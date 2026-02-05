@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "integration: requires a running Postgres/Redis (e.g. via docker compose)",
+]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_unused_configs = true
+ignore_missing_imports = true

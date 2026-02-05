@@ -1,0 +1,2157 @@
+openapi: 3.0.3
+info:
+  title: Curious Now API (v0)
+  version: "0.1"
+servers:
+  - url: /v1
+
+paths:
+  /items/feed:
+    get:
+      summary: Stage 1 Item feed (debug/internal after Stage 2)
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: source_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: content_type
+          schema: { $ref: "#/components/schemas/ContentType" }
+      responses:
+        "200":
+          description: Paginated list of Items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemsFeedResponse"
+
+  /sources:
+    get:
+      summary: List sources and feed health
+      responses:
+        "200":
+          description: Sources with feed health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourcesResponse"
+
+  /feed:
+    get:
+      summary: Stage 2+ cluster feed (latest/trending/for_you)
+      parameters:
+        - in: query
+          name: tab
+          schema:
+            type: string
+            enum: [latest, trending, for_you]
+            default: latest
+        - in: query
+          name: topic_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: content_type
+          schema: { $ref: "#/components/schemas/ContentType" }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Paginated list of StoryClusters (cards)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClustersFeedResponse"
+        "401":
+          description: Unauthenticated (only returned when tab=for_you)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /clusters/{id}:
+    get:
+      summary: Get a StoryCluster and its evidence list
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Cluster detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClusterDetail" }
+        "301":
+          description: Cluster has been merged; client should redirect to canonical cluster id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RedirectResponse" }
+
+  /clusters/{id}/updates:
+    get:
+      summary: Stage 4 update log for a cluster
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Cluster updates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClusterUpdatesResponse" }
+        "301":
+          description: Cluster has been merged; client should redirect to canonical cluster id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RedirectResponse" }
+
+  /topics:
+    get:
+      summary: List topics
+      responses:
+        "200":
+          description: Topics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopicsResponse" }
+
+  /topics/{id}:
+    get:
+      summary: Topic page (clusters in topic)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Topic detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopicDetail" }
+        "301":
+          description: Topic has been merged; client should redirect to canonical topic id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopicRedirectResponse" }
+
+  /topics/{id}/lineage:
+    get:
+      summary: Stage 4 lineage nodes/edges for a topic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Lineage graph for topic
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopicLineageResponse" }
+        "301":
+          description: Topic has been merged; client should redirect to canonical topic id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopicRedirectResponse" }
+
+  /search:
+    get:
+      summary: Stage 2+ search (cluster-first)
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchResponse" }
+
+  /glossary:
+    get:
+      summary: Stage 3 glossary lookup (term or alias)
+      parameters:
+        - in: query
+          name: term
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Best matching glossary entry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GlossaryLookupResponse" }
+
+  /auth/magic_link/start:
+    post:
+      summary: Stage 5 start email magic-link login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthMagicLinkStartRequest" }
+      responses:
+        "200":
+          description: Sent (or silently accepted)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthMagicLinkStartResponse" }
+
+  /auth/magic_link/verify:
+    post:
+      summary: Stage 5 verify magic-link token and create a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthMagicLinkVerifyRequest" }
+      responses:
+        "200":
+          description: Verified; session created (cookie set)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthMagicLinkVerifyResponse" }
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /auth/logout:
+    post:
+      summary: Stage 5 logout (revoke current session)
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LogoutResponse" }
+
+  /user:
+    get:
+      summary: Stage 5 get the current user
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/prefs:
+    get:
+      summary: Stage 5 get user preferences and state
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: User prefs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPrefsResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    patch:
+      summary: Stage 5 update user preferences
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserPrefsPatchRequest" }
+      responses:
+        "200":
+          description: Updated prefs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPrefsResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/follows/topics/{topic_id}:
+    post:
+      summary: Stage 5 follow a topic
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: topic_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Followed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      summary: Stage 5 unfollow a topic
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: topic_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Unfollowed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/blocks/sources/{source_id}:
+    post:
+      summary: Stage 5 block a source
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: source_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Blocked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      summary: Stage 5 unblock a source
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: source_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Unblocked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/saves/{cluster_id}:
+    post:
+      summary: Stage 5 save a cluster
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      summary: Stage 5 unsave a cluster
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Unsaved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/hides/{cluster_id}:
+    post:
+      summary: Stage 5 hide a cluster from all feeds
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Hidden
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      summary: Stage 5 unhide a cluster
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Unhidden
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/saves:
+    get:
+      summary: Stage 5 list saved clusters (reading list)
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: Saved clusters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSavesResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/watches/clusters:
+    get:
+      summary: Stage 6 list watched clusters
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: Watched clusters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserWatchesResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/watches/clusters/{cluster_id}:
+    post:
+      summary: Stage 6 watch a cluster (story update alerts)
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Watched
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      summary: Stage 6 unwatch a cluster
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: cluster_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Unwatched
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /feedback:
+    post:
+      summary: Stage 8 user feedback (auth optional)
+      security:
+        - SessionAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeedbackIn" }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeedbackResponse" }
+
+  /entities:
+    get:
+      summary: Stage 10 entities list/search
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema: { type: string }
+        - in: query
+          name: entity_type
+          required: false
+          schema: { $ref: "#/components/schemas/EntityType" }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Entities
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntitiesResponse" }
+
+  /entities/{id}:
+    get:
+      summary: Stage 10 entity detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Entity detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntityDetail" }
+        "301":
+          description: Entity has been merged; client should redirect to canonical entity id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntityRedirectResponse" }
+
+  /user/follows/entities:
+    get:
+      summary: Stage 10 list followed entities (convenience)
+      security:
+        - SessionAuth: []
+      responses:
+        "200":
+          description: Followed entities
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserFollowedEntitiesResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /user/follows/entities/{entity_id}:
+    post:
+      summary: Stage 10 follow an entity
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: entity_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Followed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      summary: Stage 10 unfollow an entity
+      security:
+        - SessionAuth: []
+      parameters:
+        - in: path
+          name: entity_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Unfollowed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /events:
+    post:
+      summary: Stage 5 engagement events (auth optional)
+      security:
+        - SessionAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventIn" }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventsIngestResponse" }
+
+  /admin/feedback:
+    get:
+      summary: Stage 8 feedback triage queue
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [new, triaged, resolved, ignored]
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Feedback reports
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminFeedbackListResponse" }
+
+  /admin/feedback/{id}:
+    patch:
+      summary: Stage 8 update feedback status
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminFeedbackPatchRequest" }
+      responses:
+        "200":
+          description: Updated feedback report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeedbackReport" }
+
+  /admin/clusters/{id}/merge:
+    post:
+      summary: Stage 8 merge a cluster into another (creates redirect)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminClusterMergeRequest" }
+      responses:
+        "200":
+          description: Merge completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminClusterMergeResponse" }
+
+  /admin/clusters/{id}/split:
+    post:
+      summary: Stage 8 split a cluster by extracting items into a new cluster
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminClusterSplitRequest" }
+      responses:
+        "200":
+          description: Split completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminClusterSplitResponse" }
+
+  /admin/clusters/{id}/quarantine:
+    post:
+      summary: Stage 8 quarantine a cluster (stop auto attachments)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminClusterQuarantineRequest" }
+      responses:
+        "200":
+          description: Quarantined
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+
+  /admin/clusters/{id}/unquarantine:
+    post:
+      summary: Stage 8 unquarantine a cluster
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminClusterQuarantineRequest" }
+      responses:
+        "200":
+          description: Unquarantined
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+
+  /admin/clusters/{id}:
+    patch:
+      summary: Stage 8 manual cluster overrides (citations required)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminClusterPatchRequest" }
+      responses:
+        "200":
+          description: Updated cluster
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClusterDetail" }
+
+  /admin/clusters/{id}/topics:
+    put:
+      summary: Stage 8 set cluster topics (manual + locked)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminSetClusterTopicsRequest" }
+      responses:
+        "200":
+          description: Updated cluster topics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+
+  /admin/topics:
+    post:
+      summary: Stage 8 create a topic
+      security:
+        - AdminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminTopicCreateRequest" }
+      responses:
+        "200":
+          description: Created topic
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Topic" }
+
+  /admin/topics/{id}:
+    patch:
+      summary: Stage 8 update a topic (name, description, aliases)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminTopicPatchRequest" }
+      responses:
+        "200":
+          description: Updated topic
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Topic" }
+
+  /admin/topics/{id}/merge:
+    post:
+      summary: Stage 8 merge a topic into another (creates redirect)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminTopicMergeRequest" }
+      responses:
+        "200":
+          description: Merge completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminTopicMergeResponse" }
+
+  /admin/lineage/nodes:
+    post:
+      summary: Stage 8 create a lineage node (paper/model/dataset/method)
+      security:
+        - AdminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminLineageNodeCreateRequest" }
+      responses:
+        "200":
+          description: Created lineage node
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LineageNode" }
+
+  /admin/lineage/edges:
+    post:
+      summary: Stage 8 create a lineage edge (evidence required)
+      security:
+        - AdminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminLineageEdgeCreateRequest" }
+      responses:
+        "200":
+          description: Created lineage edge
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LineageEdge" }
+
+  /admin/entities:
+    post:
+      summary: Stage 10 create an entity
+      security:
+        - AdminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminEntityCreateRequest" }
+      responses:
+        "200":
+          description: Created entity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entity" }
+
+  /admin/entities/{id}:
+    patch:
+      summary: Stage 10 update an entity
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminEntityPatchRequest" }
+      responses:
+        "200":
+          description: Updated entity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entity" }
+
+  /admin/entities/{id}/merge:
+    post:
+      summary: Stage 10 merge an entity into another (creates redirect)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminEntityMergeRequest" }
+      responses:
+        "200":
+          description: Merge completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminEntityMergeResponse" }
+
+  /admin/clusters/{id}/entities:
+    put:
+      summary: Stage 10 set cluster entities (manual + locked)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminSetClusterEntitiesRequest" }
+      responses:
+        "200":
+          description: Updated cluster entities
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimpleOkResponse" }
+
+  /admin/experiments:
+    post:
+      summary: Stage 10 create an experiment
+      security:
+        - AdminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminExperimentCreateRequest" }
+      responses:
+        "200":
+          description: Created experiment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Experiment" }
+
+  /admin/experiments/{id}:
+    patch:
+      summary: Stage 10 update an experiment
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminExperimentPatchRequest" }
+      responses:
+        "200":
+          description: Updated experiment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Experiment" }
+
+  /admin/feature_flags/{key}:
+    put:
+      summary: Stage 10 upsert a feature flag
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminFeatureFlagUpsertRequest" }
+      responses:
+        "200":
+          description: Updated flag
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeatureFlag" }
+
+  /admin/source_pack/import:
+    post:
+      summary: Admin import of a source pack (idempotent upsert)
+      security:
+        - AdminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SourcePack" }
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourcePackImportResponse" }
+
+  /admin/sources/{id}:
+    patch:
+      summary: Admin update a Source (active toggle, metadata)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminSourcePatch" }
+      responses:
+        "200":
+          description: Updated source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Source" }
+
+  /admin/feeds/{id}:
+    patch:
+      summary: Admin update a SourceFeed (active toggle, fetch interval)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminFeedPatch" }
+      responses:
+        "200":
+          description: Updated feed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceFeedHealth" }
+
+  /admin/ingestion/run:
+    post:
+      summary: Admin trigger a one-off ingestion run (best-effort)
+      security:
+        - AdminTokenAuth: []
+      parameters:
+        - in: query
+          name: feed_id
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminRunResponse" }
+
+components:
+  securitySchemes:
+    AdminTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
+    SessionAuth:
+      type: apiKey
+      in: cookie
+      name: cn_session
+  schemas:
+    ContentType:
+      type: string
+      enum: [news, press_release, preprint, peer_reviewed, report]
+
+    EntityType:
+      type: string
+      enum: [person, institution, model, dataset, method, venue]
+
+    Source:
+      type: object
+      required: [source_id, name, source_type, active]
+      properties:
+        source_id: { type: string, format: uuid }
+        name: { type: string }
+        homepage_url: { type: string, nullable: true }
+        source_type:
+          type: string
+          enum: [journalism, journal, preprint_server, university, government, lab, blog]
+        reliability_tier:
+          type: string
+          nullable: true
+          enum: [tier1, tier2, tier3]
+        active: { type: boolean }
+
+    SourceFeedHealth:
+      type: object
+      required: [feed_id, feed_url, feed_type, active]
+      properties:
+        feed_id: { type: string, format: uuid }
+        feed_url: { type: string }
+        feed_type: { type: string, enum: [rss, atom, api] }
+        active: { type: boolean }
+        fetch_interval_minutes: { type: integer }
+        last_fetched_at: { type: string, format: date-time, nullable: true }
+        last_status: { type: integer, nullable: true }
+        error_streak: { type: integer }
+
+    SourcesResponse:
+      type: object
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          items:
+            type: object
+            required: [source, feeds]
+            properties:
+              source: { $ref: "#/components/schemas/Source" }
+              feeds:
+                type: array
+                items: { $ref: "#/components/schemas/SourceFeedHealth" }
+
+    Item:
+      type: object
+      required: [item_id, canonical_url, title, source, content_type, fetched_at]
+      properties:
+        item_id: { type: string, format: uuid }
+        canonical_url: { type: string }
+        url: { type: string }
+        title: { type: string }
+        snippet: { type: string, nullable: true }
+        author: { type: string, nullable: true }
+        published_at: { type: string, format: date-time, nullable: true }
+        fetched_at: { type: string, format: date-time }
+        content_type: { $ref: "#/components/schemas/ContentType" }
+        paywalled: { type: boolean, nullable: true }
+        source:
+          type: object
+          required: [source_id, name]
+          properties:
+            source_id: { type: string, format: uuid }
+            name: { type: string }
+        arxiv_id: { type: string, nullable: true }
+        doi: { type: string, nullable: true }
+        pmid: { type: string, nullable: true }
+
+    ItemsFeedResponse:
+      type: object
+      required: [page, results]
+      properties:
+        page: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/Item" }
+
+    TopicChip:
+      type: object
+      required: [topic_id, name, score]
+      properties:
+        topic_id: { type: string, format: uuid }
+        name: { type: string }
+        score: { type: number }
+
+    ClusterCard:
+      type: object
+      required: [cluster_id, canonical_title, updated_at, distinct_source_count]
+      properties:
+        cluster_id: { type: string, format: uuid }
+        canonical_title: { type: string }
+        updated_at: { type: string, format: date-time }
+        distinct_source_count: { type: integer }
+        top_topics:
+          type: array
+          items: { $ref: "#/components/schemas/TopicChip" }
+        content_type_badges:
+          type: array
+          items: { $ref: "#/components/schemas/ContentType" }
+        method_badges:
+          type: array
+          items: { type: string }
+        takeaway: { type: string, nullable: true }
+        confidence_band:
+          type: string
+          nullable: true
+          enum: [early, growing, established]
+        anti_hype_flags:
+          type: array
+          items: { type: string }
+        is_saved: { type: boolean, nullable: true }
+        is_watched: { type: boolean, nullable: true }
+        why_in_feed: { $ref: "#/components/schemas/WhyInFeed" }
+
+    ClustersFeedResponse:
+      type: object
+      required: [tab, page, results]
+      properties:
+        tab: { type: string }
+        page: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ClusterCard" }
+
+    EvidenceItem:
+      type: object
+      required: [item_id, title, url, source, published_at]
+      properties:
+        item_id: { type: string, format: uuid }
+        title: { type: string }
+        url: { type: string }
+        published_at: { type: string, format: date-time, nullable: true }
+        source:
+          type: object
+          required: [source_id, name]
+          properties:
+            source_id: { type: string, format: uuid }
+            name: { type: string }
+        content_type: { $ref: "#/components/schemas/ContentType" }
+
+    ClusterDetail:
+      type: object
+      required: [cluster_id, canonical_title, created_at, updated_at, distinct_source_count, evidence]
+      properties:
+        cluster_id: { type: string, format: uuid }
+        canonical_title: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        distinct_source_count: { type: integer }
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/TopicChip" }
+        content_type_breakdown:
+          type: object
+          additionalProperties: { type: integer }
+        evidence:
+          type: object
+          additionalProperties:
+            type: array
+            items: { $ref: "#/components/schemas/EvidenceItem" }
+        takeaway: { type: string, nullable: true }
+        summary_intuition: { type: string, nullable: true }
+        summary_deep_dive: { type: string, nullable: true }
+        assumptions:
+          type: array
+          items: { type: string }
+        limitations:
+          type: array
+          items: { type: string }
+        what_could_change_this:
+          type: array
+          items: { type: string }
+        confidence_band:
+          type: string
+          nullable: true
+          enum: [early, growing, established]
+        method_badges:
+          type: array
+          items: { type: string }
+        anti_hype_flags:
+          type: array
+          items: { type: string }
+        takeaway_supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        summary_intuition_supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        summary_deep_dive_supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        glossary_entries:
+          type: array
+          items: { $ref: "#/components/schemas/GlossaryEntry" }
+        is_saved: { type: boolean, nullable: true }
+        is_watched: { type: boolean, nullable: true }
+
+    Topic:
+      type: object
+      required: [topic_id, name]
+      properties:
+        topic_id: { type: string, format: uuid }
+        name: { type: string }
+        description_short: { type: string, nullable: true }
+        is_followed: { type: boolean, nullable: true }
+
+    TopicsResponse:
+      type: object
+      required: [topics]
+      properties:
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/Topic" }
+
+    TopicDetail:
+      allOf:
+        - $ref: "#/components/schemas/Topic"
+        - type: object
+          required: [latest_clusters]
+          properties:
+            latest_clusters:
+              type: array
+              items: { $ref: "#/components/schemas/ClusterCard" }
+            trending_clusters:
+              type: array
+              items: { $ref: "#/components/schemas/ClusterCard" }
+
+    ClusterUpdateEntry:
+      type: object
+      required: [created_at, change_type, summary, supporting_item_ids]
+      properties:
+        created_at: { type: string, format: date-time }
+        change_type:
+          type: string
+          enum: [new_evidence, refinement, contradiction, merge, split, quarantine, unquarantine, correction]
+        summary: { type: string }
+        diff:
+          type: object
+          nullable: true
+          properties:
+            previously:
+              type: array
+              items: { type: string }
+            now:
+              type: array
+              items: { type: string }
+            because:
+              type: array
+              items: { type: string }
+        supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    ClusterUpdatesResponse:
+      type: object
+      required: [cluster_id, updates]
+      properties:
+        cluster_id: { type: string, format: uuid }
+        updates:
+          type: array
+          items: { $ref: "#/components/schemas/ClusterUpdateEntry" }
+
+    LineageNode:
+      type: object
+      required: [node_id, node_type, title]
+      properties:
+        node_id: { type: string, format: uuid }
+        node_type:
+          type: string
+          enum: [paper, model, dataset, method]
+        title: { type: string }
+        external_url: { type: string, nullable: true }
+        published_at: { type: string, format: date-time, nullable: true }
+
+    LineageEdge:
+      type: object
+      required: [from, to, relation_type, evidence_item_ids]
+      properties:
+        from: { type: string, format: uuid }
+        to: { type: string, format: uuid }
+        relation_type:
+          type: string
+          enum: [extends, improves, compresses, replaces_in_some_settings, contradicts, orthogonal]
+        evidence_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        notes_short: { type: string, nullable: true }
+
+    TopicLineageResponse:
+      type: object
+      required: [topic_id, nodes, edges]
+      properties:
+        topic_id: { type: string, format: uuid }
+        nodes:
+          type: array
+          items: { $ref: "#/components/schemas/LineageNode" }
+        edges:
+          type: array
+          items: { $ref: "#/components/schemas/LineageEdge" }
+
+    SearchResponse:
+      type: object
+      required: [query, clusters]
+      properties:
+        query: { type: string }
+        clusters:
+          type: array
+          items: { $ref: "#/components/schemas/ClusterCard" }
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/Topic" }
+        entities:
+          type: array
+          items: { $ref: "#/components/schemas/Entity" }
+
+    RedirectResponse:
+      type: object
+      required: [redirect_to_cluster_id]
+      properties:
+        redirect_to_cluster_id: { type: string, format: uuid }
+
+    TopicRedirectResponse:
+      type: object
+      required: [redirect_to_topic_id]
+      properties:
+        redirect_to_topic_id: { type: string, format: uuid }
+
+    EntityRedirectResponse:
+      type: object
+      required: [redirect_to_entity_id]
+      properties:
+        redirect_to_entity_id: { type: string, format: uuid }
+
+    GlossaryEntry:
+      type: object
+      required: [glossary_entry_id, term, definition_short]
+      properties:
+        glossary_entry_id: { type: string, format: uuid }
+        term: { type: string }
+        definition_short: { type: string }
+        definition_long: { type: string, nullable: true }
+
+    GlossaryLookupResponse:
+      type: object
+      required: [entry]
+      properties:
+        entry: { $ref: "#/components/schemas/GlossaryEntry" }
+
+    SourcePack:
+      type: object
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          items:
+            type: object
+            required: [name, source_type, feeds]
+            properties:
+              name: { type: string }
+              homepage_url: { type: string, nullable: true }
+              source_type:
+                type: string
+                enum: [journalism, journal, preprint_server, university, government, lab, blog]
+              reliability_tier:
+                type: string
+                nullable: true
+                enum: [tier1, tier2, tier3]
+              active: { type: boolean, nullable: true }
+              terms_notes: { type: string, nullable: true }
+              feeds:
+                type: array
+                items:
+                  type: object
+                  required: [feed_url, feed_type]
+                  properties:
+                    feed_url: { type: string }
+                    feed_type: { type: string, enum: [rss, atom, api] }
+                    fetch_interval_minutes: { type: integer, nullable: true }
+                    active: { type: boolean, nullable: true }
+
+    SourcePackImportResponse:
+      type: object
+      required: [sources_upserted, feeds_upserted]
+      properties:
+        sources_upserted: { type: integer }
+        feeds_upserted: { type: integer }
+
+    AdminSourcePatch:
+      type: object
+      properties:
+        name: { type: string }
+        homepage_url: { type: string, nullable: true }
+        source_type:
+          type: string
+          enum: [journalism, journal, preprint_server, university, government, lab, blog]
+        reliability_tier:
+          type: string
+          nullable: true
+          enum: [tier1, tier2, tier3]
+        terms_notes: { type: string, nullable: true }
+        active: { type: boolean }
+
+    AdminFeedPatch:
+      type: object
+      properties:
+        feed_url: { type: string }
+        feed_type: { type: string, enum: [rss, atom, api] }
+        fetch_interval_minutes: { type: integer }
+        active: { type: boolean }
+
+    AdminRunResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [accepted] }
+
+    WhyInFeed:
+      type: object
+      properties:
+        reasons:
+          type: array
+          items: { type: string }
+        matched_topic_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+
+    SimpleOkResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+
+    User:
+      type: object
+      required: [user_id, email, created_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        email: { type: string }
+        created_at: { type: string, format: date-time }
+
+    UserResponse:
+      type: object
+      required: [user]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+
+    AuthMagicLinkStartRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    AuthMagicLinkStartResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [sent] }
+
+    AuthMagicLinkVerifyRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 20 }
+
+    AuthMagicLinkVerifyResponse:
+      type: object
+      required: [user]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+
+    LogoutResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+
+    UserPrefs:
+      type: object
+      required: [reading_mode_default, notification_settings]
+      properties:
+        reading_mode_default:
+          type: string
+          enum: [intuition, deep]
+        followed_topic_ids:
+          type: array
+          items: { type: string, format: uuid }
+        followed_entity_ids:
+          type: array
+          items: { type: string, format: uuid }
+        blocked_source_ids:
+          type: array
+          items: { type: string, format: uuid }
+        saved_cluster_ids:
+          type: array
+          items: { type: string, format: uuid }
+        hidden_cluster_ids:
+          type: array
+          items: { type: string, format: uuid }
+        notification_settings:
+          type: object
+          additionalProperties: true
+
+    UserPrefsResponse:
+      type: object
+      required: [prefs]
+      properties:
+        prefs: { $ref: "#/components/schemas/UserPrefs" }
+
+    UserPrefsPatchRequest:
+      type: object
+      properties:
+        reading_mode_default:
+          type: string
+          enum: [intuition, deep]
+        notification_settings:
+          type: object
+          additionalProperties: true
+
+    SavedCluster:
+      type: object
+      required: [saved_at, cluster]
+      properties:
+        saved_at: { type: string, format: date-time }
+        cluster: { $ref: "#/components/schemas/ClusterCard" }
+
+    UserSavesResponse:
+      type: object
+      required: [saved]
+      properties:
+        saved:
+          type: array
+          items: { $ref: "#/components/schemas/SavedCluster" }
+
+    WatchedCluster:
+      type: object
+      required: [watched_at, cluster]
+      properties:
+        watched_at: { type: string, format: date-time }
+        cluster: { $ref: "#/components/schemas/ClusterCard" }
+
+    UserWatchesResponse:
+      type: object
+      required: [watched]
+      properties:
+        watched:
+          type: array
+          items: { $ref: "#/components/schemas/WatchedCluster" }
+
+    Entity:
+      type: object
+      required: [entity_id, entity_type, name]
+      properties:
+        entity_id: { type: string, format: uuid }
+        entity_type: { $ref: "#/components/schemas/EntityType" }
+        name: { type: string }
+        description_short: { type: string, nullable: true }
+        external_url: { type: string, nullable: true }
+
+    EntityChip:
+      allOf:
+        - $ref: "#/components/schemas/Entity"
+        - type: object
+          properties:
+            is_followed: { type: boolean, nullable: true }
+
+    EntityDetail:
+      allOf:
+        - $ref: "#/components/schemas/EntityChip"
+        - type: object
+          properties:
+            latest_clusters:
+              type: array
+              items: { $ref: "#/components/schemas/ClusterCard" }
+            related_entities:
+              type: array
+              items: { $ref: "#/components/schemas/EntityChip" }
+
+    EntitiesResponse:
+      type: object
+      required: [page, results]
+      properties:
+        page: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/EntityChip" }
+
+    UserFollowedEntitiesResponse:
+      type: object
+      required: [entities]
+      properties:
+        entities:
+          type: array
+          items: { $ref: "#/components/schemas/EntityChip" }
+
+    AdminEntityCreateRequest:
+      type: object
+      required: [entity_type, name]
+      properties:
+        entity_type: { $ref: "#/components/schemas/EntityType" }
+        name: { type: string }
+        description_short: { type: string, nullable: true }
+        external_url: { type: string, nullable: true }
+
+    AdminEntityPatchRequest:
+      type: object
+      properties:
+        entity_type: { $ref: "#/components/schemas/EntityType" }
+        name: { type: string }
+        description_short: { type: string, nullable: true }
+        external_url: { type: string, nullable: true }
+
+    AdminEntityMergeRequest:
+      type: object
+      required: [to_entity_id]
+      properties:
+        to_entity_id: { type: string, format: uuid }
+        notes: { type: string, nullable: true }
+        supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    AdminEntityMergeResponse:
+      type: object
+      required: [from_entity_id, to_entity_id]
+      properties:
+        from_entity_id: { type: string, format: uuid }
+        to_entity_id: { type: string, format: uuid }
+
+    AdminSetClusterEntitiesRequest:
+      type: object
+      required: [entities]
+      properties:
+        replace:
+          type: boolean
+          default: true
+        entities:
+          type: array
+          items: { $ref: "#/components/schemas/AdminClusterEntityAssignment" }
+        notes: { type: string, nullable: true }
+
+    AdminClusterEntityAssignment:
+      type: object
+      required: [entity_id]
+      properties:
+        entity_id: { type: string, format: uuid }
+        score: { type: number, nullable: true }
+        locked: { type: boolean, nullable: true }
+
+    Experiment:
+      type: object
+      required: [experiment_id, key, active]
+      properties:
+        experiment_id: { type: string, format: uuid }
+        key: { type: string }
+        description: { type: string, nullable: true }
+        active: { type: boolean }
+        start_at: { type: string, format: date-time, nullable: true }
+        end_at: { type: string, format: date-time, nullable: true }
+
+    AdminExperimentCreateRequest:
+      type: object
+      required: [key]
+      properties:
+        key: { type: string }
+        description: { type: string, nullable: true }
+        active: { type: boolean, nullable: true }
+        start_at: { type: string, format: date-time, nullable: true }
+        end_at: { type: string, format: date-time, nullable: true }
+
+    AdminExperimentPatchRequest:
+      type: object
+      properties:
+        description: { type: string, nullable: true }
+        active: { type: boolean }
+        start_at: { type: string, format: date-time, nullable: true }
+        end_at: { type: string, format: date-time, nullable: true }
+
+    FeatureFlag:
+      type: object
+      required: [key, enabled]
+      properties:
+        key: { type: string }
+        enabled: { type: boolean }
+        config:
+          type: object
+          additionalProperties: true
+
+    AdminFeatureFlagUpsertRequest:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        config:
+          type: object
+          additionalProperties: true
+
+    EventIn:
+      type: object
+      required: [event_type]
+      properties:
+        event_type:
+          type: string
+          enum:
+            - open_cluster
+            - click_item
+            - save_cluster
+            - unsave_cluster
+            - hide_cluster
+            - unhide_cluster
+            - follow_topic
+            - unfollow_topic
+            - block_source
+            - unblock_source
+        client_id: { type: string, format: uuid, nullable: true }
+        cluster_id: { type: string, format: uuid, nullable: true }
+        item_id: { type: string, format: uuid, nullable: true }
+        topic_id: { type: string, format: uuid, nullable: true }
+        meta:
+          type: object
+          additionalProperties: true
+
+    EventsIngestResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [accepted] }
+
+    FeedbackIn:
+      type: object
+      required: [feedback_type]
+      properties:
+        feedback_type:
+          type: string
+          enum: [confusing, overstated, incorrect, missing_context, broken_link, other]
+        client_id: { type: string, format: uuid, nullable: true }
+        cluster_id: { type: string, format: uuid, nullable: true }
+        item_id: { type: string, format: uuid, nullable: true }
+        topic_id: { type: string, format: uuid, nullable: true }
+        message: { type: string, nullable: true }
+
+    FeedbackResponse:
+      type: object
+      required: [status, feedback_id]
+      properties:
+        status: { type: string, enum: [accepted] }
+        feedback_id: { type: string, format: uuid }
+
+    FeedbackReport:
+      type: object
+      required: [feedback_id, created_at, feedback_type, status]
+      properties:
+        feedback_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        feedback_type:
+          type: string
+          enum: [confusing, overstated, incorrect, missing_context, broken_link, other]
+        status:
+          type: string
+          enum: [new, triaged, resolved, ignored]
+        message: { type: string, nullable: true }
+        cluster_id: { type: string, format: uuid, nullable: true }
+        item_id: { type: string, format: uuid, nullable: true }
+        topic_id: { type: string, format: uuid, nullable: true }
+        user_id: { type: string, format: uuid, nullable: true }
+
+    AdminFeedbackListResponse:
+      type: object
+      required: [page, results]
+      properties:
+        page: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/FeedbackReport" }
+
+    AdminFeedbackPatchRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [triaged, resolved, ignored]
+        resolution_notes: { type: string, nullable: true }
+
+    AdminClusterMergeRequest:
+      type: object
+      required: [to_cluster_id]
+      properties:
+        to_cluster_id: { type: string, format: uuid }
+        notes: { type: string, nullable: true }
+        supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    AdminClusterMergeResponse:
+      type: object
+      required: [from_cluster_id, to_cluster_id]
+      properties:
+        from_cluster_id: { type: string, format: uuid }
+        to_cluster_id: { type: string, format: uuid }
+
+    AdminClusterSplitRequest:
+      type: object
+      required: [move_item_ids]
+      properties:
+        new_cluster_title: { type: string, nullable: true }
+        move_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        notes: { type: string, nullable: true }
+
+    AdminClusterSplitResponse:
+      type: object
+      required: [source_cluster_id, new_cluster_id]
+      properties:
+        source_cluster_id: { type: string, format: uuid }
+        new_cluster_id: { type: string, format: uuid }
+
+    AdminClusterQuarantineRequest:
+      type: object
+      properties:
+        notes: { type: string, nullable: true }
+
+    AdminClusterPatchRequest:
+      type: object
+      properties:
+        canonical_title: { type: string }
+        representative_item_id: { type: string, format: uuid, nullable: true }
+        takeaway: { type: string, nullable: true }
+        takeaway_supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        summary_intuition: { type: string, nullable: true }
+        summary_intuition_supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        summary_deep_dive: { type: string, nullable: true }
+        summary_deep_dive_supporting_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        assumptions:
+          type: array
+          items: { type: string }
+        limitations:
+          type: array
+          items: { type: string }
+        what_could_change_this:
+          type: array
+          items: { type: string }
+        confidence_band:
+          type: string
+          nullable: true
+          enum: [early, growing, established]
+        method_badges:
+          type: array
+          items: { type: string }
+        anti_hype_flags:
+          type: array
+          items: { type: string }
+
+    AdminSetClusterTopicsRequest:
+      type: object
+      required: [topics]
+      properties:
+        replace:
+          type: boolean
+          default: true
+        topics:
+          type: array
+          items: { $ref: "#/components/schemas/AdminClusterTopicAssignment" }
+        notes: { type: string, nullable: true }
+
+    AdminClusterTopicAssignment:
+      type: object
+      required: [topic_id]
+      properties:
+        topic_id: { type: string, format: uuid }
+        score: { type: number, nullable: true }
+        locked: { type: boolean, nullable: true }
+
+    AdminTopicCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description_short: { type: string, nullable: true }
+        aliases:
+          type: array
+          items: { type: string }
+        parent_topic_id: { type: string, format: uuid, nullable: true }
+
+    AdminTopicPatchRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description_short: { type: string, nullable: true }
+        aliases:
+          type: array
+          items: { type: string }
+        parent_topic_id: { type: string, format: uuid, nullable: true }
+
+    AdminTopicMergeRequest:
+      type: object
+      required: [to_topic_id]
+      properties:
+        to_topic_id: { type: string, format: uuid }
+        notes: { type: string, nullable: true }
+
+    AdminTopicMergeResponse:
+      type: object
+      required: [from_topic_id, to_topic_id]
+      properties:
+        from_topic_id: { type: string, format: uuid }
+        to_topic_id: { type: string, format: uuid }
+
+    AdminLineageNodeCreateRequest:
+      type: object
+      required: [node_type, title]
+      properties:
+        node_type:
+          type: string
+          enum: [paper, model, dataset, method]
+        title: { type: string }
+        external_url: { type: string, nullable: true }
+        published_at: { type: string, format: date-time, nullable: true }
+        external_ids:
+          type: object
+          additionalProperties: true
+        topic_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    AdminLineageEdgeCreateRequest:
+      type: object
+      required: [from_node_id, to_node_id, relation_type, evidence_item_ids]
+      properties:
+        from_node_id: { type: string, format: uuid }
+        to_node_id: { type: string, format: uuid }
+        relation_type:
+          type: string
+          enum: [extends, improves, compresses, replaces_in_some_settings, contradicts, orthogonal]
+        evidence_item_ids:
+          type: array
+          items: { type: string, format: uuid }
+        notes_short: { type: string, nullable: true }

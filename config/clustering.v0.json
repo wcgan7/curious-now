@@ -1,0 +1,55 @@
+{
+  "timeWindowDays": 14,
+  "maxCandidates": 200,
+  "thresholds": {
+    "attachScore": 0.72,
+    "highConfidenceAttachScore": 0.82,
+    "minTokenOverlap": 2,
+    "minTitleJaccard": 0.42,
+    "singleTokenGuard": true
+  },
+  "scoringWeights": {
+    "titleJaccard": 0.65,
+    "timeProximity": 0.25,
+    "tokenOverlap": 0.1
+  },
+  "bonuses": {
+    "newSourceBonus": 0.04,
+    "externalIdMatchArxiv": 1.0,
+    "externalIdMatchDoi": 0.95
+  },
+  "timeDecayDays": 7,
+  "stopwords": [
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "new",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "via",
+    "with",
+    "study",
+    "researchers",
+    "report"
+  ],
+  "rareTokenMinLength": 3,
+  "allowShortTokens": ["ai", "ml", "llm", "jwst", "bert"],
+  "searchDocTitlesLimit": 8
+}

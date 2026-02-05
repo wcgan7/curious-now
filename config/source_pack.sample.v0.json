@@ -1,0 +1,37 @@
+{
+  "sources": [
+    {
+      "name": "NASA",
+      "homepage_url": "https://www.nasa.gov/",
+      "source_type": "government",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "RSS OK; metadata-first storage.",
+      "feeds": [
+        {
+          "feed_url": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "arXiv (cs.AI)",
+      "homepage_url": "https://arxiv.org/",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier2",
+      "active": true,
+      "terms_notes": "Use arXiv RSS; store titles/links only.",
+      "feeds": [
+        {
+          "feed_url": "https://export.arxiv.org/rss/cs.AI",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,9 @@
+target-version = "py39"
+line-length = 100
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+  # FastAPI/Depends patterns intentionally call Depends/Cookie/Header in defaults.
+  "B008",
+]
