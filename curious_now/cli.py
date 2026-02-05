@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import UUID
 
 from curious_now.ai_generation import (
+    enrich_stage3_for_clusters,
     generate_embeddings_for_clusters,
     generate_takeaways_for_clusters,
 )
@@ -283,6 +284,25 @@ def cmd_generate_embeddings(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_enrich_stage3(args: argparse.Namespace) -> int:
+    """Generate Stage 3 enrichment (intuition, deep-dive, confidence, anti-hype flags)."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        result = enrich_stage3_for_clusters(
+            conn,
+            limit=int(args.limit),
+        )
+    print(
+        f"Stage 3 enrichment complete: "
+        f"{result.clusters_succeeded}/{result.clusters_processed} succeeded; "
+        f"{result.clusters_failed} failed."
+    )
+    if result.clusters_succeeded > 0:
+        print(f"Generated: intuition, deep-dive, confidence bands, and anti-hype flags.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="curious-now")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -396,6 +416,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Embedding provider (ollama, sentence-transformers, mock)"
     )
     p_embeddings.set_defaults(func=cmd_generate_embeddings)
+
+    p_enrich = sub.add_parser(
+        "enrich-stage3",
+        help="Generate deep-dives, intuition, confidence bands, anti-hype flags"
+    )
+    p_enrich.add_argument(
+        "--limit", type=int, default=50, help="Max clusters to process"
+    )
+    p_enrich.set_defaults(func=cmd_enrich_stage3)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
