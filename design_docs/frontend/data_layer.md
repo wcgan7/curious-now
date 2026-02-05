@@ -1,6 +1,6 @@
 # Frontend Data Layer — Curious Now
 
-This document specifies state management, data fetching patterns, caching strategies, and API integration. It complements `frontend_architecture.md` and connects to `design_docs/openapi.v0.yaml`.
+This document specifies state management, data fetching patterns, caching strategies, and API integration. It complements `design_docs/frontend/architecture.md` and connects to `design_docs/openapi.v0.yaml`.
 
 ---
 

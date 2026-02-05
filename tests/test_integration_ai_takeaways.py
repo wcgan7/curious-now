@@ -6,6 +6,8 @@ Uses codex-cli as the primary test adapter.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from curious_now.ai.llm_adapter import (
@@ -271,7 +273,7 @@ class TestGenerateTakeawayMock:
         result = generate_takeaway(input_data, adapter=mock_adapter)
 
         assert result.success is False
-        assert "No items" in result.error
+        assert result.error is not None and "No items" in result.error
 
     def test_generate_takeaway_no_title_fails(
         self,
@@ -284,7 +286,7 @@ class TestGenerateTakeawayMock:
         result = generate_takeaway(input_data, adapter=mock_adapter)
 
         assert result.success is False
-        assert "title" in result.error.lower()
+        assert result.error is not None and "title" in result.error.lower()
 
     def test_generate_takeaway_strips_quotes(
         self,
@@ -307,7 +309,7 @@ class TestGenerateTakeawayFromDbData:
     """Test convenience function for DB data."""
 
     def test_generate_from_db_data(self, mock_adapter: MockAdapter) -> None:
-        items = [
+        items: list[dict[str, Any]] = [
             {
                 "title": "CRISPR advancement in neurons",
                 "snippet": "Scientists develop new technique.",

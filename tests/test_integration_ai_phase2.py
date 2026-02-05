@@ -233,7 +233,7 @@ class TestGenerateIntuitionMock:
         result = generate_intuition(input_data, adapter=mock_adapter)
 
         assert result.success is False
-        assert "title" in result.error.lower()
+        assert result.error is not None and "title" in result.error.lower()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -352,6 +352,7 @@ class TestGenerateDeepDiveMock:
         result = generate_deep_dive(sample_deep_dive_input, adapter=mock_adapter)
 
         assert result.success is True
+        assert result.content is not None
         assert result.content.what_happened
         assert result.content.why_it_matters
         assert result.content.background
@@ -406,6 +407,7 @@ class TestGenerateDeepDiveClaude:
         result = generate_deep_dive(sample_deep_dive_input, adapter=claude_adapter)
 
         assert result.success is True
+        assert result.content is not None
         assert len(result.content.limitations) >= 1
 
     def test_deep_dive_confidence_reasonable(

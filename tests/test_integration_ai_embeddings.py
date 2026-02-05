@@ -206,7 +206,7 @@ class TestGenerateClusterEmbedding:
         result = generate_cluster_embedding(input_data, provider=mock_provider)
 
         assert result.success is False
-        assert "title" in result.error.lower()
+        assert result.error is not None and "title" in result.error.lower()
 
     def test_generate_auto_selects_provider(
         self,
