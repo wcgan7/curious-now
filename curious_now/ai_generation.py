@@ -7,6 +7,7 @@ intuition, deep-dives) for clusters stored in the database.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -141,16 +142,18 @@ def _update_cluster_takeaway(
     item_ids: list[UUID],
 ) -> None:
     """Update cluster with generated takeaway."""
+    # Convert UUIDs to JSON array of strings for JSONB column
+    item_ids_json = json.dumps([str(uid) for uid in item_ids])
     with conn.cursor() as cur:
         cur.execute(
             """
             UPDATE story_clusters
             SET takeaway = %s,
-                takeaway_supporting_item_ids = %s,
+                takeaway_supporting_item_ids = %s::jsonb,
                 updated_at = now()
             WHERE id = %s;
             """,
-            (takeaway, item_ids, cluster_id),
+            (takeaway, item_ids_json, cluster_id),
         )
 
 
