@@ -416,7 +416,7 @@ def cosine_similarity(embedding1: list[float], embedding2: list[float]) -> float
     if magnitude1 == 0 or magnitude2 == 0:
         return 0.0
 
-    return dot_product / (magnitude1 * magnitude2)
+    return float(dot_product / (magnitude1 * magnitude2))
 
 
 async def generate_embeddings_batch(

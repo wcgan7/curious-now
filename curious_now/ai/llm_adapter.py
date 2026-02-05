@@ -406,12 +406,14 @@ class ClaudeCLIAdapter(LLMAdapter):
                         if isinstance(content, str):
                             # The result itself may be JSON string
                             try:
-                                return json.loads(content)
+                                inner = json.loads(content)
+                                if isinstance(inner, dict):
+                                    return dict(inner)
                             except json.JSONDecodeError:
                                 pass
                         elif isinstance(content, dict):
-                            return content
-                    return parsed
+                            return dict(content)
+                    return dict(parsed)
                 return None
             except json.JSONDecodeError as e:
                 logger.warning("Failed to parse Claude JSON output: %s", e)

@@ -180,7 +180,8 @@ def _parse_deep_dive_json(text: str) -> dict[str, Any] | None:
             text = text[start:end].strip()
 
     try:
-        return json.loads(text)
+        result = json.loads(text)
+        return dict(result) if isinstance(result, dict) else None
     except json.JSONDecodeError as e:
         logger.warning("Failed to parse deep-dive JSON: %s", e)
         return None

@@ -169,7 +169,8 @@ def _parse_lineage_result(text: str) -> dict[str, Any] | None:
             text = text[start:end].strip()
 
     try:
-        return json.loads(text)
+        result = json.loads(text)
+        return dict(result) if isinstance(result, dict) else None
     except json.JSONDecodeError as e:
         logger.warning("Failed to parse lineage JSON: %s", e)
         return None
