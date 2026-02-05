@@ -23,7 +23,7 @@ This document specifies all error states, empty states, loading states, and offl
 Used for route-level errors (404, 500, etc.)
 
 ```tsx
-// src/components/errors/FullPageError.tsx
+// components/errors/FullPageError.tsx
 import styles from './FullPageError.module.css';
 import { Button } from '@/components/ui/Button';
 
@@ -63,7 +63,7 @@ export function FullPageError({
             </Button>
           )}
           {secondaryAction && (
-            <Button variant="ghost" onClick={secondaryAction.onClick}>
+            <Button variant="tertiary" onClick={secondaryAction.onClick}>
               {secondaryAction.label}
             </Button>
           )}
@@ -133,7 +133,7 @@ export function FullPageError({
 Used for component-level errors within a page.
 
 ```tsx
-// src/components/errors/InlineError.tsx
+// components/errors/InlineError.tsx
 import styles from './InlineError.module.css';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -211,7 +211,7 @@ export function InlineError({ message, onRetry, compact }: InlineErrorProps) {
 Used for transient errors that don't block interaction.
 
 ```tsx
-// Already defined in frontend_components.md
+// Already defined in design_docs/frontend/components.md
 // Usage example:
 const { showToast } = useToast();
 
@@ -231,7 +231,7 @@ showToast({
 
 ### 404 - Page Not Found
 
-`src/app/not-found.tsx`
+`app/not-found.tsx`
 
 ```tsx
 import { FullPageError } from '@/components/errors/FullPageError';
@@ -265,7 +265,7 @@ export default function NotFound() {
 
 ### 500 - Server Error
 
-`src/app/error.tsx`
+`app/error.tsx`
 
 ```tsx
 'use client';
@@ -319,7 +319,7 @@ export default function Error({ error, reset }: ErrorProps) {
 
 ### Offline State
 
-`src/components/errors/OfflineState.tsx`
+`components/errors/OfflineState.tsx`
 
 ```tsx
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -352,7 +352,7 @@ export function OfflineFallback() {
 
 ### Maintenance Mode
 
-`src/app/maintenance/page.tsx`
+`app/maintenance/page.tsx`
 
 ```tsx
 import { FullPageError } from '@/components/errors/FullPageError';
@@ -418,7 +418,7 @@ export default function MaintenancePage() {
 When no stories are available (rare, but possible during initial launch or filters).
 
 ```tsx
-// src/components/feed/EmptyFeed.tsx
+// components/feed/EmptyFeed.tsx
 import styles from './EmptyFeed.module.css';
 import { Newspaper } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -517,7 +517,7 @@ export function EmptyFeed({ type, topicName, onClearFilters }: EmptyFeedProps) {
 ### Empty Saved Stories
 
 ```tsx
-// src/components/saved/EmptySaved.tsx
+// components/saved/EmptySaved.tsx
 import styles from './EmptySaved.module.css';
 import { Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -545,7 +545,7 @@ export function EmptySaved() {
 ### Empty Search Results
 
 ```tsx
-// src/components/search/EmptySearch.tsx
+// components/search/EmptySearch.tsx
 import styles from './EmptySearch.module.css';
 import { Search } from 'lucide-react';
 
@@ -666,7 +666,7 @@ export function EmptySearch({ query, suggestions }: EmptySearchProps) {
 ### Empty Notifications
 
 ```tsx
-// src/components/notifications/EmptyNotifications.tsx
+// components/notifications/EmptyNotifications.tsx
 import styles from './EmptyNotifications.module.css';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
@@ -690,7 +690,7 @@ export function EmptyNotifications() {
 ### Empty Following
 
 ```tsx
-// src/components/topics/EmptyFollowing.tsx
+// components/topics/EmptyFollowing.tsx
 import styles from './EmptyFollowing.module.css';
 import { Hash } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -733,7 +733,7 @@ export function EmptyFollowing() {
 ### Skeleton Components
 
 ```tsx
-// src/components/ui/Skeleton.tsx
+// components/ui/Skeleton.tsx
 import styles from './Skeleton.module.css';
 
 interface SkeletonProps {
@@ -810,7 +810,7 @@ export function Skeleton({
 ### Feed Loading Skeleton
 
 ```tsx
-// src/components/feed/FeedSkeleton.tsx
+// components/feed/FeedSkeleton.tsx
 import styles from './FeedSkeleton.module.css';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -852,7 +852,7 @@ export function FeedSkeleton() {
 ### Story Page Loading Skeleton
 
 ```tsx
-// src/components/story/StorySkeleton.tsx
+// components/story/StorySkeleton.tsx
 import styles from './StorySkeleton.module.css';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -987,7 +987,7 @@ export function Spinner({ size = 'medium' }: { size?: 'small' | 'medium' | 'larg
 ### Input Error State
 
 ```tsx
-// src/components/ui/Input.tsx (with error state)
+// components/ui/Input.tsx (with error state)
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
@@ -1060,7 +1060,7 @@ export function Input({ label, error, hint, id, ...props }: InputProps) {
 ### Form-Level Error
 
 ```tsx
-// src/components/forms/FormError.tsx
+// components/forms/FormError.tsx
 import styles from './FormError.module.css';
 import { AlertTriangle } from 'lucide-react';
 
@@ -1099,7 +1099,7 @@ export function FormError({ title = 'Error', message, onDismiss }: FormErrorProp
 ### Offline Banner
 
 ```tsx
-// src/components/OfflineBanner.tsx
+// components/OfflineBanner.tsx
 'use client';
 
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -1160,7 +1160,7 @@ export function OfflineBanner() {
 ### Offline-Disabled Action
 
 ```tsx
-// src/components/OfflineDisabled.tsx
+// components/OfflineDisabled.tsx
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { Tooltip } from '@/components/ui/Tooltip';
 
@@ -1198,7 +1198,7 @@ export function OfflineDisabled({ children, action = 'This action' }: OfflineDis
 ## Error Boundary
 
 ```tsx
-// src/components/ErrorBoundary.tsx
+// components/ErrorBoundary.tsx
 'use client';
 
 import { Component, ErrorInfo, ReactNode } from 'react';

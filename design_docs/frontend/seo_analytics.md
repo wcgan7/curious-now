@@ -4,6 +4,12 @@
 
 This document specifies the SEO strategy, metadata generation, structured data implementation, and analytics tracking for Curious Now.
 
+**Route note (v0):** The current frontend routing is **ID-based** (UUIDs), per `design_docs/frontend/architecture.md`:
+- Story: `/story/[id]` (cluster UUID)
+- Topic: `/topic/[id]` (topic UUID)
+
+This doc also includes an optional **v1** plan for adding human-readable slugs. If/when you add slugs, keep the UUID as the canonical identifier (e.g. `/story/[id]/[slug]`) so lookups never depend on the slug.
+
 ---
 
 ## SEO Architecture
@@ -12,8 +18,8 @@ This document specifies the SEO strategy, metadata generation, structured data i
 
 ```
 /                           # Home (Today's Feed)
-/story/[slug]               # Story detail page
-/topic/[slug]               # Topic feed
+/story/[id]                 # Story detail page (cluster UUID)
+/topic/[id]                 # Topic feed (topic UUID)
 /search                     # Search results
 /search?q=[query]           # Search with query
 /saved                      # Saved stories (auth required)
@@ -21,6 +27,10 @@ This document specifies the SEO strategy, metadata generation, structured data i
 /about                      # About page
 /privacy                    # Privacy policy
 /terms                      # Terms of service
+
+# Optional v1 (SEO-friendly, but UUID remains canonical):
+# /story/[id]/[slug]
+# /topic/[id]/[slug]
 ```
 
 ### Slug Generation Rules
