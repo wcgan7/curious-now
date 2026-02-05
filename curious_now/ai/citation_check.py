@@ -247,22 +247,33 @@ def check_citations(
         source_texts=source_texts,
     )
 
-    # Generate completion
-    response: LLMResponse = adapter.complete(
+    # Try complete_json first for reliable JSON parsing
+    raw_json = adapter.complete_json(
         user_prompt,
         system_prompt=CITATION_CHECK_SYSTEM_PROMPT,
         max_tokens=1000,
-        temperature=0.3,  # Low temp for consistent validation
     )
 
-    if not response.success:
-        logger.warning("Citation check failed: %s", response.error)
-        return CitationCheckResult.failure(response.error or "Unknown error")
+    # Get model name for result
+    model_name = getattr(adapter, "model", adapter.name)
 
-    # Parse the JSON response
-    raw_json = _parse_citation_check_json(response.text)
     if raw_json is None:
-        return CitationCheckResult.failure("Failed to parse JSON response")
+        # Fallback: try regular complete with manual parsing
+        response: LLMResponse = adapter.complete(
+            user_prompt,
+            system_prompt=CITATION_CHECK_SYSTEM_PROMPT,
+            max_tokens=1000,
+            temperature=0.3,  # Low temp for consistent validation
+        )
+
+        if not response.success:
+            logger.warning("Citation check failed: %s", response.error)
+            return CitationCheckResult.failure(response.error or "Unknown error")
+
+        model_name = response.model
+        raw_json = _parse_citation_check_json(response.text)
+        if raw_json is None:
+            return CitationCheckResult.failure("Failed to parse JSON response")
 
     # Extract results
     validated = bool(raw_json.get("validated", False))
@@ -295,7 +306,7 @@ def check_citations(
         confidence=confidence,
         flags=flags,
         checked_claims=checked_claims,
-        model=response.model,
+        model=model_name,
         success=True,
     )
 

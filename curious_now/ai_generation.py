@@ -15,9 +15,22 @@ from uuid import UUID
 import psycopg
 
 from curious_now.ai.embeddings import (
+    ClusterEmbeddingInput,
     EmbeddingResult,
     generate_cluster_embedding,
     get_embedding_provider,
+)
+from curious_now.ai.deep_dive import (
+    DeepDiveInput,
+    DeepDiveResult,
+    SourceSummary,
+    deep_dive_to_json,
+    generate_deep_dive,
+)
+from curious_now.ai.intuition import (
+    IntuitionInput,
+    IntuitionResult,
+    generate_intuition,
 )
 from curious_now.ai.llm_adapter import LLMAdapter, get_llm_adapter
 from curious_now.ai.takeaways import (
@@ -83,10 +96,12 @@ def _get_cluster_items_for_takeaway(
         cur.execute(
             """
             SELECT
+                i.id AS item_id,
                 i.title,
                 i.snippet,
                 s.name AS source_name,
-                i.content_type AS source_type
+                i.content_type AS source_type,
+                i.published_at
             FROM cluster_items ci
             JOIN items i ON i.id = ci.item_id
             JOIN sources s ON s.id = i.source_id
@@ -180,16 +195,22 @@ def generate_takeaways_for_clusters(
             # Get topics
             topics = _get_cluster_topics(conn, cluster_id)
 
-            # Build input
-            item_summaries = [
-                ItemSummary(
-                    title=item["title"],
-                    snippet=item.get("snippet"),
-                    source_name=item.get("source_name"),
-                    source_type=item.get("source_type"),
+            # Build input and track item IDs
+            item_summaries = []
+            item_ids = []
+            for item in items:
+                item_summaries.append(
+                    ItemSummary(
+                        title=item["title"],
+                        snippet=item.get("snippet"),
+                        source_name=item.get("source_name"),
+                        source_type=item.get("source_type"),
+                        published_at=(
+                            str(item["published_at"]) if item.get("published_at") else None
+                        ),
+                    )
                 )
-                for item in items
-            ]
+                item_ids.append(item["item_id"])
 
             input_data = TakeawayInput(
                 cluster_title=canonical_title,
@@ -209,9 +230,8 @@ def generate_takeaways_for_clusters(
                 failed += 1
                 continue
 
-            # Update cluster (no item IDs for now, would need to track which items
-            # were used)
-            _update_cluster_takeaway(conn, cluster_id, result.takeaway, [])
+            # Update cluster with supporting item IDs
+            _update_cluster_takeaway(conn, cluster_id, result.takeaway, item_ids)
             succeeded += 1
             logger.info(
                 "Generated takeaway for cluster %s (confidence: %.2f)",
@@ -367,11 +387,14 @@ def generate_embeddings_for_clusters(
                     continue
 
             # Generate embedding
-            result: EmbeddingResult = generate_cluster_embedding(
+            embedding_input = ClusterEmbeddingInput(
                 cluster_id=str(cluster_id),
                 canonical_title=canonical_title,
                 takeaway=takeaway,
                 topic_names=topics if topics else None,
+            )
+            result: EmbeddingResult = generate_cluster_embedding(
+                embedding_input,
                 provider=provider,
             )
 
@@ -400,6 +423,384 @@ def generate_embeddings_for_clusters(
             failed += 1
 
     return GenerateEmbeddingsResult(
+        clusters_processed=processed,
+        clusters_succeeded=succeeded,
+        clusters_failed=failed,
+        clusters_skipped=skipped,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 3 Enrichment (intuition, deep-dive, confidence, flags, badges)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class GenerateStage3Result:
+    """Result of Stage 3 enrichment batch."""
+
+    clusters_processed: int
+    clusters_succeeded: int
+    clusters_failed: int
+    clusters_skipped: int  # Already had all Stage 3 fields
+
+
+def _get_clusters_needing_stage3(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Get clusters that need Stage 3 enrichment (missing intuition or deep-dive)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                c.id AS cluster_id,
+                c.canonical_title,
+                c.takeaway,
+                c.distinct_source_count
+            FROM story_clusters c
+            WHERE c.status = 'active'
+              AND c.takeaway IS NOT NULL
+              AND (c.summary_intuition IS NULL OR c.summary_deep_dive IS NULL)
+            ORDER BY c.updated_at DESC
+            LIMIT %s;
+            """,
+            (limit,),
+        )
+        return cur.fetchall()
+
+
+def _get_cluster_content_types(
+    conn: psycopg.Connection[Any],
+    cluster_id: UUID,
+) -> list[str]:
+    """Get distinct content types for items in a cluster."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT i.content_type
+            FROM cluster_items ci
+            JOIN items i ON i.id = ci.item_id
+            WHERE ci.cluster_id = %s
+              AND i.content_type IS NOT NULL;
+            """,
+            (cluster_id,),
+        )
+        return [row["content_type"] for row in cur.fetchall()]
+
+
+def _get_cluster_snippets(
+    conn: psycopg.Connection[Any],
+    cluster_id: UUID,
+    limit: int = 5,
+) -> list[str]:
+    """Get technical snippets from cluster items for intuition generation."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT i.snippet
+            FROM cluster_items ci
+            JOIN items i ON i.id = ci.item_id
+            WHERE ci.cluster_id = %s
+              AND i.snippet IS NOT NULL
+              AND LENGTH(i.snippet) > 50
+            ORDER BY ci.role ASC, i.published_at DESC NULLS LAST
+            LIMIT %s;
+            """,
+            (cluster_id, limit),
+        )
+        return [row["snippet"] for row in cur.fetchall()]
+
+
+def _compute_confidence_band(
+    content_types: list[str],
+    source_count: int,
+) -> str | None:
+    """
+    Compute confidence band based on evidence types.
+
+    Returns: 'early', 'growing', 'established', or None
+    """
+    has_peer_reviewed = "peer_reviewed" in content_types
+    has_preprint = "preprint" in content_types
+    has_report = "report" in content_types
+    has_primary = has_peer_reviewed or has_preprint or has_report
+
+    if has_peer_reviewed and source_count >= 3:
+        return "established"
+    elif has_primary and source_count >= 2:
+        return "growing"
+    elif source_count >= 1:
+        return "early"
+    return None
+
+
+def _compute_anti_hype_flags(
+    content_types: list[str],
+    source_count: int,
+) -> list[str]:
+    """
+    Compute anti-hype flags based on evidence types.
+
+    Returns list of flag strings.
+    """
+    flags = []
+
+    has_peer_reviewed = "peer_reviewed" in content_types
+    has_preprint = "preprint" in content_types
+    has_press_release = "press_release" in content_types
+
+    # Preprint not yet peer-reviewed
+    if has_preprint and not has_peer_reviewed:
+        flags.append("preprint_not_peer_reviewed")
+
+    # Press release only (no primary evidence)
+    if has_press_release and not has_preprint and not has_peer_reviewed:
+        flags.append("press_release_only")
+
+    # Single source
+    if source_count == 1:
+        flags.append("single_source")
+
+    return flags
+
+
+def _compute_method_badges(content_types: list[str]) -> list[str]:
+    """
+    Compute method badges based on content types.
+
+    Note: v0 just assigns based on content type. Future versions
+    could use LLM to extract methods from text.
+    """
+    badges = []
+
+    if "peer_reviewed" in content_types or "preprint" in content_types:
+        # Assume research involves some form of study
+        badges.append("observational")
+
+    if "report" in content_types:
+        badges.append("benchmark")
+
+    return badges
+
+
+def _update_cluster_stage3(
+    conn: psycopg.Connection[Any],
+    cluster_id: UUID,
+    *,
+    summary_intuition: str | None = None,
+    summary_intuition_item_ids: list[UUID] | None = None,
+    summary_deep_dive: dict[str, Any] | None = None,
+    summary_deep_dive_item_ids: list[UUID] | None = None,
+    confidence_band: str | None = None,
+    anti_hype_flags: list[str] | None = None,
+    method_badges: list[str] | None = None,
+    limitations: list[str] | None = None,
+) -> None:
+    """Update cluster with Stage 3 enrichment fields."""
+    import json
+
+    updates = []
+    params: list[Any] = []
+
+    if summary_intuition is not None:
+        updates.append("summary_intuition = %s")
+        params.append(summary_intuition)
+        updates.append("summary_intuition_supporting_item_ids = %s")
+        params.append(json.dumps([str(i) for i in (summary_intuition_item_ids or [])]))
+
+    if summary_deep_dive is not None:
+        updates.append("summary_deep_dive = %s")
+        params.append(json.dumps(summary_deep_dive))
+        updates.append("summary_deep_dive_supporting_item_ids = %s")
+        params.append(json.dumps([str(i) for i in (summary_deep_dive_item_ids or [])]))
+
+    if confidence_band is not None:
+        updates.append("confidence_band = %s")
+        params.append(confidence_band)
+
+    if anti_hype_flags is not None:
+        updates.append("anti_hype_flags = %s")
+        params.append(json.dumps(anti_hype_flags))
+
+    if method_badges is not None:
+        updates.append("method_badges = %s")
+        params.append(json.dumps(method_badges))
+
+    if limitations is not None:
+        updates.append("limitations = %s")
+        params.append(json.dumps(limitations))
+
+    if not updates:
+        return
+
+    updates.append("updated_at = now()")
+    params.append(cluster_id)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE story_clusters
+            SET {', '.join(updates)}
+            WHERE id = %s;
+            """,
+            tuple(params),
+        )
+
+
+def enrich_stage3_for_clusters(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+    adapter: LLMAdapter | None = None,
+) -> GenerateStage3Result:
+    """
+    Generate Stage 3 enrichment (intuition, deep-dive, confidence, flags) for clusters.
+
+    Requires clusters to already have takeaways generated.
+
+    Args:
+        conn: Database connection
+        limit: Maximum number of clusters to process
+        adapter: LLM adapter to use (defaults to configured adapter)
+
+    Returns:
+        GenerateStage3Result with processing statistics
+    """
+    if adapter is None:
+        adapter = get_llm_adapter()
+
+    clusters = _get_clusters_needing_stage3(conn, limit=limit)
+    processed = 0
+    succeeded = 0
+    failed = 0
+    skipped = 0
+
+    for cluster in clusters:
+        cluster_id = cluster["cluster_id"]
+        canonical_title = cluster["canonical_title"]
+        takeaway = cluster.get("takeaway")
+        source_count = cluster.get("distinct_source_count", 1)
+        processed += 1
+
+        if not takeaway:
+            logger.warning("Cluster %s has no takeaway, skipping Stage 3", cluster_id)
+            skipped += 1
+            continue
+
+        try:
+            # Get items for supporting IDs
+            items = _get_cluster_items_for_takeaway(conn, cluster_id)
+            item_ids = [item["item_id"] for item in items]
+
+            # Get content types for heuristics
+            content_types = _get_cluster_content_types(conn, cluster_id)
+
+            # Get topics
+            topics = _get_cluster_topics(conn, cluster_id)
+
+            # Get snippets for intuition
+            snippets = _get_cluster_snippets(conn, cluster_id)
+
+            # ─────────────────────────────────────────────────────────────
+            # Generate intuition
+            # ─────────────────────────────────────────────────────────────
+            intuition_input = IntuitionInput(
+                cluster_title=canonical_title,
+                takeaway=takeaway,
+                technical_snippets=snippets if snippets else None,
+                topic_names=topics if topics else None,
+            )
+            intuition_result: IntuitionResult = generate_intuition(
+                intuition_input, adapter=adapter
+            )
+
+            summary_intuition = None
+            if intuition_result.success:
+                summary_intuition = intuition_result.intuition
+            else:
+                logger.warning(
+                    "Intuition generation failed for cluster %s: %s",
+                    cluster_id,
+                    intuition_result.error,
+                )
+
+            # ─────────────────────────────────────────────────────────────
+            # Generate deep-dive
+            # ─────────────────────────────────────────────────────────────
+            source_summaries = [
+                SourceSummary(
+                    title=item["title"],
+                    snippet=item.get("snippet"),
+                    source_name=item.get("source_name"),
+                    source_type=item.get("source_type"),
+                )
+                for item in items
+            ]
+
+            deep_dive_input = DeepDiveInput(
+                cluster_title=canonical_title,
+                takeaway=takeaway,
+                source_summaries=source_summaries,
+                topic_names=topics if topics else None,
+            )
+            deep_dive_result: DeepDiveResult = generate_deep_dive(
+                deep_dive_input, adapter=adapter
+            )
+
+            summary_deep_dive = None
+            limitations = None
+            if deep_dive_result.success and deep_dive_result.content:
+                summary_deep_dive = deep_dive_to_json(deep_dive_result.content)
+                limitations = deep_dive_result.content.limitations
+            else:
+                logger.warning(
+                    "Deep-dive generation failed for cluster %s: %s",
+                    cluster_id,
+                    deep_dive_result.error,
+                )
+
+            # ─────────────────────────────────────────────────────────────
+            # Compute heuristics
+            # ─────────────────────────────────────────────────────────────
+            confidence_band = _compute_confidence_band(content_types, source_count)
+            anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
+            method_badges = _compute_method_badges(content_types)
+
+            # ─────────────────────────────────────────────────────────────
+            # Update cluster
+            # ─────────────────────────────────────────────────────────────
+            _update_cluster_stage3(
+                conn,
+                cluster_id,
+                summary_intuition=summary_intuition,
+                summary_intuition_item_ids=item_ids if summary_intuition else None,
+                summary_deep_dive=summary_deep_dive,
+                summary_deep_dive_item_ids=item_ids if summary_deep_dive else None,
+                confidence_band=confidence_band,
+                anti_hype_flags=anti_hype_flags,
+                method_badges=method_badges,
+                limitations=limitations,
+            )
+
+            succeeded += 1
+            logger.info(
+                "Stage 3 enrichment complete for cluster %s "
+                "(intuition: %s, deep-dive: %s, confidence: %s)",
+                cluster_id,
+                "yes" if summary_intuition else "no",
+                "yes" if summary_deep_dive else "no",
+                confidence_band,
+            )
+
+        except Exception as e:
+            logger.exception(
+                "Error in Stage 3 enrichment for cluster %s: %s", cluster_id, e
+            )
+            failed += 1
+
+    return GenerateStage3Result(
         clusters_processed=processed,
         clusters_succeeded=succeeded,
         clusters_failed=failed,

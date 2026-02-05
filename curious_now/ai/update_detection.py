@@ -224,28 +224,39 @@ def detect_update(
         time_context=time_context,
     )
 
-    # Generate completion
-    response: LLMResponse = adapter.complete(
+    # Try complete_json first for reliable JSON parsing
+    raw_json = adapter.complete_json(
         user_prompt,
         system_prompt=UPDATE_DETECTION_SYSTEM_PROMPT,
         max_tokens=500,
-        temperature=0.3,
     )
 
-    if not response.success:
-        logger.warning("Update detection failed: %s", response.error)
-        return UpdateDetectionResult.failure(response.error or "Unknown error")
+    # Get model name for result
+    model_name = getattr(adapter, "model", adapter.name)
 
-    # Parse the JSON response
-    raw_json = _parse_update_result(response.text)
     if raw_json is None:
-        return UpdateDetectionResult.failure("Failed to parse JSON response")
+        # Fallback: try regular complete with manual parsing
+        response: LLMResponse = adapter.complete(
+            user_prompt,
+            system_prompt=UPDATE_DETECTION_SYSTEM_PROMPT,
+            max_tokens=500,
+            temperature=0.3,
+        )
+
+        if not response.success:
+            logger.warning("Update detection failed: %s", response.error)
+            return UpdateDetectionResult.failure(response.error or "Unknown error")
+
+        model_name = response.model
+        raw_json = _parse_update_result(response.text)
+        if raw_json is None:
+            return UpdateDetectionResult.failure("Failed to parse JSON response")
 
     # Check if meaningful
     meaningful = bool(raw_json.get("meaningful", False))
 
     if not meaningful:
-        return UpdateDetectionResult.not_meaningful(response.model)
+        return UpdateDetectionResult.not_meaningful(model_name)
 
     # Parse update type
     update_type_str = raw_json.get("update_type", "follow_up")
@@ -267,7 +278,7 @@ def detect_update(
         summary=raw_json.get("summary", ""),
         changes=[str(c) for c in changes],
         confidence=float(raw_json.get("confidence", 0.7)),
-        model=response.model,
+        model=model_name,
         success=True,
     )
 

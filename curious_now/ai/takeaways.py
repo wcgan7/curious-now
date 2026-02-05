@@ -35,6 +35,7 @@ class ItemSummary:
     title: str
     snippet: str | None = None
     source_name: str | None = None
+    source_type: str | None = None  # journalism, journal, preprint, etc.
     published_at: str | None = None
 
 

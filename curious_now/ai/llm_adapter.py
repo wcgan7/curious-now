@@ -340,6 +340,93 @@ class ClaudeCLIAdapter(LLMAdapter):
         except Exception as e:
             return LLMResponse.failure(self.name, str(e))
 
+    def complete_json(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str | None = None,
+        max_tokens: int = 1024,
+        json_schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Generate a completion with native JSON output format.
+
+        Uses Claude CLI's --output-format json for reliable JSON parsing.
+        Optionally validates against a JSON schema.
+        """
+        try:
+            cli_cmd = self._get_cli_command()
+
+            # Write prompt to temp file
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", delete=False
+            ) as f:
+                if system_prompt:
+                    f.write(f"System: {system_prompt}\n\n")
+                f.write(prompt)
+                prompt_file = f.name
+
+            try:
+                # Build command with JSON output format
+                cmd = [
+                    cli_cmd,
+                    "--print",
+                    "--output-format", "json",
+                    "--model", self.model,
+                ]
+
+                # Add JSON schema if provided
+                if json_schema:
+                    cmd.extend(["--json-schema", json.dumps(json_schema)])
+
+                with open(prompt_file) as pf:
+                    result = subprocess.run(
+                        cmd,
+                        stdin=pf,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+            finally:
+                Path(prompt_file).unlink(missing_ok=True)
+
+            if result.returncode != 0:
+                logger.warning("Claude CLI JSON error: %s", result.stderr)
+                return None
+
+            # Parse the JSON output
+            output = result.stdout.strip()
+            try:
+                # Claude --output-format json returns a JSON object with "result" key
+                parsed = json.loads(output)
+                # Extract the actual content - may be nested in result/content
+                if isinstance(parsed, dict):
+                    if "result" in parsed:
+                        content = parsed["result"]
+                        if isinstance(content, str):
+                            # The result itself may be JSON string
+                            try:
+                                return json.loads(content)
+                            except json.JSONDecodeError:
+                                pass
+                        elif isinstance(content, dict):
+                            return content
+                    return parsed
+                return None
+            except json.JSONDecodeError as e:
+                logger.warning("Failed to parse Claude JSON output: %s", e)
+                # Fall back to base implementation
+                return super().complete_json(
+                    prompt, system_prompt=system_prompt, max_tokens=max_tokens
+                )
+
+        except subprocess.TimeoutExpired:
+            logger.warning("Claude CLI JSON request timed out")
+            return None
+        except Exception as e:
+            logger.warning("Claude CLI JSON error: %s", e)
+            return None
+
 
 class CodexCLIAdapter(LLMAdapter):
     """

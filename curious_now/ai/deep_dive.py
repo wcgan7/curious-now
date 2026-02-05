@@ -305,22 +305,33 @@ def generate_deep_dive(
         context_section=context_section,
     )
 
-    # Generate completion
-    response: LLMResponse = adapter.complete(
+    # Try complete_json first for reliable JSON parsing
+    raw_json = adapter.complete_json(
         user_prompt,
         system_prompt=DEEP_DIVE_SYSTEM_PROMPT,
         max_tokens=1000,
-        temperature=0.5,  # Lower temp for more structured output
     )
 
-    if not response.success:
-        logger.warning("Deep-dive generation failed: %s", response.error)
-        return DeepDiveResult.failure(response.error or "Unknown error")
+    # Get model name for result
+    model_name = getattr(adapter, "model", adapter.name)
 
-    # Parse the JSON response
-    raw_json = _parse_deep_dive_json(response.text)
     if raw_json is None:
-        return DeepDiveResult.failure("Failed to parse JSON response")
+        # Fallback: try regular complete with manual parsing
+        response: LLMResponse = adapter.complete(
+            user_prompt,
+            system_prompt=DEEP_DIVE_SYSTEM_PROMPT,
+            max_tokens=1000,
+            temperature=0.5,
+        )
+
+        if not response.success:
+            logger.warning("Deep-dive generation failed: %s", response.error)
+            return DeepDiveResult.failure(response.error or "Unknown error")
+
+        model_name = response.model
+        raw_json = _parse_deep_dive_json(response.text)
+        if raw_json is None:
+            return DeepDiveResult.failure("Failed to parse JSON response")
 
     # Validate and create content
     content = _validate_deep_dive_content(raw_json)
@@ -347,7 +358,7 @@ def generate_deep_dive(
         content=content,
         raw_json=raw_json,
         confidence=confidence,
-        model=response.model,
+        model=model_name,
         success=True,
     )
 

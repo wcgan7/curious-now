@@ -219,28 +219,39 @@ def analyze_lineage(
         topics_b=topics_b,
     )
 
-    # Generate completion
-    response: LLMResponse = adapter.complete(
+    # Try complete_json first for reliable JSON parsing
+    raw_json = adapter.complete_json(
         user_prompt,
         system_prompt=LINEAGE_SYSTEM_PROMPT,
         max_tokens=300,
-        temperature=0.3,
     )
 
-    if not response.success:
-        logger.warning("Lineage analysis failed: %s", response.error)
-        return LineageAnalysisResult.failure(response.error or "Unknown error")
+    # Get model name for result
+    model_name = getattr(adapter, "model", adapter.name)
 
-    # Parse the JSON response
-    raw_json = _parse_lineage_result(response.text)
     if raw_json is None:
-        return LineageAnalysisResult.failure("Failed to parse JSON response")
+        # Fallback: try regular complete with manual parsing
+        response: LLMResponse = adapter.complete(
+            user_prompt,
+            system_prompt=LINEAGE_SYSTEM_PROMPT,
+            max_tokens=300,
+            temperature=0.3,
+        )
+
+        if not response.success:
+            logger.warning("Lineage analysis failed: %s", response.error)
+            return LineageAnalysisResult.failure(response.error or "Unknown error")
+
+        model_name = response.model
+        raw_json = _parse_lineage_result(response.text)
+        if raw_json is None:
+            return LineageAnalysisResult.failure("Failed to parse JSON response")
 
     # Check if connected
     connected = bool(raw_json.get("connected", False))
 
     if not connected:
-        return LineageAnalysisResult.not_connected(response.model)
+        return LineageAnalysisResult.not_connected(model_name)
 
     # Parse relationship type
     relationship_str = raw_json.get("relationship", "builds_on")
@@ -261,7 +272,7 @@ def analyze_lineage(
     return LineageAnalysisResult(
         connected=True,
         edge=edge,
-        model=response.model,
+        model=model_name,
         success=True,
     )
 

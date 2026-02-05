@@ -367,7 +367,9 @@ def semantic_search(
 
     Falls back to full-text search if vector search is not available.
     """
-    # Check if pgvector is available and embeddings exist
+    from curious_now.ai.embeddings import generate_query_embedding, get_embedding_provider
+
+    # Check if pgvector is available
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -380,29 +382,70 @@ def semantic_search(
         has_vector = row["has_vector"] if row else False
 
     if not has_vector:
-        # Fall back to FTS
         return _fallback_fts_search(conn, request.query, request.limit)
 
-    # Check if we have embeddings column
+    # Check if we have any embeddings in the cluster_embeddings table
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT EXISTS(
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'story_clusters'
-                  AND column_name = 'embedding'
-            ) AS has_embedding;
+                SELECT 1 FROM cluster_embeddings LIMIT 1
+            ) AS has_embeddings;
             """
         )
         row = cur.fetchone()
-        has_embedding = row["has_embedding"] if row else False
+        has_embeddings = row["has_embeddings"] if row else False
 
-    if not has_embedding:
+    if not has_embeddings:
         return _fallback_fts_search(conn, request.query, request.limit)
 
-    # For now, we don't have a way to generate query embeddings,
-    # so fall back to FTS. In production, you'd call an embedding API here.
-    return _fallback_fts_search(conn, request.query, request.limit)
+    # Generate query embedding
+    try:
+        provider = get_embedding_provider()
+        query_result = generate_query_embedding(request.query, provider=provider)
+
+        if not query_result.success or not query_result.embedding:
+            return _fallback_fts_search(conn, request.query, request.limit)
+
+        query_embedding = query_result.embedding
+    except Exception:
+        return _fallback_fts_search(conn, request.query, request.limit)
+
+    # Perform vector similarity search using pgvector
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                c.id AS cluster_id,
+                c.canonical_title,
+                c.takeaway,
+                1 - (ce.embedding <=> %s::vector) AS similarity_score
+            FROM cluster_embeddings ce
+            JOIN story_clusters c ON c.id = ce.cluster_id
+            WHERE c.status = 'active'
+            ORDER BY ce.embedding <=> %s::vector
+            LIMIT %s;
+            """,
+            (query_embedding, query_embedding, request.limit),
+        )
+        rows = cur.fetchall()
+
+    results = []
+    for r in rows:
+        results.append(
+            VectorSearchResult(
+                cluster_id=r["cluster_id"],
+                canonical_title=r["canonical_title"],
+                takeaway=r["takeaway"],
+                similarity_score=float(r["similarity_score"]) if r["similarity_score"] else 0.0,
+            )
+        )
+
+    return VectorSearchResponse(
+        query=request.query,
+        results=results,
+        fallback_to_fts=False,
+    )
 
 
 def _fallback_fts_search(
