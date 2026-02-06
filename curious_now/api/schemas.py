@@ -183,6 +183,7 @@ class ClusterDetail(BaseModel):
 
     takeaway: str | None = None
     summary_intuition: str | None = None
+    summary_intuition_eli20: str | None = None
     summary_deep_dive: str | None = None
     assumptions: list[str] = []
     limitations: list[str] = []

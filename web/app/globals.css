@@ -1,0 +1,189 @@
+:root {
+  /* Curious Now — Paper + Ocean (canonical tokens from design_docs/stage3.md) */
+  --bg: #fbfaf7;
+  --surface-1: #ffffff;
+  --surface-2: #f4f1ea;
+  --border: #e6e1d7;
+
+  --text-1: #111827;
+  --text-2: #374151;
+  --text-3: #6b7280;
+
+  --primary: #1e40af;
+  --primary-hover: #1d4ed8;
+  --accent: #0f766e;
+  --highlight: #f3d36b;
+
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --info: #0369a1;
+
+  --font-ui: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+  --font-article: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", serif;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
+  /* Build-critical tokens */
+  --border-1: 1px solid var(--border);
+  --border-2: 1px solid color-mix(in srgb, var(--border) 70%, var(--text-3));
+  --focus: color-mix(in srgb, var(--primary) 70%, white);
+  --focus-ring: 2px solid var(--focus);
+  --focus-offset: 2px;
+  --shadow-1: 0 1px 2px rgba(17, 24, 39, 0.06);
+  --shadow-2: 0 6px 18px rgba(17, 24, 39, 0.1);
+  --t-fast: 150ms;
+  --t-med: 220ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --tap: 44px;
+
+  /* Compat aliases used in some docs (see design_docs/frontend_handoff.md) */
+  --space-1: var(--s-1);
+  --space-2: var(--s-2);
+  --space-3: var(--s-3);
+  --space-4: var(--s-4);
+  --space-5: 20px;
+  --space-6: var(--s-6);
+  --space-8: var(--s-8);
+  --space-12: var(--s-12);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-full: 9999px;
+
+  --color-text-primary: var(--text-1);
+  --color-text-secondary: var(--text-2);
+  --color-text-tertiary: var(--text-3);
+  --color-primary: var(--primary);
+  --color-error: var(--danger);
+
+  --color-primary-bg: color-mix(in srgb, var(--primary) 10%, var(--surface-1));
+  --color-primary-bg-hover: color-mix(in srgb, var(--primary) 14%, var(--surface-1));
+  --color-surface-alt: var(--surface-2);
+
+  --color-warning-text: var(--warning);
+  --color-warning-bg: color-mix(in srgb, var(--warning) 12%, var(--surface-1));
+
+  --color-error-text: var(--danger);
+  --color-error-bg: color-mix(in srgb, var(--danger) 10%, var(--surface-1));
+  --color-error-border: color-mix(in srgb, var(--danger) 35%, var(--border));
+  --color-error-ring: color-mix(in srgb, var(--danger) 30%, transparent);
+
+  --color-skeleton-base: color-mix(in srgb, var(--border) 70%, var(--surface-2));
+  --color-skeleton-highlight: var(--surface-1);
+
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-2xl: 24px;
+
+  --font-serif: var(--font-article);
+}
+
+.theme-dark {
+  --bg: #070a12;
+  --surface-1: #0b1220;
+  --surface-2: #111b2e;
+  --border: #1f2a44;
+
+  --text-1: #e5e7eb;
+  --text-2: #cbd5e1;
+  --text-3: #94a3b8;
+
+  --primary: #93c5fd;
+  --primary-hover: #60a5fa;
+  --accent: #5eead4;
+  --highlight: #fde68a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-ui);
+  min-height: 100%;
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 12% -8%, color-mix(in srgb, var(--highlight) 22%, transparent), transparent 32%),
+    radial-gradient(circle at 88% -14%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 36%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 56%, var(--bg)) 0, var(--bg) 240px),
+    repeating-linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--border) 14%, transparent) 0,
+      color-mix(in srgb, var(--border) 14%, transparent) 1px,
+      transparent 1px,
+      transparent 14px
+    );
+  background-attachment: fixed;
+}
+
+main {
+  animation: reveal 260ms var(--ease);
+}
+
+main > * {
+  animation: sectionRise 320ms var(--ease);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sectionRise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

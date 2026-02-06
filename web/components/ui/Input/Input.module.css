@@ -1,0 +1,49 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.input {
+  height: 44px;
+  padding: 0 var(--s-3);
+  border-radius: 12px;
+  border: var(--border-1);
+  background: color-mix(in srgb, var(--surface-1) 92%, var(--surface-2));
+  color: var(--text-1);
+  font-size: 16px;
+  transition:
+    border-color var(--t-fast) var(--ease),
+    background-color var(--t-fast) var(--ease);
+}
+
+.input:hover {
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+}
+
+.input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+}
+
+.errorText {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-3);
+}

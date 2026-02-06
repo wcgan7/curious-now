@@ -1,0 +1,72 @@
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: 10px;
+}
+
+.metaRow::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--border) 80%, white), transparent);
+  margin-left: 4px;
+}
+
+.badges {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.takeaway {
+  margin: var(--s-3) 0 0;
+  color: var(--text-2);
+  font-family: var(--font-article);
+  line-height: 1.68;
+  font-size: 1.05rem;
+}
+
+.flags {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  margin-top: var(--s-3);
+}
+
+.flag {
+  font-size: 12px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.readLink {
+  color: var(--primary);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 640px) {
+  .takeaway {
+    font-size: 0.98rem;
+    line-height: 1.55;
+  }
+
+  .flags {
+    margin-top: 8px;
+    gap: 6px;
+  }
+
+  .flag {
+    font-size: 11px;
+    padding: 2px 7px;
+  }
+}

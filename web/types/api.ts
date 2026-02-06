@@ -1,0 +1,25 @@
+import type { components } from '@/types/api.generated';
+
+export type ContentType = components['schemas']['ContentType'];
+export type ClusterCard = components['schemas']['ClusterCard'];
+export type ClustersFeedResponse = components['schemas']['ClustersFeedResponse'];
+export type ClusterDetail = components['schemas']['ClusterDetail'];
+export type TopicDetail = components['schemas']['TopicDetail'];
+export type TopicsResponse = components['schemas']['TopicsResponse'];
+export type SearchResponse = components['schemas']['SearchResponse'];
+export type GlossaryLookupResponse = components['schemas']['GlossaryLookupResponse'];
+export type TopicLineageResponse = components['schemas']['TopicLineageResponse'];
+export type ClusterUpdatesResponse = components['schemas']['ClusterUpdatesResponse'];
+export type Source = components['schemas']['Source'];
+export type SourcesResponse = components['schemas']['SourcesResponse'];
+export type User = components['schemas']['User'];
+export type UserResponse = components['schemas']['UserResponse'];
+export type UserPrefs = components['schemas']['UserPrefs'];
+export type UserPrefsResponse = components['schemas']['UserPrefsResponse'];
+export type UserPrefsPatchRequest = components['schemas']['UserPrefsPatchRequest'];
+export type SimpleOkResponse = components['schemas']['SimpleOkResponse'];
+export type UserSavesResponse = components['schemas']['UserSavesResponse'];
+export type UserWatchesResponse = components['schemas']['UserWatchesResponse'];
+export type AuthMagicLinkStartResponse = components['schemas']['AuthMagicLinkStartResponse'];
+export type AuthMagicLinkVerifyResponse = components['schemas']['AuthMagicLinkVerifyResponse'];
+export type LogoutResponse = components['schemas']['LogoutResponse'];

@@ -339,6 +339,7 @@ def _upsert_item(
 ) -> tuple[bool, bool]:
     canonical_hash = _sha256_hex(canonical_url)
     title_hash = _sha256_hex(normalize_title_for_hash(title))
+    full_text_status = "pending" if content_type in {"preprint", "peer_reviewed"} else None
 
     with conn.cursor() as cur:
         cur.execute(
@@ -357,9 +358,10 @@ def _upsert_item(
               title_hash,
               canonical_hash,
               arxiv_id,
-              doi
+              doi,
+              full_text_status
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'en',%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'en',%s,%s,%s,%s,%s)
             ON CONFLICT (canonical_hash)
             DO UPDATE SET
               url = EXCLUDED.url,
@@ -372,7 +374,13 @@ def _upsert_item(
               content_type = EXCLUDED.content_type,
               title_hash = EXCLUDED.title_hash,
               arxiv_id = COALESCE(items.arxiv_id, EXCLUDED.arxiv_id),
-              doi = COALESCE(items.doi, EXCLUDED.doi)
+              doi = COALESCE(items.doi, EXCLUDED.doi),
+              full_text_status = CASE
+                WHEN items.full_text IS NOT NULL AND btrim(items.full_text) <> '' THEN 'ok'
+                WHEN EXCLUDED.content_type IN ('preprint', 'peer_reviewed')
+                  THEN COALESCE(items.full_text_status, EXCLUDED.full_text_status, 'pending')
+                ELSE items.full_text_status
+              END
             RETURNING (xmax = 0) AS inserted;
             """,
             (
@@ -389,6 +397,7 @@ def _upsert_item(
                 canonical_hash,
                 arxiv_id,
                 doi,
+                full_text_status,
             ),
         )
         row = cur.fetchone()

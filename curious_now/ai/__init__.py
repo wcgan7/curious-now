@@ -33,6 +33,8 @@ from curious_now.ai.intuition import (
     GlossaryTerm,
     IntuitionInput,
     IntuitionResult,
+    generate_eli20,
+    generate_eli5,
     generate_intuition,
     generate_intuition_from_db_data,
 )
@@ -92,6 +94,8 @@ __all__ = [
     "GlossaryTerm",
     "IntuitionInput",
     "IntuitionResult",
+    "generate_eli20",
+    "generate_eli5",
     "generate_intuition",
     "generate_intuition_from_db_data",
     # Deep Dive

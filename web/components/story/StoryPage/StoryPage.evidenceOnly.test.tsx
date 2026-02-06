@@ -1,0 +1,54 @@
+import { describe, expect, it } from 'vitest';
+
+import { StoryPage } from './StoryPage';
+import { renderWithProviders } from '@/test/utils';
+
+describe('StoryPage (evidence-only)', () => {
+  it('renders even when understanding fields are null', () => {
+    const { getByText, queryByText } = renderWithProviders(
+      <StoryPage
+        cluster={{
+          cluster_id: '00000000-0000-0000-0000-000000000001',
+          canonical_title: 'Evidence-only story',
+          created_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          updated_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          distinct_source_count: 1,
+          evidence: {
+            news: [
+              {
+                item_id: '00000000-0000-0000-0000-000000000101',
+                title: 'Evidence item title',
+                url: 'https://example.com',
+                published_at: null,
+                source: { source_id: 's1', name: 'Example' },
+                content_type: 'news',
+              },
+            ],
+          },
+          topics: [],
+          content_type_breakdown: { news: 1 },
+          takeaway: null,
+          summary_intuition: null,
+          summary_deep_dive: null,
+          assumptions: [],
+          limitations: [],
+          what_could_change_this: [],
+          confidence_band: null,
+          method_badges: [],
+          anti_hype_flags: [],
+          takeaway_supporting_item_ids: [],
+          summary_intuition_supporting_item_ids: [],
+          summary_deep_dive_supporting_item_ids: [],
+          glossary_entries: [],
+          is_saved: null,
+          is_watched: null,
+        }}
+      />
+    );
+
+    expect(getByText('Evidence-only story')).toBeInTheDocument();
+    expect(getByText('Evidence item title')).toBeInTheDocument();
+    expect(queryByText('Intuition')).toBeNull();
+    expect(queryByText('Deep dive')).toBeNull();
+  });
+});

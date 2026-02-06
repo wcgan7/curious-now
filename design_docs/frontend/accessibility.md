@@ -4,6 +4,8 @@
 
 This document specifies accessibility requirements and implementation patterns for Curious Now. The goal is WCAG 2.1 AA compliance, ensuring the platform is usable by people with various disabilities.
 
+**Token note:** Canonical UI tokens (colors/spacing/radius) are defined in `design_docs/stage3.md`. Some snippets in this doc use generic `--color-*` / `--space-*` names; translate them to the canonical tokens or use the compat aliases in `design_docs/frontend_handoff.md`.
+
 ---
 
 ## Accessibility Standards

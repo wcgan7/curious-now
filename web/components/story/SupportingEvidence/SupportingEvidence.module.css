@@ -1,0 +1,51 @@
+.wrap {
+  margin-top: var(--s-3);
+  padding: var(--s-3);
+  border: var(--border-1);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+  display: grid;
+  gap: var(--s-2);
+}
+
+.heading {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+
+.item {
+  display: grid;
+  gap: 4px;
+}
+
+.link {
+  color: var(--text-1);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  color: var(--text-3);
+  font-size: 13px;
+}
+

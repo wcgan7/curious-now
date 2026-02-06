@@ -32,14 +32,11 @@ from curious_now.ai.deep_dive import (
     generate_deep_dive,
 )
 from curious_now.ai.intuition import (
-    GlossaryTerm,
     IntuitionInput,
     IntuitionResult,
-    _extract_analogies,
+    generate_eli20,
+    generate_eli5,
     generate_intuition,
-)
-from curious_now.ai.intuition import (
-    _calculate_confidence as calculate_intuition_confidence,
 )
 from curious_now.ai.llm_adapter import ClaudeCLIAdapter, MockAdapter
 
@@ -62,20 +59,37 @@ def mock_adapter() -> MockAdapter:
     """
     return MockAdapter(
         responses={
-            # Matches "analogy" in intuition prompts
-            "analogy": "CRISPR works like molecular scissors that can cut DNA at "
-            "precise locations. The new variant is like having steadier hands for "
-            "brain surgery - crucial because neurons don't regenerate. "
-            "[Analogies: scissors, surgery]",
-            # Matches "deep-dive" in deep_dive prompts
-            "deep-dive": """{
-                "what_happened": "Scientists developed a modified CRISPR system.",
-                "why_it_matters": "This enables gene therapy in brain cells.",
-                "background": "CRISPR has been used in other tissues since 2012.",
-                "limitations": ["Only tested in mice", "High cost", "Limited availability"],
-                "whats_next": "Clinical trials expected within 3 years.",
-                "related_concepts": ["gene therapy", "Cas9", "neurons"]
-            }""",
+            # Matches ELI20 prompt section title
+            "Canonical Deep Dive": "The method refines CRISPR so edits in neurons are more targeted and "
+            "predictable, emphasizing control over where changes happen while preserving "
+            "the intended therapeutic effect. It frames the core mechanism as tightening "
+            "specificity in the editing step and pairing that with delivery choices that "
+            "fit brain-cell constraints, so the approach stays practical for disease-focused "
+            "applications without introducing new claims beyond the deep dive source.",
+            # Matches ELI5 prompt section title
+            "Conceptual Intuition (ELI20)": "This is about making a gene-editing approach safer and more reliable "
+            "for brain cells. The problem is that tiny mistakes matter more in neurons, so "
+            "the goal is to reduce off-target changes. At a high level, it improves how the "
+            "editing tool picks where to act, then pairs that with a delivery setup suited "
+            "to those cells, so treatment ideas can be explored with less unwanted editing.",
+            # Matches "Technical Deep Dive" in deep_dive prompts
+            "Technical Deep Dive": """## Overview
+
+Scientists developed a modified CRISPR system that enables gene therapy in brain cells.
+
+## Methodology / Approach
+
+The team modified the Cas9 enzyme to reduce off-target effects in post-mitotic cells.
+
+## Results
+
+Clinical trials showed significant improvement in neurological function.
+
+## Limitations & Uncertainties
+
+- Only tested in mice so far
+- High cost of treatment
+- Limited availability of specialized facilities""",
             # Matches "Validate" in citation check prompts
             "validate": """{
                 "validated": true,
@@ -99,18 +113,12 @@ def sample_intuition_input() -> IntuitionInput:
     """Sample input for intuition generation."""
     return IntuitionInput(
         cluster_title="New CRISPR variant enables precise gene editing in neurons",
-        takeaway="Scientists developed a CRISPR modification that works in brain cells, "
-        "potentially enabling treatments for neurological diseases.",
-        technical_snippets=[
-            "The modified Cas9 enzyme shows reduced off-target effects in post-mitotic cells "
-            "due to enhanced PAM specificity.",
-            "Delivery was achieved using AAV9 vectors with neuron-specific promoters.",
-        ],
-        glossary_terms=[
-            GlossaryTerm(term="CRISPR", definition="Gene editing technology"),
-            GlossaryTerm(term="Cas9", definition="The enzyme that cuts DNA"),
-        ],
-        topic_names=["Gene Therapy", "Neuroscience"],
+        deep_dive_markdown=(
+            "## Overview\\nA CRISPR variant was adapted for neurons.\\n\\n"
+            "## Methodology / Approach\\nThe work improves targeting specificity and uses "
+            "delivery suited to neuronal biology.\\n\\n"
+            "## Results\\nThe deep dive reports improved precision relative to baseline."
+        ),
     )
 
 
@@ -119,7 +127,6 @@ def sample_deep_dive_input() -> DeepDiveInput:
     """Sample input for deep-dive generation."""
     return DeepDiveInput(
         cluster_title="FDA approves first CRISPR-based therapy",
-        takeaway="The FDA approved Casgevy for sickle cell disease, marking a historic milestone.",
         source_summaries=[
             SourceSummary(
                 title="FDA Approves First CRISPR Therapy for Sickle Cell Disease",
@@ -129,6 +136,16 @@ def sample_deep_dive_input() -> DeepDiveInput:
                 ),
                 source_name="FDA Press Release",
                 source_type="government",
+                full_text=(
+                    "The FDA has approved Casgevy (exagamglogene autotemcel), developed "
+                    "by Vertex Pharmaceuticals and CRISPR Therapeutics, for treating "
+                    "sickle cell disease in patients 12 years and older. This is the "
+                    "first FDA-approved therapy using CRISPR gene-editing technology. "
+                    "The treatment involves extracting a patient's bone marrow stem cells, "
+                    "editing them using CRISPR to produce functional hemoglobin, and "
+                    "reinfusing the modified cells. Clinical trials showed 93% of patients "
+                    "were free of vaso-occlusive crises for at least 12 months after treatment."
+                ),
             ),
             SourceSummary(
                 title="CRISPR gene therapy receives landmark FDA approval",
@@ -136,6 +153,14 @@ def sample_deep_dive_input() -> DeepDiveInput:
                 "authorized for use in the United States.",
                 source_name="Nature",
                 source_type="journal",
+                full_text=(
+                    "The approval marks the first time a CRISPR-based therapy has been "
+                    "authorized for use in the United States, representing a landmark moment "
+                    "for gene editing technology. The therapy targets BCL11A, a gene that "
+                    "normally suppresses fetal hemoglobin production. By disrupting this gene, "
+                    "the treatment reactivates fetal hemoglobin, which can compensate for "
+                    "the defective adult hemoglobin in sickle cell disease."
+                ),
             ),
             SourceSummary(
                 title="What the first CRISPR therapy approval means for patients",
@@ -143,10 +168,17 @@ def sample_deep_dive_input() -> DeepDiveInput:
                 "hospitalization for bone marrow extraction.",
                 source_name="STAT News",
                 source_type="journalism",
+                full_text=(
+                    "The treatment costs approximately $2.2 million and requires "
+                    "hospitalization for bone marrow extraction and chemotherapy conditioning. "
+                    "Patients must undergo myeloablative conditioning to make room for the "
+                    "edited cells. The process takes several months from cell collection to "
+                    "reinfusion. While the therapy shows promise, questions remain about "
+                    "long-term durability and accessibility for the approximately 100,000 "
+                    "Americans living with sickle cell disease."
+                ),
             ),
         ],
-        glossary_terms=["CRISPR", "sickle cell disease", "gene therapy"],
-        topic_names=["Gene Therapy", "FDA", "Rare Diseases"],
     )
 
 
@@ -155,50 +187,29 @@ def sample_deep_dive_input() -> DeepDiveInput:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestExtractAnalogies:
-    """Test analogy extraction from response text."""
+class TestLayeredIntuition:
+    """Test staged intuition generation helpers."""
 
-    def test_extract_analogies_standard_format(self) -> None:
-        text = "CRISPR is like scissors. [Analogies: scissors, lock and key]"
-        clean, analogies = _extract_analogies(text)
-
-        assert clean == "CRISPR is like scissors."
-        assert analogies == ["scissors", "lock and key"]
-
-    def test_extract_analogies_singular(self) -> None:
-        text = "It works like a key. [Analogy: key]"
-        clean, analogies = _extract_analogies(text)
-
-        assert clean == "It works like a key."
-        assert analogies == ["key"]
-
-    def test_extract_analogies_none(self) -> None:
-        text = "This is an explanation without analogies."
-        clean, analogies = _extract_analogies(text)
-
-        assert clean == text
-        assert analogies == []
-
-
-class TestCalculateIntuitionConfidence:
-    """Test intuition confidence calculation."""
-
-    def test_good_length_increases_confidence(
-        self, sample_intuition_input: IntuitionInput
+    def test_generate_eli20_from_deep_dive(
+        self,
+        sample_intuition_input: IntuitionInput,
+        mock_adapter: MockAdapter,
     ) -> None:
-        good_intuition = " ".join(["word"] * 100)  # 100 words
-        confidence = calculate_intuition_confidence(good_intuition, sample_intuition_input)
+        eli20_text, _, _, word_count, _ = generate_eli20(sample_intuition_input, adapter=mock_adapter)
+        assert len(eli20_text) > 0
+        assert word_count > 20
 
-        assert confidence > 0.8
-
-    def test_jargon_reduces_confidence(
-        self, sample_intuition_input: IntuitionInput
+    def test_generate_eli5_from_eli20(
+        self,
+        mock_adapter: MockAdapter,
     ) -> None:
-        jargon_intuition = "The methodology paradigm shows statistically significant results."
-        confidence = calculate_intuition_confidence(jargon_intuition, sample_intuition_input)
-
-        # Should be lower due to jargon
-        assert confidence < 0.8
+        eli5_text, _, _, word_count, _ = generate_eli5(
+            cluster_title="Test",
+            eli20_text="A precise conceptual explanation of how a CRISPR variant improves targeting.",
+            adapter=mock_adapter,
+        )
+        assert len(eli5_text) > 0
+        assert word_count > 20
 
 
 class TestGenerateIntuitionMock:
@@ -215,7 +226,7 @@ class TestGenerateIntuitionMock:
         assert result.success is True
         assert len(result.intuition) > 0
 
-    def test_generate_intuition_extracts_analogies(
+    def test_generate_intuition_returns_both_layers(
         self,
         sample_intuition_input: IntuitionInput,
         mock_adapter: MockAdapter,
@@ -223,17 +234,28 @@ class TestGenerateIntuitionMock:
         result = generate_intuition(sample_intuition_input, adapter=mock_adapter)
 
         assert result.success is True
-        assert len(result.analogies_used) > 0
+        assert len(result.eli20) > 0
+        assert len(result.eli5) > 0
 
     def test_generate_intuition_no_title_fails(
         self,
         mock_adapter: MockAdapter,
     ) -> None:
-        input_data = IntuitionInput(cluster_title="")
+        input_data = IntuitionInput(cluster_title="", deep_dive_markdown="text")
         result = generate_intuition(input_data, adapter=mock_adapter)
 
         assert result.success is False
         assert result.error is not None and "title" in result.error.lower()
+
+    def test_generate_intuition_missing_deep_dive_fails(
+        self,
+        mock_adapter: MockAdapter,
+    ) -> None:
+        input_data = IntuitionInput(cluster_title="CRISPR")
+        result = generate_intuition(input_data, adapter=mock_adapter)
+
+        assert result.success is False
+        assert result.error is not None and "deep dive" in result.error.lower()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -255,10 +277,11 @@ class TestGenerateIntuitionClaude:
         result = generate_intuition(sample_intuition_input, adapter=claude_adapter)
 
         assert result.success is True, f"Generation failed: {result.error}"
-        assert len(result.intuition) > 50
+        assert len(result.eli5) > 50
+        assert len(result.eli20) > 50
         assert result.confidence > 0.5
 
-    def test_intuition_uses_simple_language(
+    def test_eli5_uses_simple_language(
         self,
         sample_intuition_input: IntuitionInput,
         claude_adapter: ClaudeCLIAdapter,
@@ -272,10 +295,10 @@ class TestGenerateIntuitionClaude:
 
         # Should avoid heavy jargon
         jargon_words = ["methodology", "paradigm", "pursuant"]
-        intuition_lower = result.intuition.lower()
+        intuition_lower = result.eli5.lower()
         for word in jargon_words:
             assert word not in intuition_lower, (
-                f"Intuition contains jargon '{word}': {result.intuition}"
+                f"Intuition contains jargon '{word}': {result.eli5}"
             )
 
 
@@ -289,30 +312,20 @@ class TestDeepDiveContent:
 
     def test_deep_dive_to_json(self) -> None:
         content = DeepDiveContent(
-            what_happened="Test happened",
-            why_it_matters="It matters because...",
-            background="Background info",
-            limitations=["Limit 1", "Limit 2"],
-            whats_next="Next steps",
-            related_concepts=["concept1", "concept2"],
+            markdown="## Overview\n\nTest content here.",
             generated_at="2026-02-05T10:00:00Z",
             source_count=3,
         )
 
         json_data = deep_dive_to_json(content)
 
-        assert json_data["what_happened"] == "Test happened"
-        assert len(json_data["limitations"]) == 2
+        assert "## Overview" in json_data["markdown"]
         assert json_data["source_count"] == 3
+        assert json_data["generated_at"] == "2026-02-05T10:00:00Z"
 
     def test_deep_dive_from_json(self) -> None:
         json_data = {
-            "what_happened": "Test happened",
-            "why_it_matters": "It matters",
-            "background": "Background",
-            "limitations": ["Limit 1"],
-            "whats_next": "Next",
-            "related_concepts": [],
+            "markdown": "## Overview\n\nTest happened.",
             "generated_at": "2026-02-05T10:00:00Z",
             "source_count": 2,
         }
@@ -320,7 +333,8 @@ class TestDeepDiveContent:
         content = deep_dive_from_json(json_data)
 
         assert content is not None
-        assert content.what_happened == "Test happened"
+        assert "## Overview" in content.markdown
+        assert content.source_count == 2
 
     def test_deep_dive_from_json_invalid(self) -> None:
         json_data = {"incomplete": "data"}
@@ -344,7 +358,7 @@ class TestGenerateDeepDiveMock:
         assert result.success is True
         assert result.content is not None
 
-    def test_generate_deep_dive_has_all_sections(
+    def test_generate_deep_dive_has_markdown_content(
         self,
         sample_deep_dive_input: DeepDiveInput,
         mock_adapter: MockAdapter,
@@ -353,11 +367,9 @@ class TestGenerateDeepDiveMock:
 
         assert result.success is True
         assert result.content is not None
-        assert result.content.what_happened
-        assert result.content.why_it_matters
-        assert result.content.background
-        assert result.content.whats_next
-        assert len(result.content.limitations) > 0
+        assert len(result.content.markdown) > 0
+        # Should have headers (##)
+        assert "##" in result.content.markdown
 
     def test_generate_deep_dive_no_title_fails(
         self,
@@ -390,13 +402,12 @@ class TestGenerateDeepDiveClaude:
         assert result.success is True, f"Generation failed: {result.error}"
         assert result.content is not None
 
-        # Check all sections have content
-        assert len(result.content.what_happened) > 20
-        assert len(result.content.why_it_matters) > 20
-        assert len(result.content.background) > 20
-        assert len(result.content.whats_next) > 20
+        # Check markdown has substantial content
+        assert len(result.content.markdown) > 200
+        # Should have headers
+        assert "##" in result.content.markdown
 
-    def test_deep_dive_includes_limitations(
+    def test_deep_dive_includes_methodology_or_results(
         self,
         sample_deep_dive_input: DeepDiveInput,
         claude_adapter: ClaudeCLIAdapter,
@@ -408,7 +419,9 @@ class TestGenerateDeepDiveClaude:
 
         assert result.success is True
         assert result.content is not None
-        assert len(result.content.limitations) >= 1
+        markdown_lower = result.content.markdown.lower()
+        # Should mention methodology, results, or approach
+        assert any(word in markdown_lower for word in ["method", "result", "approach"])
 
     def test_deep_dive_confidence_reasonable(
         self,
@@ -611,22 +624,25 @@ class TestIntuitionResultDataclass:
 
     def test_create_success_result(self) -> None:
         result = IntuitionResult(
-            intuition="Test intuition text",
-            analogies_used=["scissors", "key"],
+            intuition="Test ELI5",
+            eli20="Test ELI20",
+            eli5="Test ELI5",
             confidence=0.85,
             model="test-model",
             success=True,
         )
 
-        assert result.intuition == "Test intuition text"
-        assert len(result.analogies_used) == 2
+        assert result.intuition == "Test ELI5"
+        assert result.eli20 == "Test ELI20"
+        assert result.eli5 == "Test ELI5"
         assert result.success is True
 
     def test_create_failure_result(self) -> None:
         result = IntuitionResult.failure("Test error")
 
         assert result.intuition == ""
-        assert result.analogies_used == []
+        assert result.eli20 == ""
+        assert result.eli5 == ""
         assert result.success is False
         assert result.error == "Test error"
 
@@ -636,18 +652,13 @@ class TestDeepDiveResultDataclass:
 
     def test_create_success_result(self) -> None:
         content = DeepDiveContent(
-            what_happened="Test",
-            why_it_matters="Test",
-            background="Test",
-            limitations=[],
-            whats_next="Test",
-            related_concepts=[],
+            markdown="## Overview\n\nTest content.",
             generated_at="2026-02-05",
             source_count=1,
         )
         result = DeepDiveResult(
             content=content,
-            raw_json={},
+            raw_json={"markdown": content.markdown},
             confidence=0.8,
             model="test",
             success=True,

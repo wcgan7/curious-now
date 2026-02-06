@@ -1,0 +1,77 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-12) var(--s-6);
+  text-align: center;
+}
+
+.iconWrapper {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--surface-2);
+  border-radius: 9999px;
+  margin-bottom: var(--s-6);
+  border: var(--border-1);
+}
+
+.icon {
+  width: 36px;
+  height: 36px;
+  color: var(--text-3);
+}
+
+.title {
+  font-family: var(--font-article);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin: 0 0 var(--s-2) 0;
+}
+
+.message {
+  font-size: 14px;
+  color: var(--text-2);
+  max-width: 360px;
+  line-height: 1.6;
+  margin: 0 0 var(--s-6) 0;
+}
+
+.suggestions {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.suggestionsLabel {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.suggestionsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  justify-content: center;
+}
+
+.suggestionChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 9999px;
+  border: var(--border-1);
+  background: var(--surface-1);
+  color: var(--text-1);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.suggestionChip:hover {
+  background: var(--surface-2);
+}
+

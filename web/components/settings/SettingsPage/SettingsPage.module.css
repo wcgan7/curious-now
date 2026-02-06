@@ -1,0 +1,134 @@
+.main {
+  padding: var(--s-6) var(--s-4) var(--s-12);
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  display: grid;
+  gap: var(--s-6);
+}
+
+.header {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-article);
+  font-size: 28px;
+  color: var(--text-1);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.sections {
+  display: grid;
+  gap: var(--s-6);
+}
+
+.section {
+  padding: var(--s-5);
+  border: var(--border-1);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+  display: grid;
+  gap: var(--s-3);
+}
+
+.h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-1);
+}
+
+.p {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.radioGroup {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.radioRow {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  padding: var(--s-2);
+  border-radius: var(--r-md);
+}
+
+.radioRow:hover {
+  background: var(--surface-2);
+}
+
+.radioLabel {
+  color: var(--text-1);
+}
+
+.row {
+  display: inline-flex;
+  gap: var(--s-3);
+  align-items: center;
+}
+
+.errorInline {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.okInline {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s-3);
+}
+
+.linkCard {
+  padding: var(--s-4);
+  border: var(--border-1);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  text-decoration: none;
+  box-shadow: var(--shadow-1);
+  display: grid;
+  gap: var(--s-1);
+}
+
+.linkCard:hover {
+  background: var(--surface-2);
+}
+
+.linkTitle {
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.linkDesc {
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+

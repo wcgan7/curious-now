@@ -1,0 +1,47 @@
+.module {
+  background-color: color-mix(in srgb, var(--surface-2) 70%, white);
+  border: var(--border-1);
+  border-radius: 18px;
+  padding: var(--s-4) var(--s-4) 20px;
+  margin: var(--s-6) 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.module::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 75%, white),
+    color-mix(in srgb, var(--primary) 72%, white)
+  );
+}
+
+.heading {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+  margin: 0 0 var(--s-2);
+}
+
+.text {
+  font-family: var(--font-article);
+  font-size: clamp(19px, 2.3vw, 22px);
+  line-height: 1.58;
+  color: var(--text-1);
+  margin: 0;
+}
+
+@media (min-width: 768px) {
+  .module {
+    padding: var(--s-6);
+  }
+  .text {
+    font-size: 19px;
+  }
+}

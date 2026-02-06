@@ -8,6 +8,8 @@ This file is the **stage-by-stage roadmap**. Related detailed docs:
 * `design_docs/stage1.md` (ingestion + storage + minimal web)
 * `design_docs/stage2.md` (clusters/dedup/trending/search/topics + DB migrations + clustering QA)
 * `design_docs/stage3.md` (Stage 3 UI system for the understanding layer; includes the implementation-ready component spec)
+* `design_docs/frontend_handoff.md` (single handoff doc for implementing the Next.js frontend)
+* `design_docs/frontend/` (frontend architecture, components, data layer, PWA, testing, accessibility, SEO, error/empty states)
 * `design_docs/stage3_backend.md` (Stage 3 backend: schema + enrichment job + guardrails)
 * `design_docs/stage4.md` (update tracking + lineage)
 * `design_docs/stage5.md` (accounts + personalization)

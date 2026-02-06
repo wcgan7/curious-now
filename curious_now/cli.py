@@ -26,6 +26,7 @@ from curious_now.notifications import (
     enqueue_topic_digest_jobs,
     send_due_notification_jobs,
 )
+from curious_now.paper_text_hydration import hydrate_paper_text
 from curious_now.repo_stage1 import import_source_pack
 from curious_now.retention import purge_logs
 from curious_now.settings import get_settings
@@ -109,6 +110,24 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         f"{result.feeds_succeeded}/{result.feeds_attempted} feeds ok; "
         f"{result.items_inserted} inserted; {result.items_updated} updated; "
         f"{result.items_seen} items seen."
+    )
+    return 0
+
+
+def cmd_hydrate_paper_text(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = DB(settings.database_url)
+    now = _parse_now(args.now)
+    with db.connect(autocommit=True) as conn:
+        result = hydrate_paper_text(
+            conn,
+            limit=int(args.limit),
+            now_utc=now,
+        )
+    print(
+        "Paper text hydration complete: "
+        f"{result.items_hydrated}/{result.items_scanned} hydrated; "
+        f"{result.items_failed} failed; {result.items_skipped} skipped."
     )
     return 0
 
@@ -221,6 +240,18 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
         f"{ing.items_inserted} inserted; {ing.items_updated} updated; "
         f"{ing.items_seen} items seen."
     )
+    if bool(args.hydrate_paper_text):
+        with db.connect(autocommit=True) as conn:
+            hydrated = hydrate_paper_text(
+                conn,
+                limit=int(args.hydrate_limit),
+                now_utc=now,
+            )
+        print(
+            "Hydrated papers: "
+            f"{hydrated.items_hydrated}/{hydrated.items_scanned} hydrated; "
+            f"{hydrated.items_failed} failed; {hydrated.items_skipped} skipped."
+        )
 
     cfg = load_clustering_config(Path(args.clustering_config) if args.clustering_config else None)
     with db.connect(autocommit=True) as conn:
@@ -301,12 +332,12 @@ def cmd_enrich_stage3(args: argparse.Namespace) -> int:
         f"{result.clusters_failed} failed."
     )
     if result.clusters_succeeded > 0:
-        print(f"Generated: intuition, deep-dive, confidence bands, and anti-hype flags.")
+        print("Generated: intuition, deep-dive, confidence bands, and anti-hype flags.")
     return 0
 
 
 def cmd_generate_intuition(args: argparse.Namespace) -> int:
-    """Generate intuition for clusters (high-level understanding)."""
+    """Generate layered intuition (ELI20 -> ELI5) for clusters."""
     settings = get_settings()
     db = DB(settings.database_url)
     with db.connect(autocommit=True) as conn:
@@ -371,6 +402,16 @@ def main(argv: list[str] | None = None) -> int:
     p_ingest.add_argument("--now", type=str, default=None, help="Override current time (ISO-8601)")
     p_ingest.set_defaults(func=cmd_ingest)
 
+    p_hydrate = sub.add_parser(
+        "hydrate-paper-text",
+        help="Hydrate full text for paper items (preprint, peer-reviewed)"
+    )
+    p_hydrate.add_argument(
+        "--limit", type=int, default=200, help="Max items to hydrate"
+    )
+    p_hydrate.add_argument("--now", type=str, default=None, help="Override current time (ISO-8601)")
+    p_hydrate.set_defaults(func=cmd_hydrate_paper_text)
+
     p_source_pack = sub.add_parser(
         "import-source-pack", help="Import a source pack JSON (idempotent upsert)"
     )
@@ -420,6 +461,24 @@ def main(argv: list[str] | None = None) -> int:
     p_pipeline.add_argument("--limit-feeds", type=int, default=25)
     p_pipeline.add_argument("--max-items-per-feed", type=int, default=200)
     p_pipeline.add_argument("--force", action="store_true", default=False)
+    p_pipeline.add_argument(
+        "--hydrate-paper-text",
+        action="store_true",
+        default=True,
+        help="Hydrate paper full text after ingestion (default: enabled)",
+    )
+    p_pipeline.add_argument(
+        "--no-hydrate-paper-text",
+        dest="hydrate_paper_text",
+        action="store_false",
+        help="Skip paper text hydration during pipeline run",
+    )
+    p_pipeline.add_argument(
+        "--hydrate-limit",
+        type=int,
+        default=500,
+        help="Max paper items to hydrate in pipeline",
+    )
     p_pipeline.add_argument("--cluster-limit-items", type=int, default=2000)
     p_pipeline.add_argument("--clustering-config", type=str, default=None)
     p_pipeline.add_argument("--tag-lookback-days", type=int, default=14)
@@ -466,7 +525,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_intuition = sub.add_parser(
         "generate-intuition",
-        help="Generate intuition (high-level understanding) for all clusters"
+        help="Generate layered intuition (ELI20, ELI5) for all clusters"
     )
     p_intuition.add_argument(
         "--limit", type=int, default=100, help="Max clusters to process"

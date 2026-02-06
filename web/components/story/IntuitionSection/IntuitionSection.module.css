@@ -1,0 +1,69 @@
+.section {
+  margin: var(--s-8) 0;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.h2 {
+  font-family: var(--font-article);
+  font-size: 30px;
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: -0.015em;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: var(--border-1);
+  background: color-mix(in srgb, var(--surface-1) 90%, var(--surface-2));
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.tab,
+.activeTab {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.activeTab {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--primary) 15%, var(--surface-1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 30%, var(--border));
+}
+
+.modePill {
+  display: inline-flex;
+  align-items: center;
+  border: var(--border-1);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--surface-2) 70%, white);
+}
+
+.prose {
+  font-family: var(--font-article);
+  font-size: clamp(18px, 2.3vw, 20px);
+  line-height: 1.72;
+  color: var(--text-1);
+  margin: 0;
+  max-width: 68ch;
+}

@@ -4,6 +4,8 @@
 
 This document specifies all error states, empty states, loading states, and offline states for Curious Now. Consistent handling of these states improves user experience and reduces confusion.
 
+**Token note:** Canonical UI tokens (colors/spacing/radius) are defined in `design_docs/stage3.md`. Some snippets in this doc use generic `--color-*` / `--space-*` / `--radius-*` / `--text-*` names; translate them to the canonical tokens or use the compat aliases in `design_docs/frontend_handoff.md`.
+
 ---
 
 ## Design Principles

@@ -1,0 +1,47 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.3;
+  border: var(--border-1);
+  background: color-mix(in srgb, var(--surface-2) 68%, white);
+  color: var(--text-2);
+  text-transform: none;
+  font-weight: 560;
+}
+
+.warning {
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+  color: var(--warning);
+}
+
+.success {
+  background: color-mix(in srgb, var(--success) 12%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+  color: var(--success);
+}
+
+.info {
+  background: color-mix(in srgb, var(--info) 12%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--info) 28%, var(--border));
+  color: var(--info);
+}
+
+.default {
+}
+
+.contentType {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.3;
+  background: color-mix(in srgb, var(--surface-2) 68%, white);
+  color: var(--text-2);
+  border: var(--border-1);
+  font-weight: 560;
+}

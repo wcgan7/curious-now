@@ -1,0 +1,26 @@
+.indicator {
+  position: fixed;
+  bottom: var(--s-4);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface-1);
+  border: var(--border-1);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  font-size: 14px;
+  color: var(--text-2);
+  z-index: 1000;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 25%, transparent);
+}
+

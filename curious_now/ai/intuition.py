@@ -1,12 +1,14 @@
-"""Intuition field generation for story clusters.
+"""Layered intuition generation for story clusters.
 
-This module generates plain-language explanations that build mental models
-for non-experts using analogies and simplified concepts.
+This module generates two intuition layers in a strict cascade:
+- ELI20 (Conceptual Intuition): derived only from Deep Dive text
+- ELI5 (Foundational Intuition): derived only from ELI20 text
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,12 +16,29 @@ from curious_now.ai.llm_adapter import LLMAdapter, LLMResponse, get_llm_adapter
 
 logger = logging.getLogger(__name__)
 
+_DIGIT_RE = re.compile(r"\d")
+
+# Soft length targets (words)
+ELI20_TARGET_MIN_WORDS = 100
+ELI20_TARGET_MAX_WORDS = 150
+ELI20_HARD_MAX_WORDS = 250
+
+ELI5_TARGET_MIN_WORDS = 60
+ELI5_TARGET_MAX_WORDS = 100
+ELI5_HARD_MAX_WORDS = 250
+
 
 @dataclass
 class IntuitionInput:
-    """Input data for intuition generation."""
+    """Input data for layered intuition generation.
+
+    Notes:
+    - `deep_dive_markdown` is required for the new cascade.
+    - Legacy fields are accepted for backward compatibility but ignored.
+    """
 
     cluster_title: str
+    deep_dive_markdown: str | None = None
     takeaway: str | None = None
     technical_snippets: list[str] | None = None
     glossary_terms: list[GlossaryTerm] | None = None
@@ -28,7 +47,7 @@ class IntuitionInput:
 
 @dataclass
 class GlossaryTerm:
-    """A glossary term with definition."""
+    """A glossary term with definition (legacy compatibility)."""
 
     term: str
     definition: str
@@ -36,21 +55,29 @@ class GlossaryTerm:
 
 @dataclass
 class IntuitionResult:
-    """Result of intuition generation."""
+    """Result of layered intuition generation."""
 
-    intuition: str
-    analogies_used: list[str]
+    intuition: str  # Backward-compatible alias for ELI5 output
+    eli20: str
+    eli5: str
     confidence: float
     model: str
     success: bool = True
     error: str | None = None
+    eli20_word_count: int = 0
+    eli5_word_count: int = 0
+    eli20_rerun_shorten: bool = False
+    eli5_rerun_shorten: bool = False
+    eli20_new_digit_flag: bool = False
+    eli5_new_digit_flag: bool = False
 
     @staticmethod
     def failure(error: str) -> IntuitionResult:
         """Create a failure result."""
         return IntuitionResult(
             intuition="",
-            analogies_used=[],
+            eli20="",
+            eli5="",
             confidence=0.0,
             model="unknown",
             success=False,
@@ -58,119 +85,224 @@ class IntuitionResult:
         )
 
 
-INTUITION_SYSTEM_PROMPT = """You are explaining science concepts to a smart, \
-curious friend who isn't a scientist.
+ELI20_SYSTEM_PROMPT = """You are explaining a scientific or technical topic to a reader who already has some familiarity with the field.
 
-Your goal is to build understanding, not just awareness. Use:
-- Analogies to everyday things
-- Simple comparisons
-- Concrete examples
+Goal: Provide the \"Conceptual Intuition\" layer-help the reader form a clear mental model of what was done and how it works at a high level, without diving into implementation details.
 
-Avoid:
-- Jargon and technical terms (unless you explain them)
-- Hedging and unnecessary caveats
-- Vague statements like "this is important" without explaining why
-- Starting with "Imagine" or "Think of it like" - just use the analogy directly"""
+Rules:
+- Base your explanation strictly on the provided Deep Dive text.
+- Do not add new facts, interpretations, implications, or claims beyond what appears in the Deep Dive.
+- Use technical terms when they improve precision, but stay at the conceptual level.
+- Avoid everyday analogies unless absolutely necessary.
+- No hype, no filler."""
 
 
-INTUITION_USER_PROMPT_TEMPLATE = """Topic: {cluster_title}
+ELI20_USER_PROMPT_TEMPLATE = """Topic: {cluster_title}
 
-Key Point: {takeaway}
+Canonical Deep Dive (source of truth):
+{deep_dive_markdown}
 
-{technical_section}
-{glossary_section}
+Task:
+Write a single compact paragraph that:
+- Explains the core idea or approach at a conceptual level
+- Describes how it works at a high level (key components/steps, but not implementation detail)
+- Highlights what is distinctive or novel ONLY if stated in the Deep Dive
 
-Write 2-3 sentences (100-150 words) that:
-1. Use an analogy or comparison to everyday things
-2. Explain the core concept in plain language
-3. Highlight why this technical detail matters
-
-At the end, list any analogies you used in brackets, like: [Analogies: scissors, lock and key]
-
-Write ONLY the explanation followed by the analogies list."""
-
-
-def _format_technical_snippets(snippets: list[str] | None) -> str:
-    """Format technical snippets for the prompt."""
-    if not snippets:
-        return ""
-
-    formatted = "Technical Details:\n"
-    for snippet in snippets[:3]:  # Limit to 3 snippets
-        truncated = snippet[:300] + "..." if len(snippet) > 300 else snippet
-        formatted += f"- {truncated}\n"
-    return formatted
+Constraints:
+- Do NOT introduce any new information.
+- Do NOT include numeric results, sample sizes, p-values, or detailed experimental setup.
+- Target length: ~100-150 words.
+- Output ONLY the paragraph text."""
 
 
-def _format_glossary(terms: list[GlossaryTerm] | None) -> str:
-    """Format glossary terms for the prompt."""
-    if not terms:
-        return ""
+ELI5_SYSTEM_PROMPT = """You are explaining a scientific idea to an intelligent reader with no background in this topic.
 
-    formatted = "Related Terms:\n"
-    for term in terms[:5]:  # Limit to 5 terms
-        formatted += f"- {term.term}: {term.definition}\n"
-    return formatted
+Goal: Provide the \"Foundational Intuition\" layer-help the reader quickly grasp what this is about and what problem it addresses, without technical detail.
 
-
-def _extract_analogies(text: str) -> tuple[str, list[str]]:
-    """Extract analogies list from the response text."""
-    analogies: list[str] = []
-    clean_text = text
-
-    # Look for [Analogies: ...] at the end
-    if "[Analogies:" in text:
-        start = text.find("[Analogies:")
-        end = text.find("]", start)
-        if end > start:
-            analogies_str = text[start + 11:end].strip()
-            analogies = [a.strip() for a in analogies_str.split(",") if a.strip()]
-            clean_text = text[:start].strip()
-
-    # Also check for [Analogy: ...] (singular)
-    elif "[Analogy:" in text:
-        start = text.find("[Analogy:")
-        end = text.find("]", start)
-        if end > start:
-            analogies_str = text[start + 9:end].strip()
-            analogies = [a.strip() for a in analogies_str.split(",") if a.strip()]
-            clean_text = text[:start].strip()
-
-    return clean_text, analogies
+Rules:
+- Base your explanation strictly on the provided ELI20 text.
+- Use plain language and minimize technical terms.
+- Do not oversimplify in a way that changes the meaning.
+- Use an everyday analogy only if it genuinely clarifies the concept; do not force one.
+- Do not add new facts, interpretations, implications, or claims.
+- No hype, no filler."""
 
 
-def _calculate_confidence(intuition: str, input_data: IntuitionInput) -> float:
-    """Calculate confidence score for generated intuition."""
-    confidence = 0.75  # Base confidence
+ELI5_USER_PROMPT_TEMPLATE = """Topic: {cluster_title}
 
-    # Length factors
-    word_count = len(intuition.split())
-    if word_count < 30:
-        confidence -= 0.15
-    elif word_count > 200:
-        confidence -= 0.1
-    elif 50 <= word_count <= 150:
+Conceptual Intuition (ELI20):
+{eli20_text}
+
+Task:
+Write one short paragraph that:
+- Introduces what this idea is about
+- Explains what problem it is trying to solve
+- Gives a very high-level sense of how it works
+
+Constraints:
+- Do NOT introduce new information.
+- Target length: ~60-100 words.
+- Do not force analogies.
+- Output ONLY the paragraph text."""
+
+
+def _word_count(text: str) -> int:
+    return len(text.split())
+
+
+def _clean_output(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith('"') and cleaned.endswith('"'):
+        cleaned = cleaned[1:-1].strip()
+    if cleaned.startswith("'") and cleaned.endswith("'"):
+        cleaned = cleaned[1:-1].strip()
+    return cleaned
+
+
+def _has_new_digits(source_text: str, derived_text: str) -> bool:
+    source_digits = set(_DIGIT_RE.findall(source_text))
+    derived_digits = set(_DIGIT_RE.findall(derived_text))
+    return len(derived_digits - source_digits) > 0
+
+
+def _calc_confidence(
+    eli20: str,
+    eli5: str,
+    *,
+    eli20_new_digit_flag: bool,
+    eli5_new_digit_flag: bool,
+) -> float:
+    confidence = 0.75
+
+    eli20_words = _word_count(eli20)
+    eli5_words = _word_count(eli5)
+
+    if ELI20_TARGET_MIN_WORDS <= eli20_words <= ELI20_TARGET_MAX_WORDS:
         confidence += 0.1
+    elif eli20_words > ELI20_HARD_MAX_WORDS or eli20_words < 50:
+        confidence -= 0.1
 
-    # Has takeaway provides more context
-    if input_data.takeaway:
-        confidence += 0.05
+    if ELI5_TARGET_MIN_WORDS <= eli5_words <= ELI5_TARGET_MAX_WORDS:
+        confidence += 0.1
+    elif eli5_words > ELI5_HARD_MAX_WORDS or eli5_words < 30:
+        confidence -= 0.1
 
-    # Has technical snippets to work from
-    if input_data.technical_snippets:
-        confidence += 0.05
-
-    # Check for jargon indicators (might indicate poor simplification)
-    jargon_indicators = [
-        "et al", "p-value", "statistically significant",
-        "methodology", "paradigm", "pursuant to"
-    ]
-    intuition_lower = intuition.lower()
-    for indicator in jargon_indicators:
-        if indicator in intuition_lower:
-            confidence -= 0.05
+    if eli20_new_digit_flag:
+        confidence -= 0.1
+    if eli5_new_digit_flag:
+        confidence -= 0.1
 
     return max(0.0, min(1.0, confidence))
+
+
+def generate_eli20(
+    input_data: IntuitionInput,
+    *,
+    adapter: LLMAdapter | None = None,
+) -> tuple[str, str, bool, int, bool]:
+    """Generate ELI20 from deep dive only.
+
+    Returns: (text, model, rerun_shorten, word_count, new_digit_flag)
+    """
+    if adapter is None:
+        adapter = get_llm_adapter()
+
+    if not input_data.deep_dive_markdown:
+        return "", "unknown", False, 0, False
+
+    user_prompt = ELI20_USER_PROMPT_TEMPLATE.format(
+        cluster_title=input_data.cluster_title,
+        deep_dive_markdown=input_data.deep_dive_markdown,
+    )
+
+    response: LLMResponse = adapter.complete(
+        user_prompt,
+        system_prompt=ELI20_SYSTEM_PROMPT,
+        max_tokens=500,
+        temperature=0.3,
+    )
+
+    if not response.success:
+        return "", response.model, False, 0, False
+
+    eli20_text = _clean_output(response.text)
+    eli20_words = _word_count(eli20_text)
+    rerun_shorten = False
+
+    if eli20_words > ELI20_HARD_MAX_WORDS:
+        rerun_shorten = True
+        shortened_prompt = (
+            user_prompt
+            + "\n\nRevision instruction: shorten aggressively to 100-150 words while preserving meaning."
+        )
+        retry_response = adapter.complete(
+            shortened_prompt,
+            system_prompt=ELI20_SYSTEM_PROMPT,
+            max_tokens=300,
+            temperature=0.2,
+        )
+        if retry_response.success:
+            response = retry_response
+            eli20_text = _clean_output(retry_response.text)
+            eli20_words = _word_count(eli20_text)
+
+    new_digit_flag = _has_new_digits(input_data.deep_dive_markdown, eli20_text)
+
+    return eli20_text, response.model, rerun_shorten, eli20_words, new_digit_flag
+
+
+def generate_eli5(
+    *,
+    cluster_title: str,
+    eli20_text: str,
+    adapter: LLMAdapter | None = None,
+) -> tuple[str, str, bool, int, bool]:
+    """Generate ELI5 from ELI20 only.
+
+    Returns: (text, model, rerun_shorten, word_count, new_digit_flag)
+    """
+    if adapter is None:
+        adapter = get_llm_adapter()
+
+    user_prompt = ELI5_USER_PROMPT_TEMPLATE.format(
+        cluster_title=cluster_title,
+        eli20_text=eli20_text,
+    )
+
+    response: LLMResponse = adapter.complete(
+        user_prompt,
+        system_prompt=ELI5_SYSTEM_PROMPT,
+        max_tokens=350,
+        temperature=0.3,
+    )
+
+    if not response.success:
+        return "", response.model, False, 0, False
+
+    eli5_text = _clean_output(response.text)
+    eli5_words = _word_count(eli5_text)
+    rerun_shorten = False
+
+    if eli5_words > ELI5_HARD_MAX_WORDS:
+        rerun_shorten = True
+        shortened_prompt = (
+            user_prompt
+            + "\n\nRevision instruction: shorten aggressively to 60-100 words while preserving meaning."
+        )
+        retry_response = adapter.complete(
+            shortened_prompt,
+            system_prompt=ELI5_SYSTEM_PROMPT,
+            max_tokens=220,
+            temperature=0.2,
+        )
+        if retry_response.success:
+            response = retry_response
+            eli5_text = _clean_output(retry_response.text)
+            eli5_words = _word_count(eli5_text)
+
+    new_digit_flag = _has_new_digits(eli20_text, eli5_text)
+
+    return eli5_text, response.model, rerun_shorten, eli5_words, new_digit_flag
 
 
 def generate_intuition(
@@ -178,64 +310,50 @@ def generate_intuition(
     *,
     adapter: LLMAdapter | None = None,
 ) -> IntuitionResult:
-    """
-    Generate an intuition explanation for a story cluster.
-
-    Args:
-        input_data: The cluster data to generate intuition from
-        adapter: LLM adapter to use (defaults to configured adapter)
-
-    Returns:
-        IntuitionResult with the generated explanation
-    """
+    """Generate layered intuition via Deep Dive -> ELI20 -> ELI5."""
     if not input_data.cluster_title:
         return IntuitionResult.failure("No cluster title provided")
 
-    # Get adapter
+    if not input_data.deep_dive_markdown:
+        return IntuitionResult.failure("No deep dive markdown provided")
+
     if adapter is None:
         adapter = get_llm_adapter()
 
-    # Build the prompt
-    takeaway = input_data.takeaway or input_data.cluster_title
-    technical_section = _format_technical_snippets(input_data.technical_snippets)
-    glossary_section = _format_glossary(input_data.glossary_terms)
+    eli20_text, eli20_model, eli20_rerun, eli20_words, eli20_digit_flag = generate_eli20(
+        input_data, adapter=adapter
+    )
+    if not eli20_text:
+        return IntuitionResult.failure("ELI20 generation failed")
 
-    user_prompt = INTUITION_USER_PROMPT_TEMPLATE.format(
+    eli5_text, eli5_model, eli5_rerun, eli5_words, eli5_digit_flag = generate_eli5(
         cluster_title=input_data.cluster_title,
-        takeaway=takeaway,
-        technical_section=technical_section,
-        glossary_section=glossary_section,
+        eli20_text=eli20_text,
+        adapter=adapter,
     )
+    if not eli5_text:
+        return IntuitionResult.failure("ELI5 generation failed")
 
-    # Generate completion
-    response: LLMResponse = adapter.complete(
-        user_prompt,
-        system_prompt=INTUITION_SYSTEM_PROMPT,
-        max_tokens=400,
-        temperature=0.7,
+    confidence = _calc_confidence(
+        eli20_text,
+        eli5_text,
+        eli20_new_digit_flag=eli20_digit_flag,
+        eli5_new_digit_flag=eli5_digit_flag,
     )
-
-    if not response.success:
-        logger.warning("Intuition generation failed: %s", response.error)
-        return IntuitionResult.failure(response.error or "Unknown error")
-
-    # Process the response
-    raw_text = response.text.strip()
-    intuition, analogies = _extract_analogies(raw_text)
-
-    # Clean up quotes
-    if intuition.startswith('"') and intuition.endswith('"'):
-        intuition = intuition[1:-1]
-
-    # Calculate confidence
-    confidence = _calculate_confidence(intuition, input_data)
 
     return IntuitionResult(
-        intuition=intuition,
-        analogies_used=analogies,
+        intuition=eli5_text,
+        eli20=eli20_text,
+        eli5=eli5_text,
         confidence=confidence,
-        model=response.model,
+        model=eli5_model or eli20_model,
         success=True,
+        eli20_word_count=eli20_words,
+        eli5_word_count=eli5_words,
+        eli20_rerun_shorten=eli20_rerun,
+        eli5_rerun_shorten=eli5_rerun,
+        eli20_new_digit_flag=eli20_digit_flag,
+        eli5_new_digit_flag=eli5_digit_flag,
     )
 
 
@@ -246,41 +364,16 @@ def generate_intuition_from_db_data(
     technical_snippets: list[str] | None = None,
     glossary_terms: list[dict[str, Any]] | None = None,
     topic_names: list[str] | None = None,
+    deep_dive_markdown: str | None = None,
     *,
     adapter: LLMAdapter | None = None,
 ) -> IntuitionResult:
-    """
-    Generate intuition from database query results.
-
-    Args:
-        cluster_id: The cluster ID
-        canonical_title: The cluster's canonical title
-        takeaway: Optional pre-generated takeaway
-        technical_snippets: List of technical text from sources
-        glossary_terms: List of dicts with 'term' and 'definition' keys
-        topic_names: Optional list of topic names
-        adapter: LLM adapter to use
-
-    Returns:
-        IntuitionResult with the generated explanation
-    """
-    terms = None
-    if glossary_terms:
-        terms = [
-            GlossaryTerm(
-                term=t.get("term", ""),
-                definition=t.get("definition", ""),
-            )
-            for t in glossary_terms
-            if t.get("term") and t.get("definition")
-        ]
+    """Generate layered intuition from database-style inputs."""
+    _ = (cluster_id, takeaway, technical_snippets, glossary_terms, topic_names)
 
     input_data = IntuitionInput(
         cluster_title=canonical_title,
-        takeaway=takeaway,
-        technical_snippets=technical_snippets,
-        glossary_terms=terms,
-        topic_names=topic_names,
+        deep_dive_markdown=deep_dive_markdown,
     )
 
     return generate_intuition(input_data, adapter=adapter)

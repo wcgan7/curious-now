@@ -71,6 +71,36 @@ def _normalize_json_array(value: Any) -> list[Any]:
     return [value]
 
 
+def _extract_explainers(
+    summary_intuition: Any,
+    summary_deep_dive: Any,
+) -> tuple[str | None, str | None, str | None]:
+    """Return (eli5, eli20, deep_dive_markdown) from stored fields."""
+    eli5 = str(summary_intuition) if summary_intuition else None
+    eli20: str | None = None
+    deep_dive_markdown: str | None = None
+
+    if isinstance(summary_deep_dive, str):
+        text = summary_deep_dive.strip()
+        if text.startswith("{") and text.endswith("}"):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                deep_dive_markdown = summary_deep_dive
+            else:
+                if isinstance(parsed, dict):
+                    if isinstance(parsed.get("markdown"), str) and parsed["markdown"].strip():
+                        deep_dive_markdown = parsed["markdown"]
+                    if isinstance(parsed.get("eli20"), str) and parsed["eli20"].strip():
+                        eli20 = parsed["eli20"]
+                    if isinstance(parsed.get("eli5"), str) and parsed["eli5"].strip():
+                        eli5 = parsed["eli5"]
+        else:
+            deep_dive_markdown = summary_deep_dive
+
+    return eli5, eli20, deep_dive_markdown
+
+
 def _load_cluster_topics(
     conn: psycopg.Connection[Any], cluster_ids: list[UUID]
 ) -> dict[UUID, list[TopicChip]]:
@@ -297,6 +327,10 @@ def get_cluster_detail_or_redirect(
 
     topics = _load_cluster_topics(conn, [cluster_id]).get(cluster_id, [])
     glossary_entries = glossary_entries_for_cluster(conn, cluster_id=cluster_id)
+    summary_intuition_eli5, summary_intuition_eli20, deep_dive_markdown = _extract_explainers(
+        cluster.get("summary_intuition"),
+        cluster.get("summary_deep_dive"),
+    )
     return ClusterDetail(
         cluster_id=cluster["cluster_id"],
         canonical_title=cluster["canonical_title"],
@@ -307,8 +341,9 @@ def get_cluster_detail_or_redirect(
         content_type_breakdown=dict(breakdown),
         evidence=dict(evidence),
         takeaway=cluster["takeaway"],
-        summary_intuition=cluster["summary_intuition"],
-        summary_deep_dive=cluster["summary_deep_dive"],
+        summary_intuition=summary_intuition_eli5,
+        summary_intuition_eli20=summary_intuition_eli20,
+        summary_deep_dive=deep_dive_markdown,
         assumptions=[str(x) for x in _normalize_json_array(cluster.get("assumptions"))],
         limitations=[str(x) for x in _normalize_json_array(cluster.get("limitations"))],
         what_could_change_this=[

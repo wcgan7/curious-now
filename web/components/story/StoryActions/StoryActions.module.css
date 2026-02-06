@@ -1,0 +1,12 @@
+.row {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+}
+
+.hint {
+  color: var(--text-3);
+  font-size: 13px;
+  margin-left: var(--s-2);
+}
+
