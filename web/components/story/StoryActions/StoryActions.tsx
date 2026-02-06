@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import styles from './StoryActions.module.css';
@@ -24,6 +26,14 @@ export function StoryActions({
   initial: { saved: boolean; watched: boolean };
 }) {
   const qc = useQueryClient();
+  const [saved, setSaved] = useState(initial.saved);
+  const [watched, setWatched] = useState(initial.watched);
+
+  const redirectPath =
+    typeof window !== 'undefined'
+      ? `${window.location.pathname}${window.location.search}`
+      : '/';
+  const loginHref = `/auth/login?redirect=${encodeURIComponent(redirectPath)}`;
 
   const save = useMutation({
     mutationFn: async (next: boolean) => {
@@ -32,6 +42,7 @@ export function StoryActions({
     },
     onSuccess: async (_data, next) => {
       qc.invalidateQueries({ queryKey: ['saves'] });
+      setSaved(next);
       if (next) {
         if (cluster) {
           await saveClusterOffline(cluster);
@@ -48,13 +59,11 @@ export function StoryActions({
       if (next) return await watchCluster(clusterId);
       return await unwatchCluster(clusterId);
     },
-    onSuccess: () => {
+    onSuccess: (_data, next) => {
       qc.invalidateQueries({ queryKey: ['watches'] });
+      setWatched(next);
     },
   });
-
-  const saved = save.variables ?? initial.saved;
-  const watched = watch.variables ?? initial.watched;
 
   const needsAuth =
     (save.error instanceof ApiError && save.error.status === 401) ||
@@ -78,7 +87,14 @@ export function StoryActions({
       >
         {watched ? 'Watching' : 'Watch'}
       </Button>
-      {needsAuth ? <span className={styles.hint}>Login required</span> : null}
+      {needsAuth ? (
+        <span className={styles.hint}>
+          Login required.{' '}
+          <Link className={styles.loginLink} href={loginHref}>
+            Log in
+          </Link>
+        </span>
+      ) : null}
     </div>
   );
 }

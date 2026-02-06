@@ -1,45 +1,106 @@
 .main {
-  padding: clamp(24px, 4.5vw, var(--s-12)) 16px var(--s-12);
+  --story-sticky-top: 86px;
+  --story-anchor-offset: 140px;
+  padding: clamp(20px, 4vw, var(--s-12)) 16px var(--s-12);
 }
 
 .container {
-  max-width: 1100px;
+  max-width: 1160px;
   margin: 0 auto;
 }
 
-.header {
+.hero {
+  border: var(--border-1);
+  border-radius: 26px;
+  background:
+    radial-gradient(140% 120% at 0% 0%, color-mix(in srgb, var(--primary) 13%, white), transparent 58%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 92%, white), var(--surface-1));
+  padding: clamp(18px, 3vw, 34px);
   margin-bottom: var(--s-8);
 }
 
-.block {
+.heroTop {
   display: grid;
   gap: var(--s-3);
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 700;
 }
 
 .title {
   font-family: var(--font-article);
-  font-size: clamp(36px, 6vw, 52px);
-  line-height: 1.12;
+  font-size: clamp(34px, 5.3vw, 56px);
+  line-height: 1.08;
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.023em;
+  text-wrap: balance;
 }
 
-.canonicalTitle {
-  margin: var(--s-2) 0 0;
+.heroMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.metaChip {
+  border: var(--border-1);
+  background: color-mix(in srgb, var(--surface-2) 70%, white);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
   color: var(--text-2);
-  font-size: 15px;
+}
+
+.updatesLink {
+  font-size: 12px;
+  color: var(--primary);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+.updatesLink:hover {
+  border-bottom-color: var(--primary);
 }
 
 .actionsRow {
   margin-top: var(--s-4);
-  display: flex;
-  gap: var(--s-3);
-  align-items: center;
+}
+
+.heroTakeaway {
+  margin-top: var(--s-5);
+  border: var(--border-1);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-2) 58%, white);
+  padding: 14px 16px;
+}
+
+.takeawayLabel {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.takeawayText {
+  margin: 0;
+  font-family: var(--font-article);
+  font-size: clamp(18px, 2.3vw, 22px);
+  line-height: 1.58;
+  color: var(--text-1);
 }
 
 .columns {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--s-8);
 }
 
@@ -51,62 +112,157 @@
   min-width: 0;
 }
 
+.rail {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.tabNav {
+  position: sticky;
+  top: calc(var(--story-sticky-top) + env(safe-area-inset-top, 0px));
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--s-5);
+  padding: 10px;
+  border: var(--border-1);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-1) 96%, white);
+  backdrop-filter: blur(6px);
+}
+
+.tabLink {
+  border: var(--border-1);
+  background: color-mix(in srgb, var(--surface-2) 48%, white);
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tabLink:hover {
+  border-color: color-mix(in srgb, var(--primary) 46%, transparent);
+  color: color-mix(in srgb, var(--primary) 72%, black);
+}
+
+.panel {
+  border: var(--border-1);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface-1) 95%, white);
+  padding: clamp(16px, 2.6vw, 26px);
+  display: grid;
+  gap: var(--s-5);
+  scroll-margin-top: calc(var(--story-anchor-offset) + env(safe-area-inset-top, 0px));
+}
+
+.block {
+  display: grid;
+  gap: var(--s-3);
+}
+
 .section {
-  margin: var(--s-8) 0;
+  display: grid;
+  gap: var(--s-3);
 }
 
 .h2 {
+  margin: 0;
   font-family: var(--font-article);
   font-size: 30px;
-  line-height: 1.2;
-  margin: 0 0 var(--s-3);
   letter-spacing: -0.015em;
 }
 
 .h3 {
-  font-size: 15px;
-  letter-spacing: 0.015em;
-  margin: var(--s-6) 0 var(--s-2);
-  color: var(--text-2);
-}
-
-.prose {
-  font-family: var(--font-article);
-  font-size: clamp(18px, 2.3vw, 20px);
-  line-height: 1.72;
-  color: var(--text-1);
   margin: 0;
-  max-width: 68ch;
-}
-
-.details {
-  border: var(--border-1);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--surface-1) 94%, var(--surface-2));
-  padding: var(--s-4) var(--s-4) var(--s-6);
-  margin: var(--s-8) 0;
-}
-
-.summary {
-  cursor: pointer;
-  font-weight: 660;
-  font-size: 16px;
+  font-size: 14px;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 700;
 }
 
 .listBlock {
-  margin-top: var(--s-4);
+  display: grid;
+  gap: var(--s-2);
+  border-top: var(--border-1);
+  padding-top: var(--s-4);
 }
 
 .list {
-  margin: var(--s-2) 0 0;
+  margin: 0;
   padding-left: 20px;
   color: var(--text-2);
   font-family: var(--font-ui);
-  line-height: 1.66;
+  line-height: 1.64;
+}
+
+.quickNav {
+  border: var(--border-1);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-1) 96%, white);
+  padding: 12px;
+}
+
+.quickNavLabel {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.quickNavButtons {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.quickLink {
+  border: var(--border-1);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-2) 56%, white);
+  color: var(--text-2);
+  text-align: left;
+  font-size: 13px;
+  padding: 8px 10px;
+  text-decoration: none;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.quickLink:hover {
+  background: color-mix(in srgb, var(--primary) 12%, white);
+  border-color: color-mix(in srgb, var(--primary) 46%, transparent);
+  color: color-mix(in srgb, var(--primary) 72%, black);
+}
+
+@media (max-width: 1023px) {
+  .sidebar {
+    order: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .main {
+    /* Mobile header includes a second sticky nav row (Latest/Trending/...). */
+    --story-sticky-top: 126px;
+    --story-anchor-offset: 180px;
+  }
 }
 
 @media (min-width: 1024px) {
   .columns {
     grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: start;
+  }
+
+  .rail {
+    position: sticky;
+    top: 86px;
   }
 }

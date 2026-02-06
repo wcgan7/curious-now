@@ -66,6 +66,15 @@
   padding: 1px 5px;
 }
 
+.strong {
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.em {
+  font-style: italic;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

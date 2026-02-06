@@ -53,10 +53,10 @@ describe('StoryPage intuition fallback from deep-dive payload', () => {
       />
     );
 
-    expect(screen.getByText('ELI5 explanation')).toBeInTheDocument();
+    expect(screen.getByText('ELI20 explanation')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'ELI20' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('tab', { name: 'ELI20' }));
-    expect(screen.getByText('ELI20 explanation')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'ELI5' }));
+    expect(screen.getByText('ELI5 explanation')).toBeInTheDocument();
   });
 });

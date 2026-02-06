@@ -1,16 +1,24 @@
 import { notFound, redirect } from 'next/navigation';
 
 import { getClusterDetail } from '@/lib/api/clusters';
+import { getClusterUpdates } from '@/lib/api/updates';
 import { StoryPage } from '@/components/story/StoryPage/StoryPage';
 
 export default async function Story({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const result = await getClusterDetail(id);
-  if (result.kind === 'redirect') {
-    redirect(`/story/${result.toId}`);
+  const [clusterResult, updatesResult] = await Promise.all([
+    getClusterDetail(id),
+    getClusterUpdates(id).catch(() => null),
+  ]);
+
+  if (clusterResult.kind === 'redirect') {
+    redirect(`/story/${clusterResult.toId}`);
   }
-  if (result.kind === 'not_found') {
+  if (clusterResult.kind === 'not_found') {
     notFound();
   }
-  return <StoryPage cluster={result.cluster} />;
+
+  const hasUpdates = updatesResult?.kind === 'ok' && updatesResult.updates.updates.length > 0;
+
+  return <StoryPage cluster={clusterResult.cluster} hasUpdates={hasUpdates} />;
 }

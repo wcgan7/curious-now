@@ -23,7 +23,7 @@ vi.mock('@/lib/offline/db', () => {
 });
 
 describe('StoryActions (unauth)', () => {
-  it('shows login required hint on 401', async () => {
+  it('shows inline login hint on 401 without flipping saved state', async () => {
     const user = userEvent.setup();
     const { StoryActions } = await import('./StoryActions');
 
@@ -33,5 +33,10 @@ describe('StoryActions (unauth)', () => {
 
     await user.click(getByRole('button', { name: /^save$/i }));
     expect(await findByText(/Login required/i)).toBeInTheDocument();
+    expect(getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+    expect(getByRole('link', { name: /^log in$/i })).toHaveAttribute(
+      'href',
+      '/auth/login?redirect=%2F'
+    );
   });
 });

@@ -11,11 +11,21 @@ type StructuredDeepDive = {
   generated_at?: string;
 };
 
+type MarkdownList = {
+  ordered: boolean;
+  items: MarkdownListItem[];
+};
+
+type MarkdownListItem = {
+  text: string;
+  children: MarkdownList[];
+  trailingText: string[];
+};
+
 type MarkdownBlock =
   | { type: 'heading'; level: number; text: string }
   | { type: 'paragraph'; text: string }
-  | { type: 'ul'; items: string[] }
-  | { type: 'ol'; items: string[] };
+  | { type: 'list'; list: MarkdownList };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -76,6 +86,66 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = [];
   let i = 0;
 
+  function indentWidth(s: string): number {
+    return s.replace(/\t/g, '  ').length;
+  }
+
+  function parseList(
+    start: number,
+    ordered: boolean,
+    baseIndent: number
+  ): { list: MarkdownList; next: number } {
+    const items: MarkdownListItem[] = [];
+    let cursor = start;
+    let lastItem: MarkdownListItem | null = null;
+
+    while (cursor < lines.length) {
+      const line = lines[cursor];
+      const ul = line.match(/^(\s*)[-*+]\s+(.+)$/);
+      const ol = line.match(/^(\s*)\d+\.\s+(.+)$/);
+      const isOrderedLine = Boolean(ol);
+      const match = ol || ul;
+      if (!match) {
+        const trimmed = line.trim();
+        if (!trimmed) break;
+        const indent = indentWidth((line.match(/^(\s*)/)?.[1] ?? ''));
+        if (lastItem && indent > baseIndent) {
+          if (lastItem.children.length > 0) {
+            lastItem.trailingText.push(trimmed);
+          } else {
+            lastItem.text = `${lastItem.text} ${trimmed}`.trim();
+          }
+          cursor += 1;
+          continue;
+        }
+        break;
+      }
+
+      const indent = indentWidth(match[1]);
+      const text = match[2].trim();
+      if (indent < baseIndent) break;
+
+      if (indent > baseIndent) {
+        if (!lastItem) break;
+        const nested = parseList(cursor, isOrderedLine, indent);
+        if (nested.list.items.length) {
+          lastItem.children.push(nested.list);
+        }
+        cursor = nested.next;
+        continue;
+      }
+
+      if (isOrderedLine !== ordered) break;
+
+      const item: MarkdownListItem = { text, children: [], trailingText: [] };
+      items.push(item);
+      lastItem = item;
+      cursor += 1;
+    }
+
+    return { list: { ordered, items }, next: cursor };
+  }
+
   while (i < lines.length) {
     const line = lines[i].trim();
     if (!line) {
@@ -94,29 +164,20 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
       continue;
     }
 
-    if (/^[-*+]\s+/.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length) {
-        const listLine = lines[i].trim();
-        const m = listLine.match(/^[-*+]\s+(.+)$/);
-        if (!m) break;
-        items.push(m[1].trim());
-        i += 1;
-      }
-      if (items.length) blocks.push({ type: 'ul', items });
+    const raw = lines[i];
+    const ul = raw.match(/^(\s*)[-*+]\s+(.+)$/);
+    if (ul) {
+      const parsed = parseList(i, false, indentWidth(ul[1]));
+      if (parsed.list.items.length) blocks.push({ type: 'list', list: parsed.list });
+      i = parsed.next;
       continue;
     }
 
-    if (/^\d+\.\s+/.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length) {
-        const listLine = lines[i].trim();
-        const m = listLine.match(/^\d+\.\s+(.+)$/);
-        if (!m) break;
-        items.push(m[1].trim());
-        i += 1;
-      }
-      if (items.length) blocks.push({ type: 'ol', items });
+    const ol = raw.match(/^(\s*)\d+\.\s+(.+)$/);
+    if (ol) {
+      const parsed = parseList(i, true, indentWidth(ol[1]));
+      if (parsed.list.items.length) blocks.push({ type: 'list', list: parsed.list });
+      i = parsed.next;
       continue;
     }
 
@@ -138,9 +199,27 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
   return blocks;
 }
 
+function renderList(list: MarkdownList, key: string): React.ReactElement {
+  const ListTag = list.ordered ? 'ol' : 'ul';
+  return (
+    <ListTag key={key} className={styles.list}>
+      {list.items.map((item, idx) => (
+        <li key={`${key}-${idx}`}>
+          {renderInline(item.text)}
+          {item.children.map((child, childIdx) => renderList(child, `${key}-${idx}-${childIdx}`))}
+          {item.trailingText.map((line, lineIdx) => (
+            <div key={`${key}-${idx}-tail-${lineIdx}`}>{renderInline(line)}</div>
+          ))}
+        </li>
+      ))}
+    </ListTag>
+  );
+}
+
 function renderInline(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
-  const regex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|`([^`]+)`/g;
+  const regex =
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_/g;
   let last = 0;
   let m: RegExpExecArray | null;
 
@@ -165,6 +244,18 @@ function renderInline(text: string): React.ReactNode[] {
         <code key={`${m.index}-code`} className={styles.code}>
           {m[3]}
         </code>
+      );
+    } else if (m[4] || m[5]) {
+      nodes.push(
+        <strong key={`${m.index}-strong`} className={styles.strong}>
+          {m[4] || m[5]}
+        </strong>
+      );
+    } else if (m[6] || m[7]) {
+      nodes.push(
+        <em key={`${m.index}-em`} className={styles.em}>
+          {m[6] || m[7]}
+        </em>
       );
     }
     last = regex.lastIndex;
@@ -269,22 +360,7 @@ export function DeepDive({ value }: { value: string }) {
             </p>
           );
         }
-        if (block.type === 'ul') {
-          return (
-            <ul key={`${block.type}-${idx}`} className={styles.list}>
-              {block.items.map((item, itemIdx) => (
-                <li key={`${idx}-ul-${itemIdx}`}>{renderInline(item)}</li>
-              ))}
-            </ul>
-          );
-        }
-        return (
-          <ol key={`${block.type}-${idx}`} className={styles.list}>
-            {block.items.map((item, itemIdx) => (
-              <li key={`${idx}-ol-${itemIdx}`}>{renderInline(item)}</li>
-            ))}
-          </ol>
-        );
+        return renderList(block.list, `list-${idx}`);
       })}
     </div>
   );

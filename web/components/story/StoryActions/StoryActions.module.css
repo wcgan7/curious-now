@@ -10,3 +10,8 @@
   margin-left: var(--s-2);
 }
 
+.loginLink {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

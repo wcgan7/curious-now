@@ -34,10 +34,12 @@ export function TrustBox({
         </div>
       ) : null}
 
-      <div className={styles.row}>
-        <span className={styles.label}>Independent sources</span>
-        <span className={styles.value}>{distinctSourceCount}</span>
-      </div>
+      {distinctSourceCount > 1 ? (
+        <div className={styles.row}>
+          <span className={styles.label}>Independent sources</span>
+          <span className={styles.value}>{distinctSourceCount}</span>
+        </div>
+      ) : null}
 
       <div className={styles.block}>
         <span className={styles.label}>Source types</span>
@@ -78,4 +80,3 @@ export function TrustBox({
     </aside>
   );
 }
-

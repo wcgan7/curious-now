@@ -31,13 +31,13 @@ describe('IntuitionSection', () => {
       />
     );
 
-    expect(screen.getByText('Simple explanation')).toBeInTheDocument();
-    expect(screen.queryByText('Technical explanation')).toBeNull();
-
-    await user.click(screen.getByRole('tab', { name: 'ELI20' }));
-
     expect(screen.getByText('Technical explanation')).toBeInTheDocument();
     expect(screen.queryByText('Simple explanation')).toBeNull();
+
+    await user.click(screen.getByRole('tab', { name: 'ELI5' }));
+
+    expect(screen.getByText('Simple explanation')).toBeInTheDocument();
+    expect(screen.queryByText('Technical explanation')).toBeNull();
   });
 
   it('shows a single label if only one mode exists', () => {
