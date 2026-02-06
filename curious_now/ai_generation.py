@@ -63,6 +63,26 @@ class GenerateEmbeddingsResult:
     clusters_skipped: int  # Already had up-to-date embeddings
 
 
+@dataclass
+class GenerateIntuitionResult:
+    """Result of intuition generation batch."""
+
+    clusters_processed: int
+    clusters_succeeded: int
+    clusters_failed: int
+    clusters_skipped: int
+
+
+@dataclass
+class GenerateDeepDivesResult:
+    """Result of deep dive generation batch."""
+
+    clusters_processed: int
+    clusters_succeeded: int
+    clusters_failed: int
+    clusters_skipped: int  # Skipped because not a paper
+
+
 def _get_clusters_needing_takeaways(
     conn: psycopg.Connection[Any],
     *,
@@ -474,6 +494,67 @@ def _get_clusters_needing_stage3(
         return cur.fetchall()
 
 
+def _get_clusters_needing_intuition(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Get clusters that need intuition (have takeaway but no intuition)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                c.id AS cluster_id,
+                c.canonical_title,
+                c.takeaway,
+                c.distinct_source_count
+            FROM story_clusters c
+            WHERE c.status = 'active'
+              AND c.takeaway IS NOT NULL
+              AND c.summary_intuition IS NULL
+            ORDER BY c.updated_at DESC
+            LIMIT %s;
+            """,
+            (limit,),
+        )
+        return cur.fetchall()
+
+
+def _get_clusters_needing_deep_dive(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """
+    Get clusters that need deep dives.
+
+    Only returns clusters where items are papers (preprint or peer_reviewed),
+    since articles/press releases don't need deep dives.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT
+                c.id AS cluster_id,
+                c.canonical_title,
+                c.takeaway,
+                c.distinct_source_count,
+                c.updated_at
+            FROM story_clusters c
+            JOIN cluster_items ci ON c.id = ci.cluster_id
+            JOIN items i ON ci.item_id = i.id
+            WHERE c.status = 'active'
+              AND c.takeaway IS NOT NULL
+              AND c.summary_deep_dive IS NULL
+              AND i.content_type IN ('preprint', 'peer_reviewed')
+            ORDER BY c.updated_at DESC
+            LIMIT %s;
+            """,
+            (limit,),
+        )
+        return cur.fetchall()
+
+
 def _get_cluster_content_types(
     conn: psycopg.Connection[Any],
     cluster_id: UUID,
@@ -804,6 +885,207 @@ def enrich_stage3_for_clusters(
             failed += 1
 
     return GenerateStage3Result(
+        clusters_processed=processed,
+        clusters_succeeded=succeeded,
+        clusters_failed=failed,
+        clusters_skipped=skipped,
+    )
+
+
+def generate_intuition_for_clusters(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+    adapter: LLMAdapter | None = None,
+) -> GenerateIntuitionResult:
+    """
+    Generate intuition for clusters that have takeaways but no intuition.
+
+    Intuition is a high-level, accessible explanation of why a science story
+    matters to a general reader. It uses analogies and simple language.
+
+    Args:
+        conn: Database connection
+        limit: Maximum number of clusters to process
+        adapter: LLM adapter to use (defaults to configured adapter)
+
+    Returns:
+        GenerateIntuitionResult with processing statistics
+    """
+    if adapter is None:
+        adapter = get_llm_adapter()
+
+    clusters = _get_clusters_needing_intuition(conn, limit=limit)
+    processed = 0
+    succeeded = 0
+    failed = 0
+    skipped = 0
+
+    for cluster in clusters:
+        cluster_id = cluster["cluster_id"]
+        canonical_title = cluster["canonical_title"]
+        takeaway = cluster.get("takeaway")
+        processed += 1
+
+        if not takeaway:
+            logger.warning("Cluster %s has no takeaway, skipping intuition", cluster_id)
+            skipped += 1
+            continue
+
+        try:
+            items = _get_cluster_items_for_takeaway(conn, cluster_id)
+            item_ids = [item["item_id"] for item in items]
+            topics = _get_cluster_topics(conn, cluster_id)
+            snippets = _get_cluster_snippets(conn, cluster_id)
+            content_types = _get_cluster_content_types(conn, cluster_id)
+            source_count = cluster.get("distinct_source_count", 1)
+
+            # Generate intuition
+            intuition_input = IntuitionInput(
+                cluster_title=canonical_title,
+                takeaway=takeaway,
+                technical_snippets=snippets if snippets else None,
+                topic_names=topics if topics else None,
+            )
+            intuition_result: IntuitionResult = generate_intuition(
+                intuition_input, adapter=adapter
+            )
+
+            if intuition_result.success:
+                # Also compute heuristics (confidence, flags) since we're here
+                confidence_band = _compute_confidence_band(content_types, source_count)
+                anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
+                method_badges = _compute_method_badges(content_types)
+
+                _update_cluster_stage3(
+                    conn,
+                    cluster_id,
+                    summary_intuition=intuition_result.intuition,
+                    summary_intuition_item_ids=item_ids,
+                    confidence_band=confidence_band,
+                    anti_hype_flags=anti_hype_flags,
+                    method_badges=method_badges,
+                )
+                succeeded += 1
+                logger.info("Intuition generated for cluster %s", cluster_id)
+            else:
+                logger.warning(
+                    "Intuition generation failed for cluster %s: %s",
+                    cluster_id,
+                    intuition_result.error,
+                )
+                failed += 1
+
+        except Exception as e:
+            logger.exception("Error generating intuition for cluster %s: %s", cluster_id, e)
+            failed += 1
+
+    return GenerateIntuitionResult(
+        clusters_processed=processed,
+        clusters_succeeded=succeeded,
+        clusters_failed=failed,
+        clusters_skipped=skipped,
+    )
+
+
+def generate_deep_dives_for_clusters(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+    adapter: LLMAdapter | None = None,
+) -> GenerateDeepDivesResult:
+    """
+    Generate deep dives for paper-based clusters (preprints and peer-reviewed).
+
+    Deep dives provide detailed explainer content for scientific papers,
+    including what happened, why it matters, background, limitations, and next steps.
+
+    Only applies to clusters with preprint or peer_reviewed content types.
+    News articles and press releases don't need deep dives since the article
+    itself is the explanation.
+
+    Args:
+        conn: Database connection
+        limit: Maximum number of clusters to process
+        adapter: LLM adapter to use (defaults to configured adapter)
+
+    Returns:
+        GenerateDeepDivesResult with processing statistics
+    """
+    if adapter is None:
+        adapter = get_llm_adapter()
+
+    # Only get clusters with paper content types
+    clusters = _get_clusters_needing_deep_dive(conn, limit=limit)
+    processed = 0
+    succeeded = 0
+    failed = 0
+    skipped = 0
+
+    for cluster in clusters:
+        cluster_id = cluster["cluster_id"]
+        canonical_title = cluster["canonical_title"]
+        takeaway = cluster.get("takeaway")
+        processed += 1
+
+        if not takeaway:
+            logger.warning("Cluster %s has no takeaway, skipping deep dive", cluster_id)
+            skipped += 1
+            continue
+
+        try:
+            items = _get_cluster_items_for_takeaway(conn, cluster_id)
+            item_ids = [item["item_id"] for item in items]
+            topics = _get_cluster_topics(conn, cluster_id)
+
+            # Build source summaries for deep dive
+            source_summaries = [
+                SourceSummary(
+                    title=item["title"],
+                    snippet=item.get("snippet"),
+                    source_name=item.get("source_name"),
+                    source_type=item.get("source_type"),
+                )
+                for item in items
+            ]
+
+            # Generate deep dive
+            deep_dive_input = DeepDiveInput(
+                cluster_title=canonical_title,
+                takeaway=takeaway,
+                source_summaries=source_summaries,
+                topic_names=topics if topics else None,
+            )
+            deep_dive_result: DeepDiveResult = generate_deep_dive(
+                deep_dive_input, adapter=adapter
+            )
+
+            if deep_dive_result.success and deep_dive_result.content:
+                summary_deep_dive = deep_dive_to_json(deep_dive_result.content)
+                limitations = deep_dive_result.content.limitations
+
+                _update_cluster_stage3(
+                    conn,
+                    cluster_id,
+                    summary_deep_dive=summary_deep_dive,
+                    summary_deep_dive_item_ids=item_ids,
+                    limitations=limitations,
+                )
+                succeeded += 1
+                logger.info("Deep dive generated for cluster %s", cluster_id)
+            else:
+                logger.warning(
+                    "Deep dive generation failed for cluster %s: %s",
+                    cluster_id,
+                    deep_dive_result.error,
+                )
+                failed += 1
+
+        except Exception as e:
+            logger.exception("Error generating deep dive for cluster %s: %s", cluster_id, e)
+            failed += 1
+
+    return GenerateDeepDivesResult(
         clusters_processed=processed,
         clusters_succeeded=succeeded,
         clusters_failed=failed,

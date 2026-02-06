@@ -18,17 +18,23 @@ while true; do
     # 1. Run main pipeline (ingest → cluster → tag → trending)
     python -m curious_now.cli pipeline
 
-    # 2. Generate AI takeaways for new clusters
+    # 2. Generate AI takeaways (1-liner summaries) for new clusters
     echo ""
-    echo "Generating AI takeaways..."
+    echo "Generating takeaways..."
     CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli generate-takeaways --limit 50
 
-    # 3. Generate deep dives (Stage 3 enrichment)
+    # 3. Generate intuition (high-level understanding) for all clusters
     echo ""
-    echo "Generating deep dives..."
-    CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli enrich-stage3 --limit 50
+    echo "Generating intuition..."
+    CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli generate-intuition --limit 50
 
-    # 4. Generate embeddings for semantic search (optional)
+    # 4. Generate deep dives for papers only (preprints, peer-reviewed)
+    #    News articles and press releases don't need deep dives
+    echo ""
+    echo "Generating deep dives for papers..."
+    CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli generate-deep-dives --limit 50
+
+    # 5. Generate embeddings for semantic search (optional)
     # echo ""
     # echo "Generating embeddings..."
     # python -m curious_now.cli generate-embeddings --limit 50

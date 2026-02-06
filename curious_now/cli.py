@@ -7,7 +7,9 @@ from uuid import UUID
 
 from curious_now.ai_generation import (
     enrich_stage3_for_clusters,
+    generate_deep_dives_for_clusters,
     generate_embeddings_for_clusters,
+    generate_intuition_for_clusters,
     generate_takeaways_for_clusters,
 )
 from curious_now.api.schemas import SourcePack
@@ -303,6 +305,42 @@ def cmd_enrich_stage3(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_generate_intuition(args: argparse.Namespace) -> int:
+    """Generate intuition for clusters (high-level understanding)."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        result = generate_intuition_for_clusters(
+            conn,
+            limit=int(args.limit),
+        )
+    print(
+        f"Intuition generation complete: "
+        f"{result.clusters_succeeded}/{result.clusters_processed} succeeded; "
+        f"{result.clusters_failed} failed; {result.clusters_skipped} skipped."
+    )
+    return 0
+
+
+def cmd_generate_deep_dives(args: argparse.Namespace) -> int:
+    """Generate deep dives for paper-based clusters only."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        result = generate_deep_dives_for_clusters(
+            conn,
+            limit=int(args.limit),
+        )
+    print(
+        f"Deep dive generation complete: "
+        f"{result.clusters_succeeded}/{result.clusters_processed} succeeded; "
+        f"{result.clusters_failed} failed; {result.clusters_skipped} skipped."
+    )
+    if result.clusters_processed == 0:
+        print("Note: Deep dives only apply to preprints and peer-reviewed papers.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="curious-now")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -419,12 +457,30 @@ def main(argv: list[str] | None = None) -> int:
 
     p_enrich = sub.add_parser(
         "enrich-stage3",
-        help="Generate deep-dives, intuition, confidence bands, anti-hype flags"
+        help="[Legacy] Generate deep-dives, intuition, confidence bands, anti-hype flags"
     )
     p_enrich.add_argument(
         "--limit", type=int, default=50, help="Max clusters to process"
     )
     p_enrich.set_defaults(func=cmd_enrich_stage3)
+
+    p_intuition = sub.add_parser(
+        "generate-intuition",
+        help="Generate intuition (high-level understanding) for all clusters"
+    )
+    p_intuition.add_argument(
+        "--limit", type=int, default=100, help="Max clusters to process"
+    )
+    p_intuition.set_defaults(func=cmd_generate_intuition)
+
+    p_deep_dives = sub.add_parser(
+        "generate-deep-dives",
+        help="Generate deep dives for papers only (preprints, peer-reviewed)"
+    )
+    p_deep_dives.add_argument(
+        "--limit", type=int, default=50, help="Max clusters to process"
+    )
+    p_deep_dives.set_defaults(func=cmd_generate_deep_dives)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
