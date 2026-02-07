@@ -2,12 +2,15 @@ import Link from 'next/link';
 
 import type { TopicDetail } from '@/types/api';
 import { ClusterCard } from '@/components/feed/ClusterCard/ClusterCard';
-import { FollowButton } from '@/components/topic/FollowButton/FollowButton';
 import { env } from '@/lib/config/env';
 
 import styles from './TopicPage.module.css';
 
 export function TopicPage({ detail }: { detail: TopicDetail }) {
+  const topicType = (detail as TopicDetail & { topic_type?: 'category' | 'subtopic' | null })
+    .topic_type;
+  const isCategory = topicType === 'category';
+
   return (
     <main className={styles.main}>
       <div className={styles.container}>
@@ -19,7 +22,6 @@ export function TopicPage({ detail }: { detail: TopicDetail }) {
                 <p className={styles.subtitle}>{detail.description_short}</p>
               ) : null}
             </div>
-            <FollowButton topicId={detail.topic_id} initialIsFollowed={detail.is_followed} />
           </div>
 
           <div className={styles.links}>
@@ -48,7 +50,7 @@ export function TopicPage({ detail }: { detail: TopicDetail }) {
         {detail.trending_clusters?.length ? (
           <section className={styles.section} aria-labelledby="trending-heading">
             <h2 id="trending-heading" className={styles.h2}>
-              Trending in this topic
+              {isCategory ? 'Trending in this category' : 'Trending in this topic'}
             </h2>
             <div className={styles.list}>
               {detail.trending_clusters.map((c) => (

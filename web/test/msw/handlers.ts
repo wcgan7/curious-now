@@ -3,62 +3,6 @@ import { http, HttpResponse } from 'msw';
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/v1';
 
 export const handlers = [
-  http.get(`${API}/user`, () => {
-    return HttpResponse.json({ detail: 'Unauthenticated' }, { status: 401 });
-  }),
-  http.get(`${API}/user/prefs`, () => {
-    return HttpResponse.json(
-      {
-        prefs: {
-          reading_mode_default: 'intuition',
-          followed_topic_ids: [],
-          followed_entity_ids: [],
-          blocked_source_ids: [],
-          saved_cluster_ids: [],
-          hidden_cluster_ids: [],
-          notification_settings: {},
-        },
-      },
-      { status: 200 }
-    );
-  }),
-  http.patch(`${API}/user/prefs`, async ({ request }) => {
-    const patch = (await request.json().catch(() => ({}))) as any;
-    return HttpResponse.json(
-      {
-        prefs: {
-          reading_mode_default: patch.reading_mode_default || 'intuition',
-          followed_topic_ids: [],
-          followed_entity_ids: [],
-          blocked_source_ids: [],
-          saved_cluster_ids: [],
-          hidden_cluster_ids: [],
-          notification_settings: patch.notification_settings || {},
-        },
-      },
-      { status: 200 }
-    );
-  }),
-  http.post(`${API}/auth/magic_link/start`, () => {
-    return HttpResponse.json({ status: 'sent' }, { status: 200 });
-  }),
-  http.post(`${API}/auth/magic_link/verify`, () => {
-    return HttpResponse.json({ user: { user_id: 'u1', email: 'test@example.com' } }, { status: 200 });
-  }),
-  http.get(`${API}/user/saves`, () => {
-    return HttpResponse.json(
-      {
-        saved: [],
-      },
-      { status: 200 }
-    );
-  }),
-  http.post(`${API}/user/saves/:clusterId`, () => {
-    return HttpResponse.json({ status: 'ok' }, { status: 200 });
-  }),
-  http.delete(`${API}/user/saves/:clusterId`, () => {
-    return HttpResponse.json({ status: 'ok' }, { status: 200 });
-  }),
   http.get(`${API}/sources`, () => {
     return HttpResponse.json(
       {

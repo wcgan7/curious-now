@@ -7,7 +7,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from curious_now.api.deps import AuthedUser, get_db, optional_user, require_admin, require_user
+from curious_now.api.deps import get_db, require_admin
 from curious_now.api.schemas import (
     AdminEntityCreateRequest,
     AdminEntityMergeRequest,
@@ -25,9 +25,8 @@ from curious_now.api.schemas import (
     Experiment,
     FeatureFlag,
     SimpleOkResponse,
-    UserFollowedEntitiesResponse,
+    simple_ok,
 )
-from curious_now.repo_stage5 import simple_ok
 from curious_now.repo_stage10 import (
     admin_create_entity,
     admin_create_experiment,
@@ -36,11 +35,8 @@ from curious_now.repo_stage10 import (
     admin_patch_experiment,
     admin_set_cluster_entities,
     admin_upsert_feature_flag,
-    follow_entity,
     get_entity_detail_or_redirect,
     list_entities,
-    list_followed_entities,
-    unfollow_entity,
 )
 
 router = APIRouter()
@@ -52,7 +48,6 @@ def get_entities(
     entity_type: EntityType | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    user: AuthedUser | None = Depends(optional_user),
     conn: psycopg.Connection[Any] = Depends(get_db),
 ) -> EntitiesResponse:
     return list_entities(
@@ -61,21 +56,20 @@ def get_entities(
         entity_type=entity_type.value if entity_type else None,
         page=page,
         page_size=page_size,
-        user_id=user.user_id if user else None,
+        user_id=None,
     )
 
 
 @router.get("/entities/{id}", response_model=EntityDetail)
 def get_entity(
     id: UUID,  # noqa: A002
-    user: AuthedUser | None = Depends(optional_user),
     conn: psycopg.Connection[Any] = Depends(get_db),
 ) -> EntityDetail:
     try:
         result = get_entity_detail_or_redirect(
             conn,
             entity_id=id,
-            user_id=user.user_id if user else None,
+            user_id=None,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Not found") from None
@@ -85,34 +79,6 @@ def get_entity(
             content=EntityRedirectResponse(redirect_to_entity_id=result).model_dump(mode="json"),
         )
     return result
-
-
-@router.get("/user/follows/entities", response_model=UserFollowedEntitiesResponse)
-def get_user_followed_entities(
-    user: AuthedUser = Depends(require_user),
-    conn: psycopg.Connection[Any] = Depends(get_db),
-) -> UserFollowedEntitiesResponse:
-    return list_followed_entities(conn, user_id=user.user_id)
-
-
-@router.post("/user/follows/entities/{entity_id}", response_model=SimpleOkResponse)
-def post_follow_entity(
-    entity_id: UUID,
-    user: AuthedUser = Depends(require_user),
-    conn: psycopg.Connection[Any] = Depends(get_db),
-) -> SimpleOkResponse:
-    follow_entity(conn, user_id=user.user_id, entity_id=entity_id)
-    return simple_ok()
-
-
-@router.delete("/user/follows/entities/{entity_id}", response_model=SimpleOkResponse)
-def delete_follow_entity(
-    entity_id: UUID,
-    user: AuthedUser = Depends(require_user),
-    conn: psycopg.Connection[Any] = Depends(get_db),
-) -> SimpleOkResponse:
-    unfollow_entity(conn, user_id=user.user_id, entity_id=entity_id)
-    return simple_ok()
 
 
 @router.post(

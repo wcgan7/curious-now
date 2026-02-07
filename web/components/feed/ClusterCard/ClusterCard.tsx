@@ -2,11 +2,17 @@ import { formatDistanceToNow } from 'date-fns';
 
 import type { ClusterCard as ClusterCardType } from '@/types/api';
 import { Card } from '@/components/ui/Card/Card';
-import { ContentTypeBadge, Badge } from '@/components/ui/Badge/Badge';
+import { Badge } from '@/components/ui/Badge/Badge';
 
 import styles from './ClusterCard.module.css';
 
 export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
+  const topCategories = cluster.top_categories || [];
+  const categoryNameSet = new Set(topCategories.map((c) => c.name.toLowerCase()));
+  const topSubtopics = (cluster.top_topics || [])
+    .filter((topic) => !categoryNameSet.has(topic.name.toLowerCase()))
+    .slice(0, 2);
+
   return (
     <Card as="article" href={`/story/${cluster.cluster_id}`}>
       {cluster.featured_image_url ? (
@@ -20,14 +26,21 @@ export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
         </div>
       ) : null}
       <Card.Content>
-        <div className={styles.metaRow}>
-          <div className={styles.badges}>
-            {(cluster.content_type_badges || []).map((ct) => (
-              <ContentTypeBadge key={ct} type={ct} />
-            ))}
-            {cluster.confidence_band ? <Badge>{cluster.confidence_band}</Badge> : null}
+        {topCategories.length || topSubtopics.length || cluster.confidence_band ? (
+          <div className={styles.metaRow}>
+            <div className={styles.badges}>
+              {topCategories.slice(0, 1).map((category) => (
+                <Badge key={category.category_id} variant="info">
+                  {category.name}
+                </Badge>
+              ))}
+              {topSubtopics.map((topic) => (
+                <Badge key={topic.topic_id}>{topic.name}</Badge>
+              ))}
+              {cluster.confidence_band ? <Badge>{cluster.confidence_band}</Badge> : null}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <Card.Title>{cluster.canonical_title}</Card.Title>
 
@@ -44,8 +57,6 @@ export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
         ) : null}
 
         <Card.Meta>
-          <span>{cluster.distinct_source_count} sources</span>
-          <span aria-hidden="true">&middot;</span>
           <time dateTime={cluster.updated_at}>
             {formatDistanceToNow(new Date(cluster.updated_at), { addSuffix: true })}
           </time>

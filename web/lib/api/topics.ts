@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 
 import { env } from '@/lib/config/env';
-import type { TopicDetail, TopicLineageResponse } from '@/types/api';
+import type { TopicDetail, TopicLineageResponse, TopicsResponse } from '@/types/api';
 
 type TopicDetailResult =
   | { kind: 'ok'; detail: TopicDetail }
@@ -30,6 +30,22 @@ export async function getTopicDetail(topicId: string): Promise<TopicDetailResult
   if (res.status === 404) return { kind: 'not_found' };
   if (!res.ok) throw new Error(`Topic request failed: ${res.status}`);
   return { kind: 'ok', detail: (await res.json()) as TopicDetail };
+}
+
+export async function getTopics(): Promise<TopicsResponse> {
+  const url = new URL(`${env.apiUrl}/topics`);
+  const cookie = (await headers()).get('cookie');
+  const res = await fetch(url, {
+    headers: {
+      ...(cookie ? { cookie } : {}),
+      Accept: 'application/json',
+    },
+    credentials: 'include',
+    cache: 'no-store',
+  });
+
+  if (!res.ok) throw new Error(`Topics request failed: ${res.status}`);
+  return (await res.json()) as TopicsResponse;
 }
 
 type TopicLineageResult =

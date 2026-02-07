@@ -220,6 +220,8 @@ class Topic(BaseModel):
     topic_id: UUID
     name: str
     description_short: str | None = None
+    parent_topic_id: UUID | None = None
+    topic_type: Literal["category", "subtopic"] | None = None
     is_followed: bool | None = None
 
 
@@ -345,38 +347,6 @@ class AdminRunResponse(BaseModel):
     status: Literal["accepted"]
 
 
-class MagicLinkStartRequest(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    email: str
-
-
-class MagicLinkStartResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    status: str
-
-
-class MagicLinkVerifyRequest(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    token: str
-
-
-class User(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    user_id: UUID
-    email: str
-    created_at: datetime
-
-
-class MagicLinkVerifyResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    user: User
-
-
 class StatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -389,35 +359,9 @@ class SimpleOkResponse(BaseModel):
     status: Literal["ok"]
 
 
-class UserResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    user: User
-
-
-class UserPrefs(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    reading_mode_default: Literal["intuition", "deep"] = "intuition"
-    followed_topic_ids: list[UUID] = []
-    followed_entity_ids: list[UUID] = []
-    blocked_source_ids: list[UUID] = []
-    saved_cluster_ids: list[UUID] = []
-    hidden_cluster_ids: list[UUID] = []
-    notification_settings: dict[str, Any] = {}
-
-
-class UserPrefsResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    prefs: UserPrefs
-
-
-class UserPrefsPatchRequest(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    reading_mode_default: Literal["intuition", "deep"] | None = None
-    notification_settings: dict[str, Any] | None = None
+def simple_ok() -> SimpleOkResponse:
+    """Helper to return a simple OK response."""
+    return SimpleOkResponse(status="ok")
 
 
 class FeedbackCreateRequest(BaseModel):
@@ -627,60 +571,6 @@ class AdminLineageEdgeCreateRequest(BaseModel):
     notes_short: str | None = None
 
 
-class EventIn(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    event_type: Literal[
-        "open_cluster",
-        "click_item",
-        "save_cluster",
-        "unsave_cluster",
-        "hide_cluster",
-        "unhide_cluster",
-        "follow_topic",
-        "unfollow_topic",
-        "block_source",
-        "unblock_source",
-    ]
-    client_id: UUID | None = None
-    cluster_id: UUID | None = None
-    item_id: UUID | None = None
-    topic_id: UUID | None = None
-    meta: dict[str, Any] | None = None
-
-
-class EventsIngestResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    status: Literal["accepted"]
-
-
-class SavedCluster(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    saved_at: datetime
-    cluster: ClusterCard
-
-
-class UserSavesResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    saved: list[SavedCluster]
-
-
-class WatchedCluster(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    watched_at: datetime
-    cluster: ClusterCard
-
-
-class UserWatchesResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    watched: list[WatchedCluster]
-
-
 class Entity(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -711,12 +601,6 @@ class EntityDetail(BaseModel):
 
     latest_clusters: list[ClusterCard] = []
     related_entities: list[Entity] = []
-
-
-class UserFollowedEntitiesResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    entities: list[Entity]
 
 
 class AdminEntityCreateRequest(BaseModel):

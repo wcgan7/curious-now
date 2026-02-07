@@ -1,0 +1,94 @@
+.main {
+  padding: 28px 20px 48px;
+}
+
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 18px;
+}
+
+.kicker {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.84rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.title {
+  margin: 8px 0 0;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.2;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  max-width: 62ch;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.card {
+  border: var(--border-1);
+  border-radius: var(--r-3);
+  background: var(--surface-1);
+  padding: 14px;
+  display: block;
+  transition:
+    transform var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+}
+
+.card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-1);
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  text-decoration: none;
+}
+
+.cardTitle {
+  font-size: 1.02rem;
+  font-weight: 630;
+}
+
+.cardDesc {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: 0.95rem;
+}
+
+.cardMeta {
+  margin: 10px 0 0;
+  color: var(--text-3);
+  font-size: 0.82rem;
+}
+
+.empty {
+  color: var(--text-2);
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: 18px 12px 32px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

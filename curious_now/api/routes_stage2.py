@@ -7,7 +7,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from curious_now.api.deps import AuthedUser, get_db, optional_user
+from curious_now.api.deps import get_db
 from curious_now.api.schemas import (
     ClusterDetail,
     ClustersFeedResponse,
@@ -35,7 +35,6 @@ from curious_now.repo_stage2 import (
     list_topics,
     search,
 )
-from curious_now.repo_stage5 import for_you_feed
 from curious_now.repo_stage8 import topic_redirect_to
 
 router = APIRouter()
@@ -43,24 +42,17 @@ router = APIRouter()
 
 @router.get("/feed", response_model=ClustersFeedResponse)
 def get_clusters_feed(
-    tab: Literal["latest", "trending", "for_you"] = "latest",
+    tab: Literal["latest", "trending"] = "latest",
     topic_id: UUID | None = None,
     content_type: ContentType | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    user: AuthedUser | None = Depends(optional_user),
     conn: psycopg.Connection[Any] = Depends(get_db),
 ) -> ClustersFeedResponse:
     r = get_redis_client()
-    if tab == "for_you":
-        if not user:
-            raise HTTPException(status_code=401, detail="Authentication required")
-        user_key = str(user.user_id)
-    else:
-        user_key = "anon"
     cache_key = (
         f"feed:{tab}:{topic_id or 'all'}:{content_type.value if content_type else 'all'}:"
-        f"{page}:{page_size}:{user_key}"
+        f"{page}:{page_size}"
     )
     if r:
         cached = cache_get_json(r, cache_key)
@@ -71,18 +63,14 @@ def get_clusters_feed(
                 headers={"X-Cache": "hit"},
             )
 
-    if tab == "for_you":
-        assert user is not None
-        result = for_you_feed(conn, user_id=user.user_id, page=page, page_size=page_size)
-    else:
-        result = get_feed(
-            conn,
-            tab=tab,
-            topic_id=topic_id,
-            content_type=content_type.value if content_type else None,
-            page=page,
-            page_size=page_size,
-        )
+    result = get_feed(
+        conn,
+        tab=tab,
+        topic_id=topic_id,
+        content_type=content_type.value if content_type else None,
+        page=page,
+        page_size=page_size,
+    )
 
     if r:
         cache_set_json(r, cache_key, result.model_dump(mode="json"), ttl_seconds=60)

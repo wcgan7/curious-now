@@ -8,7 +8,6 @@ import type { ClusterDetail } from '@/types/api';
 import styles from './StoryPage.module.css';
 import { TrustBox } from '@/components/story/TrustBox/TrustBox';
 import { EvidencePanel } from '@/components/story/EvidencePanel/EvidencePanel';
-import { StoryActions } from '@/components/story/StoryActions/StoryActions';
 import { DeepDive } from '@/components/story/DeepDive/DeepDive';
 import { IntuitionSection } from '@/components/story/IntuitionSection/IntuitionSection';
 
@@ -155,8 +154,8 @@ export function StoryPage({
               <p className={styles.takeawayText}>{cluster.takeaway}</p>
             </div>
           ) : null}
-          <div className={styles.actionsRow}>
-            {canOpenSourceDirectly ? (
+          {canOpenSourceDirectly ? (
+            <div className={styles.actionsRow}>
               <a
                 href={primarySource.url}
                 className={styles.sourceCta}
@@ -166,13 +165,8 @@ export function StoryPage({
               >
                 {directSourceLabel}
               </a>
-            ) : null}
-            <StoryActions
-              clusterId={cluster.cluster_id}
-              cluster={cluster}
-              initial={{ saved: !!cluster.is_saved, watched: !!cluster.is_watched }}
-            />
-          </div>
+            </div>
+          ) : null}
         </header>
 
         <div className={styles.columns}>

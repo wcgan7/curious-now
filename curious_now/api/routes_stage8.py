@@ -6,7 +6,7 @@ from uuid import UUID
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from curious_now.api.deps import AuthedUser, get_db, optional_user, require_admin
+from curious_now.api.deps import get_db, require_admin
 from curious_now.api.schemas import (
     AdminClusterMergeRequest,
     AdminClusterMergeResponse,
@@ -31,9 +31,9 @@ from curious_now.api.schemas import (
     LineageNode,
     SimpleOkResponse,
     Topic,
+    simple_ok,
 )
 from curious_now.rate_limit import enforce_rate_limit
-from curious_now.repo_stage5 import simple_ok
 from curious_now.repo_stage8 import (
     admin_create_lineage_edge,
     admin_create_lineage_node,
@@ -57,11 +57,10 @@ router = APIRouter()
 def post_feedback(
     payload: FeedbackIn,
     request: Request,
-    user: AuthedUser | None = Depends(optional_user),
     conn: psycopg.Connection[Any] = Depends(get_db),
 ) -> FeedbackResponse:
     enforce_rate_limit(request, key="feedback_post", limit=30, window_seconds=60)
-    fid = create_feedback(conn, user_id=user.user_id if user else None, req=payload)
+    fid = create_feedback(conn, user_id=None, req=payload)
     return FeedbackResponse(status="accepted", feedback_id=fid)
 
 
