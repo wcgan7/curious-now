@@ -125,6 +125,16 @@ class TopicChip(BaseModel):
     score: float
 
 
+class CategoryChip(BaseModel):
+    """Category derived from subtopic assignments."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    category_id: UUID
+    name: str
+    score: float  # Max score of subtopics in this category
+
+
 class WhyInFeed(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -140,6 +150,7 @@ class ClusterCard(BaseModel):
     updated_at: datetime
     distinct_source_count: int
     top_topics: list[TopicChip] = []
+    top_categories: list[CategoryChip] = []
     content_type_badges: list[ContentType] = []
     method_badges: list[str] = []
     takeaway: str | None = None
@@ -148,6 +159,7 @@ class ClusterCard(BaseModel):
     is_saved: bool | None = None
     is_watched: bool | None = None
     why_in_feed: WhyInFeed | None = None
+    featured_image_url: str | None = None
 
 
 class ClustersFeedResponse(BaseModel):
@@ -167,6 +179,7 @@ class EvidenceItem(BaseModel):
     published_at: datetime | None = None
     source: ItemSource
     content_type: ContentType
+    image_url: str | None = None
 
 
 class ClusterDetail(BaseModel):
@@ -178,8 +191,10 @@ class ClusterDetail(BaseModel):
     updated_at: datetime
     distinct_source_count: int
     topics: list[TopicChip] = []
+    categories: list[CategoryChip] = []
     content_type_breakdown: dict[str, int] | None = None
     evidence: dict[str, list[EvidenceItem]]
+    featured_image_url: str | None = None
 
     takeaway: str | None = None
     summary_intuition: str | None = None

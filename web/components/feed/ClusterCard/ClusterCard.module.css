@@ -1,3 +1,16 @@
+.imageWrapper {
+  margin: -16px -16px 12px;
+  height: 140px;
+  overflow: hidden;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .metaRow {
   display: flex;
   justify-content: space-between;
@@ -66,7 +79,7 @@
   }
 
   .flag {
-    font-size: 11px;
+    font-size: 12px;
     padding: 2px 7px;
   }
 }

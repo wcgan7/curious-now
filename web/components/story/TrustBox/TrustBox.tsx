@@ -8,13 +8,16 @@ export function TrustBox({
   confidenceBand,
   methodBadges,
   antiHypeFlags,
+  sticky = true,
 }: {
   contentTypeBreakdown: Record<string, number>;
   distinctSourceCount: number;
   confidenceBand?: 'early' | 'growing' | 'established' | null;
   methodBadges: string[];
   antiHypeFlags: string[];
+  sticky?: boolean;
 }) {
+  const isSingleSource = distinctSourceCount <= 1;
   const confidenceLabels: Record<string, string> = {
     early: 'Early — limited evidence, may change significantly',
     growing: 'Growing — multiple sources, gaining clarity',
@@ -22,10 +25,16 @@ export function TrustBox({
   };
 
   return (
-    <aside className={styles.box} aria-labelledby="trust-heading">
-      <h2 id="trust-heading" className={styles.heading}>
-        Evidence summary
-      </h2>
+    <aside
+      className={`${styles.box} ${sticky ? styles.sticky : ''}`}
+      aria-labelledby={isSingleSource ? undefined : 'trust-heading'}
+      aria-label={isSingleSource ? 'Source details' : undefined}
+    >
+      {!isSingleSource ? (
+        <h2 id="trust-heading" className={styles.heading}>
+          Source summary
+        </h2>
+      ) : null}
 
       {confidenceBand ? (
         <div className={styles.row}>
@@ -41,18 +50,18 @@ export function TrustBox({
         </div>
       ) : null}
 
-      <div className={styles.block}>
-        <span className={styles.label}>Source types</span>
-        <div className={styles.tags}>
-          {Object.entries(contentTypeBreakdown)
-            .filter(([, count]) => count > 0)
-            .map(([type, count]) => (
-              <Badge key={type}>
-                {type} · {count}
-              </Badge>
-            ))}
+      {!isSingleSource ? (
+        <div className={styles.block}>
+          <span className={styles.label}>Source types</span>
+          <div className={styles.tags}>
+            {Object.entries(contentTypeBreakdown)
+              .filter(([, count]) => count > 0)
+              .map(([type, count]) => (
+                <Badge key={type}>{`${type.replace(/_/g, ' ')} · ${count}`}</Badge>
+              ))}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {methodBadges.length ? (
         <div className={styles.block}>

@@ -71,22 +71,24 @@ export function StoryActions({
 
   return (
     <div className={styles.row}>
-      <Button
-        variant={saved ? 'secondary' : 'primary'}
-        size="sm"
-        onClick={() => save.mutate(!saved)}
-        isLoading={save.isPending}
-      >
-        {saved ? 'Saved' : 'Save'}
-      </Button>
-      <Button
-        variant={watched ? 'secondary' : 'tertiary'}
-        size="sm"
-        onClick={() => watch.mutate(!watched)}
-        isLoading={watch.isPending}
-      >
-        {watched ? 'Watching' : 'Watch'}
-      </Button>
+      <div className={styles.actions}>
+        <Button
+          variant={saved ? 'secondary' : 'primary'}
+          size="sm"
+          onClick={() => save.mutate(!saved)}
+          isLoading={save.isPending}
+        >
+          {saved ? 'Saved' : 'Save'}
+        </Button>
+        <Button
+          variant={watched ? 'secondary' : 'tertiary'}
+          size="sm"
+          onClick={() => watch.mutate(!watched)}
+          isLoading={watch.isPending}
+        >
+          {watched ? 'Watching' : 'Watch'}
+        </Button>
+      </div>
       {needsAuth ? (
         <span className={styles.hint}>
           Login required.{' '}

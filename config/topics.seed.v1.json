@@ -1,0 +1,917 @@
+{
+  "categories": [
+    {
+      "name": "Artificial Intelligence",
+      "description_short": "Machine learning, AI research, and applications.",
+      "aliases": [
+        "AI",
+        "machine learning",
+        "ML",
+        "deep learning",
+        "neural network",
+        "LLM",
+        "large language model",
+        "foundation model",
+        "transformer",
+        "generative AI",
+        "GPT",
+        "diffusion model",
+        "text-to-image",
+        "ChatGPT",
+        "Claude"
+      ]
+    },
+    {
+      "name": "Computing",
+      "description_short": "Computer science, software, and information security.",
+      "aliases": [
+        "computer science",
+        "software",
+        "programming",
+        "algorithms",
+        "systems",
+        "computing"
+      ]
+    },
+    {
+      "name": "Life Sciences",
+      "description_short": "Biology from molecules to ecosystems.",
+      "aliases": [
+        "biology",
+        "life science",
+        "genetics",
+        "genomics",
+        "microbiology",
+        "molecular biology"
+      ]
+    },
+    {
+      "name": "Health & Medicine",
+      "description_short": "Clinical research, health, and healthcare systems.",
+      "aliases": [
+        "medicine",
+        "health",
+        "clinical",
+        "hospital",
+        "therapy",
+        "treatment",
+        "pharmaceutical"
+      ]
+    },
+    {
+      "name": "Physics",
+      "description_short": "Fundamental and applied physics.",
+      "aliases": [
+        "physics",
+        "quantum",
+        "particle",
+        "relativity",
+        "optics",
+        "plasma"
+      ]
+    },
+    {
+      "name": "Chemistry",
+      "description_short": "Chemistry and chemical engineering.",
+      "aliases": [
+        "chemistry",
+        "chemical",
+        "molecule",
+        "reaction",
+        "catalysis",
+        "synthesis",
+        "polymer"
+      ]
+    },
+    {
+      "name": "Earth & Environment",
+      "description_short": "Earth systems, ecosystems, and environmental change.",
+      "aliases": [
+        "earth science",
+        "environment",
+        "ecology",
+        "biodiversity",
+        "conservation",
+        "pollution"
+      ]
+    },
+    {
+      "name": "Climate",
+      "description_short": "Climate science, extremes, and mitigation.",
+      "aliases": [
+        "climate",
+        "climate change",
+        "global warming",
+        "greenhouse gas",
+        "GHG",
+        "carbon",
+        "CO2",
+        "methane",
+        "net zero",
+        "decarbonization",
+        "IPCC",
+        "sea level",
+        "emissions",
+        "Paris Agreement",
+        "COP28",
+        "COP29"
+      ]
+    },
+    {
+      "name": "Space",
+      "description_short": "Space missions, astronomy, and exploration.",
+      "aliases": [
+        "space",
+        "NASA",
+        "ESA",
+        "space telescope",
+        "JWST",
+        "James Webb",
+        "Artemis",
+        "ISS",
+        "SpaceX",
+        "satellite",
+        "orbit",
+        "moon",
+        "Mars"
+      ]
+    },
+    {
+      "name": "Energy",
+      "description_short": "Energy generation, storage, and grids.",
+      "aliases": [
+        "energy",
+        "battery",
+        "solar",
+        "wind",
+        "nuclear",
+        "fusion",
+        "fission",
+        "grid",
+        "hydrogen",
+        "fuel cell",
+        "photovoltaic",
+        "energy storage",
+        "electricity"
+      ]
+    },
+    {
+      "name": "Materials & Engineering",
+      "description_short": "Materials science, nanotech, and engineering systems.",
+      "aliases": [
+        "materials",
+        "engineering",
+        "manufacturing",
+        "infrastructure"
+      ]
+    },
+    {
+      "name": "Math & Economics",
+      "description_short": "Mathematics, statistics, and economic research.",
+      "aliases": [
+        "mathematics",
+        "statistics",
+        "economics",
+        "markets"
+      ]
+    },
+    {
+      "name": "Mind & Behavior",
+      "description_short": "Neuroscience and psychology.",
+      "aliases": [
+        "neuroscience",
+        "psychology",
+        "cognition",
+        "behavior"
+      ]
+    }
+  ],
+  "subtopics": [
+    {
+      "name": "Natural Language Processing",
+      "category": "Artificial Intelligence",
+      "aliases": [
+        "NLP",
+        "natural language processing",
+        "language model",
+        "LLM",
+        "transformer"
+      ]
+    },
+    {
+      "name": "Computer Vision",
+      "category": "Artificial Intelligence",
+      "aliases": [
+        "computer vision",
+        "CV",
+        "image recognition",
+        "segmentation",
+        "object detection"
+      ]
+    },
+    {
+      "name": "Reinforcement Learning",
+      "category": "Artificial Intelligence",
+      "aliases": [
+        "reinforcement learning",
+        "RL",
+        "policy gradient",
+        "agent"
+      ]
+    },
+    {
+      "name": "Generative AI",
+      "category": "Artificial Intelligence",
+      "aliases": [
+        "generative AI",
+        "diffusion model",
+        "text-to-image",
+        "image generation",
+        "GPT"
+      ]
+    },
+    {
+      "name": "Robotics",
+      "category": "Artificial Intelligence",
+      "aliases": [
+        "robot",
+        "robots",
+        "autonomous",
+        "drone",
+        "drones",
+        "humanoid",
+        "manipulation",
+        "actuator",
+        "legged robot",
+        "robotic arm"
+      ]
+    },
+
+    {
+      "name": "Algorithms & Theory",
+      "category": "Computing",
+      "aliases": [
+        "algorithm",
+        "algorithms",
+        "data structure",
+        "complexity",
+        "theorem",
+        "proof"
+      ]
+    },
+    {
+      "name": "Software & Systems",
+      "category": "Computing",
+      "aliases": [
+        "distributed systems",
+        "database",
+        "operating system",
+        "compiler",
+        "programming language",
+        "formal methods",
+        "HCI",
+        "human-computer interaction"
+      ]
+    },
+    {
+      "name": "Cybersecurity",
+      "category": "Computing",
+      "aliases": [
+        "security",
+        "cybersecurity",
+        "vulnerability",
+        "exploit",
+        "malware",
+        "ransomware",
+        "privacy",
+        "encryption",
+        "zero-day",
+        "hacking",
+        "data breach"
+      ]
+    },
+    {
+      "name": "Cryptography",
+      "category": "Computing",
+      "aliases": [
+        "cryptography",
+        "encryption",
+        "public key",
+        "signature",
+        "zero-knowledge"
+      ]
+    },
+    {
+      "name": "Data & Infrastructure",
+      "category": "Computing",
+      "aliases": [
+        "cloud",
+        "data center",
+        "datacenter",
+        "compute",
+        "infrastructure",
+        "scaling",
+        "latency",
+        "throughput",
+        "GPU cluster",
+        "TPU",
+        "HPC"
+      ]
+    },
+
+    {
+      "name": "Genetics & Genomics",
+      "category": "Life Sciences",
+      "aliases": [
+        "genome",
+        "genomics",
+        "DNA",
+        "RNA",
+        "genetics",
+        "sequencing"
+      ]
+    },
+    {
+      "name": "Molecular & Cell Biology",
+      "category": "Life Sciences",
+      "aliases": [
+        "cell",
+        "cells",
+        "protein",
+        "molecular biology",
+        "organism"
+      ]
+    },
+    {
+      "name": "Microbiology",
+      "category": "Life Sciences",
+      "aliases": [
+        "microbiology",
+        "microbiome",
+        "bacteria",
+        "viral",
+        "pathogen"
+      ]
+    },
+    {
+      "name": "Biotechnology",
+      "category": "Life Sciences",
+      "aliases": [
+        "biotech",
+        "gene therapy",
+        "synthetic biology",
+        "synbio",
+        "biomanufacturing",
+        "bioengineering",
+        "cell therapy",
+        "CAR-T",
+        "mRNA",
+        "biopharmaceutical",
+        "biofuel"
+      ]
+    },
+    {
+      "name": "Agriculture & Food Systems",
+      "category": "Life Sciences",
+      "aliases": [
+        "farming",
+        "crop",
+        "crops",
+        "agriculture",
+        "food security",
+        "irrigation",
+        "soil",
+        "fertilizer",
+        "livestock",
+        "sustainable agriculture",
+        "food production"
+      ]
+    },
+
+    {
+      "name": "Clinical Medicine",
+      "category": "Health & Medicine",
+      "aliases": [
+        "clinical trial",
+        "clinical",
+        "patients",
+        "hospital",
+        "surgery",
+        "medical"
+      ]
+    },
+    {
+      "name": "Pharmaceuticals & Therapeutics",
+      "category": "Health & Medicine",
+      "aliases": [
+        "drug",
+        "treatment",
+        "therapy",
+        "pharmaceutical",
+        "FDA",
+        "therapeutic"
+      ]
+    },
+    {
+      "name": "Diagnostics & Imaging",
+      "category": "Health & Medicine",
+      "aliases": [
+        "diagnostic",
+        "diagnostics",
+        "imaging",
+        "MRI",
+        "CT",
+        "CT scan",
+        "X-ray",
+        "ultrasound",
+        "PET",
+        "biomarker",
+        "blood test",
+        "screening"
+      ]
+    },
+    {
+      "name": "Cancer",
+      "category": "Health & Medicine",
+      "aliases": [
+        "cancer",
+        "oncology",
+        "tumor",
+        "tumour",
+        "chemotherapy",
+        "immunotherapy"
+      ]
+    },
+    {
+      "name": "Infectious Disease",
+      "category": "Health & Medicine",
+      "aliases": [
+        "virus",
+        "viral",
+        "bacteria",
+        "bacterial",
+        "pathogen",
+        "infection",
+        "pandemic",
+        "epidemic",
+        "outbreak",
+        "COVID",
+        "influenza",
+        "flu",
+        "WHO",
+        "CDC",
+        "antimicrobial",
+        "antibiotic resistance",
+        "vaccine"
+      ]
+    },
+    {
+      "name": "Public Health",
+      "category": "Health & Medicine",
+      "aliases": [
+        "public health",
+        "epidemiology",
+        "health policy",
+        "population health",
+        "screening program"
+      ]
+    },
+
+    {
+      "name": "Quantum Computing",
+      "category": "Physics",
+      "aliases": [
+        "quantum computing",
+        "quantum computer",
+        "qubit",
+        "qubits",
+        "quantum supremacy",
+        "quantum advantage",
+        "quantum error correction",
+        "IBM Quantum",
+        "Google Quantum",
+        "trapped ion",
+        "superconducting qubit"
+      ]
+    },
+    {
+      "name": "Particle & High-Energy Physics",
+      "category": "Physics",
+      "aliases": [
+        "particle",
+        "high-energy",
+        "LHC",
+        "collider"
+      ]
+    },
+    {
+      "name": "Condensed Matter",
+      "category": "Physics",
+      "aliases": [
+        "condensed matter",
+        "superconductor",
+        "superconducting",
+        "quantum materials"
+      ]
+    },
+    {
+      "name": "Optics & Photonics",
+      "category": "Physics",
+      "aliases": [
+        "photon",
+        "laser",
+        "optics",
+        "photonics"
+      ]
+    },
+
+    {
+      "name": "Catalysis & Synthesis",
+      "category": "Chemistry",
+      "aliases": [
+        "catalyst",
+        "catalysis",
+        "synthesis",
+        "reaction"
+      ]
+    },
+    {
+      "name": "Electrochemistry",
+      "category": "Chemistry",
+      "aliases": [
+        "electrochemistry",
+        "electrolyte",
+        "redox"
+      ]
+    },
+    {
+      "name": "Polymers & Soft Matter",
+      "category": "Chemistry",
+      "aliases": [
+        "polymer",
+        "polymers",
+        "plastics",
+        "soft matter"
+      ]
+    },
+
+    {
+      "name": "Geoscience",
+      "category": "Earth & Environment",
+      "aliases": [
+        "geology",
+        "geophysics",
+        "seismic",
+        "tectonic",
+        "mantle",
+        "mineral",
+        "earth science",
+        "atmosphere",
+        "glacier"
+      ]
+    },
+    {
+      "name": "Natural Hazards",
+      "category": "Earth & Environment",
+      "aliases": [
+        "earthquake",
+        "volcano",
+        "landslide",
+        "tsunami",
+        "geohazard",
+        "geohazards",
+        "hazard",
+        "disaster"
+      ]
+    },
+    {
+      "name": "Oceanography",
+      "category": "Earth & Environment",
+      "aliases": [
+        "ocean",
+        "marine",
+        "sea",
+        "coral",
+        "reef",
+        "deep sea",
+        "oceanographic",
+        "tide",
+        "current",
+        "fisheries",
+        "aquatic"
+      ]
+    },
+    {
+      "name": "Ecology & Conservation",
+      "category": "Earth & Environment",
+      "aliases": [
+        "ecology",
+        "biodiversity",
+        "conservation",
+        "endangered species",
+        "habitat",
+        "ecosystem"
+      ]
+    },
+    {
+      "name": "Pollution & Sustainability",
+      "category": "Earth & Environment",
+      "aliases": [
+        "pollution",
+        "plastic",
+        "air quality",
+        "water quality",
+        "sustainability",
+        "deforestation"
+      ]
+    },
+
+    {
+      "name": "Climate Impacts & Extremes",
+      "category": "Climate",
+      "aliases": [
+        "extreme weather",
+        "heatwave",
+        "heat wave",
+        "flood",
+        "drought",
+        "wildfire",
+        "climate risk",
+        "attribution"
+      ]
+    },
+    {
+      "name": "Climate Modeling",
+      "category": "Climate",
+      "aliases": [
+        "climate model",
+        "climate models",
+        "projection",
+        "projections",
+        "scenario",
+        "scenarios",
+        "attribution study"
+      ]
+    },
+    {
+      "name": "Carbon & Emissions",
+      "category": "Climate",
+      "aliases": [
+        "emissions",
+        "carbon",
+        "CO2",
+        "methane",
+        "greenhouse gas",
+        "GHG"
+      ]
+    },
+    {
+      "name": "Policy & Agreements",
+      "category": "Climate",
+      "aliases": [
+        "COP",
+        "COP28",
+        "COP29",
+        "Paris Agreement",
+        "net zero",
+        "decarbonization"
+      ]
+    },
+
+    {
+      "name": "Astronomy",
+      "category": "Space",
+      "aliases": [
+        "galaxy",
+        "galaxies",
+        "exoplanet",
+        "black hole",
+        "supernova",
+        "cosmology",
+        "telescope",
+        "star",
+        "pulsar",
+        "dark matter",
+        "dark energy"
+      ]
+    },
+    {
+      "name": "Space Missions & Launch",
+      "category": "Space",
+      "aliases": [
+        "launch",
+        "rocket",
+        "mission",
+        "Artemis",
+        "SpaceX",
+        "NASA",
+        "ESA"
+      ]
+    },
+    {
+      "name": "Satellites & Orbits",
+      "category": "Space",
+      "aliases": [
+        "satellite",
+        "orbit",
+        "space station",
+        "ISS"
+      ]
+    },
+
+    {
+      "name": "Batteries & Storage",
+      "category": "Energy",
+      "aliases": [
+        "battery",
+        "batteries",
+        "energy storage"
+      ]
+    },
+    {
+      "name": "Renewables",
+      "category": "Energy",
+      "aliases": [
+        "solar",
+        "wind",
+        "photovoltaic",
+        "PV"
+      ]
+    },
+    {
+      "name": "Nuclear & Fusion",
+      "category": "Energy",
+      "aliases": [
+        "nuclear",
+        "fission",
+        "fusion",
+        "reactor"
+      ]
+    },
+    {
+      "name": "Grids & Electrification",
+      "category": "Energy",
+      "aliases": [
+        "grid",
+        "electricity",
+        "power plant",
+        "transmission",
+        "electrification"
+      ]
+    },
+    {
+      "name": "Hydrogen",
+      "category": "Energy",
+      "aliases": [
+        "hydrogen",
+        "fuel cell"
+      ]
+    },
+
+    {
+      "name": "Materials Science",
+      "category": "Materials & Engineering",
+      "aliases": [
+        "material",
+        "materials",
+        "alloy",
+        "ceramic",
+        "composite",
+        "metamaterial"
+      ]
+    },
+    {
+      "name": "Nanotechnology",
+      "category": "Materials & Engineering",
+      "aliases": [
+        "nanomaterial",
+        "nanoparticle",
+        "graphene",
+        "nano"
+      ]
+    },
+    {
+      "name": "Semiconductors",
+      "category": "Materials & Engineering",
+      "aliases": [
+        "semiconductor",
+        "chip",
+        "chips",
+        "perovskite"
+      ]
+    },
+    {
+      "name": "Engineering",
+      "category": "Materials & Engineering",
+      "aliases": [
+        "aerospace",
+        "mechanical engineering",
+        "civil engineering",
+        "electrical engineering",
+        "structural",
+        "aviation",
+        "aircraft",
+        "bridge",
+        "infrastructure",
+        "manufacturing"
+      ]
+    },
+    {
+      "name": "Manufacturing & Scale-up",
+      "category": "Materials & Engineering",
+      "aliases": [
+        "scale-up",
+        "scale up",
+        "production",
+        "factory",
+        "pilot plant",
+        "mass production",
+        "industrialization"
+      ]
+    },
+
+    {
+      "name": "Neuroscience",
+      "category": "Mind & Behavior",
+      "aliases": [
+        "brain",
+        "neural",
+        "neuroscience",
+        "cortex",
+        "synapse",
+        "neurons",
+        "EEG",
+        "fMRI",
+        "cognition",
+        "memory",
+        "neuroimaging"
+      ]
+    },
+    {
+      "name": "Psychology",
+      "category": "Mind & Behavior",
+      "aliases": [
+        "psychology",
+        "cognitive",
+        "behavior",
+        "mental health",
+        "psychiatric",
+        "developmental",
+        "social psychology",
+        "therapy",
+        "anxiety",
+        "depression"
+      ]
+    },
+
+    {
+      "name": "Mathematics",
+      "category": "Math & Economics",
+      "aliases": [
+        "theorem",
+        "proof",
+        "algebra",
+        "geometry",
+        "topology",
+        "number theory",
+        "statistics",
+        "probability",
+        "optimization",
+        "combinatorics"
+      ]
+    },
+    {
+      "name": "Economics",
+      "category": "Math & Economics",
+      "aliases": [
+        "economy",
+        "inflation",
+        "interest rate",
+        "market",
+        "GDP",
+        "recession",
+        "trade",
+        "fiscal",
+        "monetary policy",
+        "labor market"
+      ]
+    },
+    {
+      "name": "Science Policy & Funding",
+      "category": "Math & Economics",
+      "aliases": [
+        "science policy",
+        "policy",
+        "regulation",
+        "governance",
+        "research funding",
+        "grant",
+        "grants",
+        "R&D",
+        "research and development",
+        "standards",
+        "legislation"
+      ]
+    }
+  ]
+}

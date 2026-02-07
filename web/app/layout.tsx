@@ -11,9 +11,9 @@ const fontUi = Manrope({
   variable: '--font-ui',
 });
 
-const fontArticle = Source_Serif_4({
+const fontBrand = Source_Serif_4({
   subsets: ['latin'],
-  variable: '--font-article',
+  variable: '--font-brand',
 });
 
 export const metadata: Metadata = {
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${fontUi.variable} ${fontArticle.variable}`}>
+      <body className={`${fontUi.variable} ${fontBrand.variable}`}>
         <Providers>
           <Header />
           {children}

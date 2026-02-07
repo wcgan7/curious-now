@@ -12,6 +12,7 @@
 }
 
 .kicker {
+  font-family: var(--font-brand);
   margin: 0;
   color: var(--accent);
   font-size: 13px;
