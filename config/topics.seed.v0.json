@@ -18,7 +18,33 @@
         "computer vision",
         "CV",
         "reinforcement learning",
-        "RL"
+        "RL",
+        "generative AI",
+        "GPT",
+        "diffusion model",
+        "text-to-image",
+        "ChatGPT",
+        "Claude"
+      ]
+    },
+    {
+      "name": "Computer Science",
+      "description_short": "Computing, algorithms, and software systems.",
+      "aliases": [
+        "algorithm",
+        "algorithms",
+        "programming",
+        "software",
+        "database",
+        "distributed systems",
+        "compiler",
+        "operating system",
+        "cryptography",
+        "HCI",
+        "human-computer interaction",
+        "programming language",
+        "formal methods",
+        "data structure"
       ]
     },
     {
@@ -38,7 +64,10 @@
         "launch",
         "rocket",
         "ISS",
-        "space station"
+        "space station",
+        "SpaceX",
+        "satellite",
+        "orbit"
       ]
     },
     {
@@ -54,13 +83,34 @@
         "methane",
         "net zero",
         "renewable",
-        "decarbonization"
+        "decarbonization",
+        "IPCC",
+        "sea level",
+        "emissions",
+        "COP28",
+        "COP29",
+        "Paris Agreement"
       ]
     },
     {
       "name": "Biology",
       "description_short": "Biology and life sciences.",
-      "aliases": ["cell", "cells", "protein", "genome", "genomics", "RNA", "DNA", "CRISPR"]
+      "aliases": [
+        "cell",
+        "cells",
+        "protein",
+        "genome",
+        "genomics",
+        "RNA",
+        "DNA",
+        "CRISPR",
+        "evolution",
+        "microbiology",
+        "genetics",
+        "molecular biology",
+        "microbiome",
+        "organism"
+      ]
     },
     {
       "name": "Medicine",
@@ -76,18 +126,104 @@
         "cancer",
         "oncology",
         "epidemiology",
-        "public health"
+        "public health",
+        "health",
+        "FDA",
+        "clinical",
+        "hospital",
+        "surgery",
+        "diagnosis",
+        "pharmaceutical"
+      ]
+    },
+    {
+      "name": "Infectious Disease",
+      "description_short": "Viruses, bacteria, and epidemic research.",
+      "aliases": [
+        "virus",
+        "viral",
+        "bacteria",
+        "bacterial",
+        "pathogen",
+        "infection",
+        "pandemic",
+        "epidemic",
+        "outbreak",
+        "COVID",
+        "influenza",
+        "flu",
+        "WHO",
+        "CDC",
+        "antimicrobial",
+        "antibiotic resistance"
+      ]
+    },
+    {
+      "name": "Biotechnology",
+      "description_short": "Applied biology and bioengineering.",
+      "aliases": [
+        "biotech",
+        "gene therapy",
+        "synthetic biology",
+        "synbio",
+        "biomanufacturing",
+        "biofuel",
+        "bioengineering",
+        "cell therapy",
+        "CAR-T",
+        "mRNA",
+        "biopharmaceutical"
       ]
     },
     {
       "name": "Physics",
       "description_short": "Fundamental and applied physics.",
-      "aliases": ["particle", "quantum", "relativity", "condensed matter", "high-energy", "LHC"]
+      "aliases": [
+        "particle",
+        "quantum",
+        "relativity",
+        "condensed matter",
+        "high-energy",
+        "LHC",
+        "photon",
+        "laser",
+        "optics",
+        "plasma",
+        "superconductor"
+      ]
+    },
+    {
+      "name": "Quantum Computing",
+      "description_short": "Quantum information and computation.",
+      "aliases": [
+        "quantum computer",
+        "qubit",
+        "qubits",
+        "quantum supremacy",
+        "quantum advantage",
+        "quantum error correction",
+        "IBM Quantum",
+        "Google Quantum",
+        "trapped ion",
+        "superconducting qubit"
+      ]
     },
     {
       "name": "Chemistry",
       "description_short": "Chemistry and chemical engineering.",
-      "aliases": ["chemical", "catalyst", "catalysis", "synthesis", "polymer", "electrochemistry"]
+      "aliases": [
+        "chemical",
+        "catalyst",
+        "catalysis",
+        "synthesis",
+        "polymer",
+        "electrochemistry",
+        "molecule",
+        "molecular",
+        "organic chemistry",
+        "inorganic",
+        "reaction"
+      ]
     },
     {
       "name": "Energy",
@@ -102,7 +238,11 @@
         "fission",
         "grid",
         "hydrogen",
-        "fuel cell"
+        "fuel cell",
+        "photovoltaic",
+        "energy storage",
+        "power plant",
+        "electricity"
       ]
     },
     {
@@ -115,54 +255,285 @@
         "nanoparticle",
         "graphene",
         "semiconductor",
-        "perovskite"
+        "perovskite",
+        "alloy",
+        "ceramic",
+        "composite",
+        "metamaterial"
       ]
     },
     {
       "name": "Robotics",
       "description_short": "Robotics and autonomous systems.",
-      "aliases": ["robot", "robots", "autonomous", "drone", "drones", "humanoid", "manipulation"]
+      "aliases": [
+        "robot",
+        "robots",
+        "autonomous",
+        "drone",
+        "drones",
+        "humanoid",
+        "manipulation",
+        "actuator",
+        "legged robot",
+        "robotic arm"
+      ]
+    },
+    {
+      "name": "Engineering",
+      "description_short": "Aerospace, mechanical, civil, and electrical engineering.",
+      "aliases": [
+        "aerospace",
+        "mechanical engineering",
+        "civil engineering",
+        "electrical engineering",
+        "structural",
+        "aviation",
+        "aircraft",
+        "bridge",
+        "infrastructure",
+        "manufacturing"
+      ]
     },
     {
       "name": "Neuroscience",
       "description_short": "Brain and nervous system research.",
-      "aliases": ["brain", "neural", "neuroscience", "cortex", "synapse", "neurons", "EEG", "fMRI"]
+      "aliases": [
+        "brain",
+        "neural",
+        "neuroscience",
+        "cortex",
+        "synapse",
+        "neurons",
+        "EEG",
+        "fMRI",
+        "cognition",
+        "memory",
+        "neuroimaging"
+      ]
     },
     {
       "name": "Astronomy",
       "description_short": "Astronomy and astrophysics.",
-      "aliases": ["galaxy", "galaxies", "exoplanet", "black hole", "supernova", "cosmology"]
+      "aliases": [
+        "galaxy",
+        "galaxies",
+        "exoplanet",
+        "black hole",
+        "supernova",
+        "cosmology",
+        "telescope",
+        "star",
+        "pulsar",
+        "dark matter",
+        "dark energy"
+      ]
     },
     {
       "name": "Geoscience",
       "description_short": "Earth science, geology, and geophysics.",
-      "aliases": ["earthquake", "volcano", "geology", "geophysics", "ocean", "atmosphere", "glacier"]
+      "aliases": [
+        "earthquake",
+        "volcano",
+        "geology",
+        "geophysics",
+        "atmosphere",
+        "glacier",
+        "seismic",
+        "tectonic",
+        "mantle",
+        "mineral"
+      ]
+    },
+    {
+      "name": "Oceanography",
+      "description_short": "Ocean science and marine research.",
+      "aliases": [
+        "ocean",
+        "marine",
+        "sea",
+        "coral",
+        "reef",
+        "deep sea",
+        "oceanographic",
+        "tide",
+        "current",
+        "fisheries",
+        "aquatic"
+      ]
+    },
+    {
+      "name": "Agriculture",
+      "description_short": "Farming, crop science, and food systems.",
+      "aliases": [
+        "farming",
+        "crop",
+        "crops",
+        "agriculture",
+        "food security",
+        "irrigation",
+        "soil",
+        "fertilizer",
+        "livestock",
+        "sustainable agriculture",
+        "food production"
+      ]
+    },
+    {
+      "name": "Archaeology",
+      "description_short": "Ancient history, fossils, and human origins.",
+      "aliases": [
+        "fossil",
+        "fossils",
+        "ancient",
+        "prehistoric",
+        "paleontology",
+        "dinosaur",
+        "excavation",
+        "artifact",
+        "anthropology",
+        "human evolution",
+        "Neanderthal"
+      ]
     },
     {
       "name": "Security",
-      "description_short": "Cybersecurity and safety.",
-      "aliases": ["security", "cybersecurity", "vulnerability", "exploit", "malware", "ransomware"]
+      "description_short": "Cybersecurity and information security.",
+      "aliases": [
+        "security",
+        "cybersecurity",
+        "vulnerability",
+        "exploit",
+        "malware",
+        "ransomware",
+        "privacy",
+        "encryption",
+        "zero-day",
+        "hacking",
+        "data breach"
+      ]
     },
     {
       "name": "Economics",
       "description_short": "Economics and markets.",
-      "aliases": ["economy", "inflation", "interest rate", "market", "GDP", "recession"]
+      "aliases": [
+        "economy",
+        "inflation",
+        "interest rate",
+        "market",
+        "GDP",
+        "recession",
+        "trade",
+        "fiscal",
+        "monetary policy",
+        "labor market"
+      ]
     },
     {
       "name": "Mathematics",
       "description_short": "Mathematical research.",
-      "aliases": ["theorem", "proof", "algebra", "geometry", "topology", "number theory"]
+      "aliases": [
+        "theorem",
+        "proof",
+        "algebra",
+        "geometry",
+        "topology",
+        "number theory",
+        "statistics",
+        "probability",
+        "optimization",
+        "combinatorics"
+      ]
     },
     {
       "name": "Psychology",
       "description_short": "Behavior and cognition.",
-      "aliases": ["psychology", "cognitive", "behavior", "mental health", "depression", "anxiety"]
+      "aliases": [
+        "psychology",
+        "cognitive",
+        "behavior",
+        "mental health",
+        "depression",
+        "anxiety",
+        "psychiatric",
+        "therapy",
+        "developmental",
+        "social psychology"
+      ]
     },
     {
       "name": "Environment",
       "description_short": "Ecology and environmental science.",
-      "aliases": ["ecology", "biodiversity", "conservation", "pollution", "wildfire", "deforestation"]
+      "aliases": [
+        "ecology",
+        "biodiversity",
+        "conservation",
+        "pollution",
+        "wildfire",
+        "deforestation",
+        "endangered species",
+        "habitat",
+        "ecosystem",
+        "sustainability"
+      ]
+    },
+    {
+      "name": "Extreme Weather & Disasters",
+      "description_short": "Weather extremes, natural hazards, and risk.",
+      "aliases": [
+        "heatwave",
+        "flood",
+        "drought",
+        "hurricane",
+        "typhoon",
+        "cyclone",
+        "wildfire",
+        "extreme weather",
+        "natural disaster",
+        "climate risk"
+      ]
+    },
+    {
+      "name": "Science Policy",
+      "description_short": "Science-related policy, regulation, and governance.",
+      "aliases": [
+        "regulation",
+        "policy",
+        "science policy",
+        "research funding",
+        "regulatory approval",
+        "ethics",
+        "governance",
+        "standards",
+        "legislation"
+      ]
+    },
+    {
+      "name": "Health Technology",
+      "description_short": "Digital health, medical devices, and diagnostics.",
+      "aliases": [
+        "health tech",
+        "medical device",
+        "wearable",
+        "digital health",
+        "diagnostic",
+        "AI healthcare",
+        "telemedicine",
+        "remote monitoring"
+      ]
+    },
+    {
+      "name": "Scientific Methods",
+      "description_short": "Research methods, statistics, and reproducibility.",
+      "aliases": [
+        "statistics",
+        "meta-analysis",
+        "replication",
+        "reproducibility",
+        "study design",
+        "sampling",
+        "bias",
+        "methodology"
+      ]
     }
   ]
 }
-

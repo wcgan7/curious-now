@@ -18,7 +18,7 @@ function flattenEvidence(evidence: Evidence): Map<string, { item: EvidenceItem; 
 }
 
 export function SupportingEvidence({
-  label = 'Supporting evidence',
+  label = 'Supporting sources',
   itemIds,
   evidence,
   onlyPapers = false,
@@ -69,4 +69,3 @@ export function SupportingEvidence({
     </section>
   );
 }
-

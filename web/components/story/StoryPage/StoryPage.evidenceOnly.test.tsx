@@ -5,7 +5,7 @@ import { renderWithProviders } from '@/test/utils';
 
 describe('StoryPage (evidence-only)', () => {
   it('renders even when understanding fields are null', () => {
-    const { getByText, queryByText } = renderWithProviders(
+    const { getByRole, getByText, queryByText } = renderWithProviders(
       <StoryPage
         cluster={{
           cluster_id: '00000000-0000-0000-0000-000000000001',
@@ -48,8 +48,12 @@ describe('StoryPage (evidence-only)', () => {
 
     expect(getByText('Evidence-only story')).toBeInTheDocument();
     expect(getByText('Evidence item title')).toBeInTheDocument();
-    expect(queryByText('Intuition')).toBeNull();
-    expect(queryByText('Deep dive')).toBeNull();
+    expect(getByRole('link', { name: /read the article/i })).toHaveAttribute(
+      'href',
+      'https://example.com'
+    );
+    expect(queryByText('Quick Explainer')).toBeNull();
+    expect(queryByText('Deep Dive')).toBeNull();
     expect(queryByText('View updates')).toBeNull();
   });
 
@@ -86,5 +90,60 @@ describe('StoryPage (evidence-only)', () => {
     );
 
     expect(getByText('View updates')).toBeInTheDocument();
+  });
+
+  it('hides direct source link when story has multiple sources', () => {
+    const { queryByRole } = renderWithProviders(
+      <StoryPage
+        cluster={{
+          cluster_id: '00000000-0000-0000-0000-000000000003',
+          canonical_title: 'Multi-source story',
+          created_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          updated_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          distinct_source_count: 2,
+          evidence: {
+            news: [
+              {
+                item_id: '00000000-0000-0000-0000-000000000301',
+                title: 'Story A',
+                url: 'https://example.com/a',
+                published_at: null,
+                source: { source_id: 's1', name: 'Example A' },
+                content_type: 'news',
+              },
+            ],
+            blog: [
+              {
+                item_id: '00000000-0000-0000-0000-000000000302',
+                title: 'Story B',
+                url: 'https://example.com/b',
+                published_at: null,
+                source: { source_id: 's2', name: 'Example B' },
+                content_type: 'blog',
+              },
+            ],
+          },
+          topics: [],
+          content_type_breakdown: { news: 1, blog: 1 },
+          takeaway: null,
+          summary_intuition: null,
+          summary_deep_dive: null,
+          assumptions: [],
+          limitations: [],
+          what_could_change_this: [],
+          confidence_band: null,
+          method_badges: [],
+          anti_hype_flags: [],
+          takeaway_supporting_item_ids: [],
+          summary_intuition_supporting_item_ids: [],
+          summary_deep_dive_supporting_item_ids: [],
+          glossary_entries: [],
+          is_saved: null,
+          is_watched: null,
+        }}
+      />
+    );
+
+    expect(queryByRole('link', { name: /read the article/i })).toBeNull();
   });
 });

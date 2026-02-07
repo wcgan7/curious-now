@@ -1,13 +1,18 @@
 .row {
-  display: flex;
+  display: grid;
   gap: var(--s-2);
+}
+
+.actions {
+  display: flex;
   align-items: center;
+  gap: var(--s-2);
+  flex-wrap: nowrap;
 }
 
 .hint {
   color: var(--text-3);
   font-size: 13px;
-  margin-left: var(--s-2);
 }
 
 .loginLink {

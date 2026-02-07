@@ -9,6 +9,16 @@ import styles from './ClusterCard.module.css';
 export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
   return (
     <Card as="article" href={`/story/${cluster.cluster_id}`}>
+      {cluster.featured_image_url ? (
+        <div className={styles.imageWrapper}>
+          <img
+            src={cluster.featured_image_url}
+            alt=""
+            className={styles.image}
+            loading="lazy"
+          />
+        </div>
+      ) : null}
       <Card.Content>
         <div className={styles.metaRow}>
           <div className={styles.badges}>

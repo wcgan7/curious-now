@@ -30,7 +30,19 @@ from curious_now.paper_text_hydration import hydrate_paper_text
 from curious_now.repo_stage1 import import_source_pack
 from curious_now.retention import purge_logs
 from curious_now.settings import get_settings
-from curious_now.topic_tagging import load_topic_seed, seed_topics, tag_recent_clusters
+from curious_now.topic_tagging import (
+    backfill_topics_v1,
+    load_topic_seed,
+    load_topic_seed_v1,
+    quarantine_untaggable_clusters,
+    rebuild_empty_search_texts,
+    run_tagging_maintenance,
+    seed_topics,
+    seed_topics_v1,
+    tag_recent_clusters,
+    tag_recent_clusters_hybrid,
+    tag_untagged_clusters_llm,
+)
 
 
 def cmd_migrate(_: argparse.Namespace) -> int:
@@ -188,6 +200,109 @@ def cmd_seed_topics(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_seed_topics_v1(args: argparse.Namespace) -> int:
+    """Seed topics from v1 format (2-layer: categories + subtopics)."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    now = _parse_now(args.now)
+    seed = load_topic_seed_v1(Path(args.path) if args.path else None)
+    with db.connect(autocommit=True) as conn:
+        result = seed_topics_v1(conn, seed=seed, now_utc=now)
+    print(
+        f"Seeded v1 topics: "
+        f"{result.categories_inserted} categories inserted, "
+        f"{result.categories_updated} updated; "
+        f"{result.subtopics_inserted} subtopics inserted, "
+        f"{result.subtopics_updated} updated."
+    )
+    return 0
+
+
+def cmd_backfill_topics_v1(args: argparse.Namespace) -> int:
+    """Backfill: seed v1 topics, clear old assignments, re-tag all clusters."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    now = _parse_now(args.now)
+    seed = load_topic_seed_v1(Path(args.path) if args.path else None)
+    print("Starting backfill...")
+    print(f"  - Loaded {len(seed.categories)} categories, {len(seed.subtopics)} subtopics")
+    with db.connect(autocommit=True) as conn:
+        result = backfill_topics_v1(
+            conn,
+            seed=seed,
+            now_utc=now,
+            limit_clusters=int(args.limit_clusters),
+            max_topics_per_cluster=int(args.max_topics_per_cluster),
+        )
+    print(
+        f"Backfill complete:\n"
+        f"  - Categories: {result.categories_inserted} inserted, {result.categories_updated} updated\n"
+        f"  - Subtopics: {result.subtopics_inserted} inserted, {result.subtopics_updated} updated\n"
+        f"  - Old assignments cleared: {result.old_assignments_cleared}\n"
+        f"  - Clusters tagged: {result.clusters_tagged}/{result.clusters_scanned}"
+    )
+    return 0
+
+
+def cmd_rebuild_search_texts(args: argparse.Namespace) -> int:
+    """Rebuild search_text for clusters with empty/short content."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        result = rebuild_empty_search_texts(
+            conn,
+            min_length=int(args.min_length),
+            limit_clusters=int(args.limit_clusters),
+        )
+    print(f"Rebuilt search_text for {result.clusters_rebuilt}/{result.clusters_scanned} clusters.")
+    return 0
+
+
+def cmd_quarantine_untaggable(args: argparse.Namespace) -> int:
+    """Quarantine clusters that cannot be meaningfully tagged."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        result = quarantine_untaggable_clusters(
+            conn,
+            min_content_length=int(args.min_length),
+            limit_clusters=int(args.limit_clusters),
+        )
+    print(f"Quarantined {result.clusters_quarantined}/{result.clusters_scanned} clusters.")
+    if result.reasons:
+        print("Reasons:")
+        for reason, count in sorted(result.reasons.items(), key=lambda x: -x[1]):
+            print(f"  - {reason}: {count}")
+    return 0
+
+
+def cmd_tagging_maintenance(args: argparse.Namespace) -> int:
+    """Run all tagging maintenance: rebuild search_text, re-tag, quarantine."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    now = _parse_now(args.now)
+    print("Running tagging maintenance...")
+    with db.connect(autocommit=True) as conn:
+        result = run_tagging_maintenance(
+            conn,
+            now_utc=now,
+            min_content_length=int(args.min_length),
+            limit_clusters=int(args.limit_clusters),
+            max_topics_per_cluster=int(args.max_topics_per_cluster),
+        )
+    print(
+        f"Maintenance complete:\n"
+        f"  - Search texts rebuilt: {result.search_text_rebuilt}\n"
+        f"  - Clusters tagged: {result.clusters_tagged}\n"
+        f"  - Clusters quarantined: {result.clusters_quarantined}"
+    )
+    if result.quarantine_reasons:
+        print("Quarantine reasons:")
+        for reason, count in sorted(result.quarantine_reasons.items(), key=lambda x: -x[1]):
+            print(f"    - {reason}: {count}")
+    return 0
+
+
 def cmd_tag_topics(args: argparse.Namespace) -> int:
     settings = get_settings()
     db = DB(settings.database_url)
@@ -201,6 +316,43 @@ def cmd_tag_topics(args: argparse.Namespace) -> int:
             max_topics_per_cluster=int(args.max_topics_per_cluster),
         )
     print(f"Tagged {result.clusters_updated}/{result.clusters_scanned} clusters.")
+    return 0
+
+
+def cmd_tag_topics_hybrid(args: argparse.Namespace) -> int:
+    """Tag topics using hybrid approach (phrase match + LLM fallback)."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    now = _parse_now(args.now)
+    with db.connect(autocommit=True) as conn:
+        result = tag_recent_clusters_hybrid(
+            conn,
+            now_utc=now,
+            lookback_days=int(args.lookback_days),
+            limit_clusters=int(args.limit_clusters),
+            max_topics_per_cluster=int(args.max_topics_per_cluster),
+            phrase_match_threshold=float(args.phrase_threshold),
+        )
+    print(
+        f"Tagged {result.clusters_updated}/{result.clusters_scanned} clusters "
+        f"(phrase: {result.phrase_match_count}, llm: {result.llm_fallback_count})."
+    )
+    return 0
+
+
+def cmd_tag_untagged_llm(args: argparse.Namespace) -> int:
+    """Tag untagged clusters using LLM only."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    now = _parse_now(args.now)
+    with db.connect(autocommit=True) as conn:
+        result = tag_untagged_clusters_llm(
+            conn,
+            now_utc=now,
+            limit_clusters=int(args.limit_clusters),
+            max_topics_per_cluster=int(args.max_topics_per_cluster),
+        )
+    print(f"LLM-tagged {result.clusters_updated}/{result.clusters_scanned} untagged clusters.")
     return 0
 
 
@@ -440,6 +592,66 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_seed_topics.set_defaults(func=cmd_seed_topics)
 
+    p_seed_topics_v1 = sub.add_parser(
+        "seed-topics-v1",
+        help="Seed topics from v1 format (2-layer: categories + subtopics)",
+    )
+    p_seed_topics_v1.add_argument(
+        "--path", type=str, default=None, help="Path to topics.seed.v1.json"
+    )
+    p_seed_topics_v1.add_argument(
+        "--now", type=str, default=None, help="Override current time (ISO-8601)"
+    )
+    p_seed_topics_v1.set_defaults(func=cmd_seed_topics_v1)
+
+    p_backfill_v1 = sub.add_parser(
+        "backfill-topics-v1",
+        help="Backfill: seed v1 topics, clear old assignments, re-tag all clusters",
+    )
+    p_backfill_v1.add_argument(
+        "--path", type=str, default=None, help="Path to topics.seed.v1.json"
+    )
+    p_backfill_v1.add_argument("--limit-clusters", type=int, default=10000)
+    p_backfill_v1.add_argument("--max-topics-per-cluster", type=int, default=3)
+    p_backfill_v1.add_argument(
+        "--now", type=str, default=None, help="Override current time (ISO-8601)"
+    )
+    p_backfill_v1.set_defaults(func=cmd_backfill_topics_v1)
+
+    p_rebuild_search = sub.add_parser(
+        "rebuild-search-texts",
+        help="Rebuild search_text for clusters with empty/short content",
+    )
+    p_rebuild_search.add_argument(
+        "--min-length", type=int, default=100, help="Minimum content length threshold"
+    )
+    p_rebuild_search.add_argument("--limit-clusters", type=int, default=1000)
+    p_rebuild_search.set_defaults(func=cmd_rebuild_search_texts)
+
+    p_quarantine = sub.add_parser(
+        "quarantine-untaggable",
+        help="Quarantine clusters that cannot be meaningfully tagged",
+    )
+    p_quarantine.add_argument(
+        "--min-length", type=int, default=100, help="Minimum content length threshold"
+    )
+    p_quarantine.add_argument("--limit-clusters", type=int, default=500)
+    p_quarantine.set_defaults(func=cmd_quarantine_untaggable)
+
+    p_maintenance = sub.add_parser(
+        "tagging-maintenance",
+        help="Run all tagging maintenance: rebuild search_text, re-tag, quarantine",
+    )
+    p_maintenance.add_argument(
+        "--min-length", type=int, default=100, help="Minimum content length threshold"
+    )
+    p_maintenance.add_argument("--limit-clusters", type=int, default=500)
+    p_maintenance.add_argument("--max-topics-per-cluster", type=int, default=3)
+    p_maintenance.add_argument(
+        "--now", type=str, default=None, help="Override current time (ISO-8601)"
+    )
+    p_maintenance.set_defaults(func=cmd_tagging_maintenance)
+
     p_tag_topics = sub.add_parser(
         "tag-topics", help="Auto-tag recent clusters with topics (Stage 2)"
     )
@@ -450,6 +662,35 @@ def main(argv: list[str] | None = None) -> int:
         "--now", type=str, default=None, help="Override current time (ISO-8601)"
     )
     p_tag_topics.set_defaults(func=cmd_tag_topics)
+
+    p_tag_hybrid = sub.add_parser(
+        "tag-topics-hybrid",
+        help="Tag topics using hybrid approach (phrase match + LLM fallback)",
+    )
+    p_tag_hybrid.add_argument("--lookback-days", type=int, default=14)
+    p_tag_hybrid.add_argument("--limit-clusters", type=int, default=500)
+    p_tag_hybrid.add_argument("--max-topics-per-cluster", type=int, default=3)
+    p_tag_hybrid.add_argument(
+        "--phrase-threshold",
+        type=float,
+        default=0.5,
+        help="Minimum phrase match score before LLM fallback (default: 0.5)",
+    )
+    p_tag_hybrid.add_argument(
+        "--now", type=str, default=None, help="Override current time (ISO-8601)"
+    )
+    p_tag_hybrid.set_defaults(func=cmd_tag_topics_hybrid)
+
+    p_tag_llm = sub.add_parser(
+        "tag-untagged-llm",
+        help="Tag untagged clusters using LLM only (backfill)",
+    )
+    p_tag_llm.add_argument("--limit-clusters", type=int, default=100)
+    p_tag_llm.add_argument("--max-topics-per-cluster", type=int, default=3)
+    p_tag_llm.add_argument(
+        "--now", type=str, default=None, help="Override current time (ISO-8601)"
+    )
+    p_tag_llm.set_defaults(func=cmd_tag_untagged_llm)
 
     p_pipeline = sub.add_parser(
         "pipeline", help="Run ingest → cluster → tag → trending (end-to-end)"

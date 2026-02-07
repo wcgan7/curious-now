@@ -440,7 +440,7 @@ class CodexCLIAdapter(LLMAdapter):
     - sgpt (shell-gpt - community tool)
     """
 
-    def __init__(self, model: str = "gpt-3.5-turbo") -> None:
+    def __init__(self, model: str = "gpt-5.2") -> None:
         self.model = model
         self._cli_cmd: str | None = None
 
@@ -592,7 +592,7 @@ class CodexCLIAdapter(LLMAdapter):
 
         return LLMResponse(
             text=result.stdout.strip(),
-            model="gpt-3.5-turbo",  # sgpt default
+            model="gpt-5.2",  # sgpt default
             adapter=self.name,
             success=True,
         )
@@ -733,7 +733,7 @@ def get_llm_adapter(adapter_type: str | None = None) -> LLMAdapter:
     elif adapter_type == "claude-cli":
         adapter = ClaudeCLIAdapter(model=llm_model or "claude-3-haiku-20240307")
     elif adapter_type == "codex-cli":
-        adapter = CodexCLIAdapter(model=llm_model or "gpt-3.5-turbo")
+        adapter = CodexCLIAdapter(model=llm_model or "gpt-5.2")
     elif adapter_type == "mock":
         return MockAdapter()
     else:

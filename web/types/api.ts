@@ -1,9 +1,7 @@
 import type { components } from '@/types/api.generated';
 
 export type ContentType = components['schemas']['ContentType'];
-export type ClusterCard = components['schemas']['ClusterCard'];
 export type ClustersFeedResponse = components['schemas']['ClustersFeedResponse'];
-export type ClusterDetail = components['schemas']['ClusterDetail'];
 export type TopicDetail = components['schemas']['TopicDetail'];
 export type TopicsResponse = components['schemas']['TopicsResponse'];
 export type SearchResponse = components['schemas']['SearchResponse'];
@@ -23,3 +21,25 @@ export type UserWatchesResponse = components['schemas']['UserWatchesResponse'];
 export type AuthMagicLinkStartResponse = components['schemas']['AuthMagicLinkStartResponse'];
 export type AuthMagicLinkVerifyResponse = components['schemas']['AuthMagicLinkVerifyResponse'];
 export type LogoutResponse = components['schemas']['LogoutResponse'];
+
+// Extended types with image URL and category support (until api.generated.ts is regenerated)
+export type EvidenceItem = components['schemas']['EvidenceItem'] & {
+  image_url?: string | null;
+};
+
+export type CategoryChip = {
+  category_id: string;
+  name: string;
+  score: number;
+};
+
+export type ClusterCard = components['schemas']['ClusterCard'] & {
+  featured_image_url?: string | null;
+  top_categories?: CategoryChip[];
+};
+
+export type ClusterDetail = components['schemas']['ClusterDetail'] & {
+  featured_image_url?: string | null;
+  evidence: Record<string, EvidenceItem[]>;
+  categories?: CategoryChip[];
+};

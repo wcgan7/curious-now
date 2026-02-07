@@ -20,7 +20,8 @@
   --info: #0369a1;
 
   --font-ui: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
-  --font-article: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", serif;
+  --font-brand: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", serif;
+  --font-article: var(--font-ui);
 
   --s-1: 4px;
   --s-2: 8px;
@@ -90,7 +91,7 @@
   --text-lg: 18px;
   --text-2xl: 24px;
 
-  --font-serif: var(--font-article);
+  --font-serif: var(--font-brand);
 }
 
 .theme-dark {
@@ -121,6 +122,15 @@ body {
   color: var(--text-1);
   font-family: var(--font-ui);
   min-height: 100%;
+}
+
+body.font-sans-mode {
+  --font-article: var(--font-ui);
+}
+
+body.font-serif-mode {
+  --font-ui: var(--font-brand);
+  --font-article: var(--font-brand);
 }
 
 body {

@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useMemo, useState } from 'react';
 
 import type { ClusterDetail } from '@/types/api';
 
 import styles from './StoryPage.module.css';
-import { TakeawayModule } from '@/components/story/TakeawayModule/TakeawayModule';
 import { TrustBox } from '@/components/story/TrustBox/TrustBox';
 import { EvidencePanel } from '@/components/story/EvidencePanel/EvidencePanel';
 import { StoryActions } from '@/components/story/StoryActions/StoryActions';
@@ -38,6 +38,32 @@ function hasText(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function pickPrimarySource(
+  evidence: ClusterDetail['evidence'] | null | undefined
+): { url: string; title: string; contentType?: string } | null {
+  if (!evidence) return null;
+  const items = Object.values(evidence).flat();
+  if (!items.length) return null;
+
+  const sorted = [...items].sort((a, b) => {
+    const aTime = a.published_at ? Date.parse(a.published_at) : Number.NEGATIVE_INFINITY;
+    const bTime = b.published_at ? Date.parse(b.published_at) : Number.NEGATIVE_INFINITY;
+    return bTime - aTime;
+  });
+  const item = sorted[0];
+  return item?.url ? { url: item.url, title: item.title, contentType: item.content_type } : null;
+}
+
+function sourceCtaLabel(contentType: string | undefined): string {
+  if (contentType === 'preprint' || contentType === 'peer_reviewed') return 'Read the paper';
+  if (contentType === 'report') return 'Read the report';
+  if (contentType === 'press_release') return 'Read the press release';
+  if (contentType === 'news') return 'Read the article';
+  return 'Read the source';
+}
+
+type EvidenceFilter = 'all' | 'news' | 'press_release' | 'preprint' | 'peer_reviewed' | 'report';
+
 export function StoryPage({
   cluster,
   hasUpdates = false,
@@ -68,17 +94,45 @@ export function StoryPage({
     !!cluster.assumptions?.length ||
     !!cluster.limitations?.length ||
     !!cluster.what_could_change_this?.length;
+  const primarySource = pickPrimarySource(cluster.evidence);
+  const isSingleSource = cluster.distinct_source_count === 1;
+  const canOpenSourceDirectly = cluster.distinct_source_count === 1 && !!primarySource;
+  const directSourceLabel = sourceCtaLabel(primarySource?.contentType);
+  const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all');
+  const relevantItemIds = useMemo(
+    () => [
+      ...(cluster.takeaway_supporting_item_ids || []),
+      ...(cluster.summary_intuition_supporting_item_ids || []),
+      ...(cluster.summary_deep_dive_supporting_item_ids || []),
+    ],
+    [
+      cluster.takeaway_supporting_item_ids,
+      cluster.summary_intuition_supporting_item_ids,
+      cluster.summary_deep_dive_supporting_item_ids,
+    ]
+  );
+
   const sections = [
-    ...(hasTakeaway || hasContextLists ? [{ id: 'overview', label: 'Overview' }] : []),
-    ...(hasIntuition ? [{ id: 'intuition', label: 'Intuition' }] : []),
+    ...(hasContextLists ? [{ id: 'overview', label: 'Overview' }] : []),
+    ...(hasIntuition ? [{ id: 'intuition', label: 'Quick Explainer' }] : []),
     ...(hasDeepDive ? [{ id: 'deep-dive', label: 'Deep Dive' }] : []),
-    { id: 'evidence', label: 'Evidence' },
+    { id: 'evidence', label: isSingleSource ? 'Source' : 'Sources' },
   ];
 
   return (
     <main className={styles.main}>
       <article className={styles.container}>
         <header className={styles.hero}>
+          {cluster.featured_image_url ? (
+            <div className={styles.heroImage}>
+              <img
+                src={cluster.featured_image_url}
+                alt=""
+                className={styles.heroImg}
+                loading="eager"
+              />
+            </div>
+          ) : null}
           <div className={styles.heroTop}>
             <p className={styles.eyebrow}>Story</p>
             <h1 className={styles.title}>{cluster.canonical_title}</h1>
@@ -102,6 +156,17 @@ export function StoryPage({
             </div>
           ) : null}
           <div className={styles.actionsRow}>
+            {canOpenSourceDirectly ? (
+              <a
+                href={primarySource.url}
+                className={styles.sourceCta}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${directSourceLabel}: ${primarySource.title}`}
+              >
+                {directSourceLabel}
+              </a>
+            ) : null}
             <StoryActions
               clusterId={cluster.cluster_id}
               cluster={cluster}
@@ -120,15 +185,9 @@ export function StoryPage({
               ))}
             </nav>
 
-            {hasTakeaway || hasContextLists ? (
+            {hasContextLists ? (
               <section id="overview" className={styles.panel}>
                 <h2 className={styles.h2}>Overview</h2>
-                {hasTakeaway ? (
-                  <div className={styles.block}>
-                    <TakeawayModule takeaway={cluster.takeaway as string} />
-                  </div>
-                ) : null}
-
                 {cluster.assumptions?.length ? (
                   <div className={styles.listBlock}>
                     <h3 className={styles.h3}>Assumptions</h3>
@@ -180,29 +239,74 @@ export function StoryPage({
             {hasDeepDive ? (
               <section id="deep-dive" className={styles.panel}>
                 <div className={styles.section}>
-                  <h2 className={styles.h2}>Deep dive</h2>
+                  <h2 className={styles.h2}>Deep Dive</h2>
                   <DeepDive value={deepDivePayload.markdown ?? cluster.summary_deep_dive!} />
                 </div>
               </section>
             ) : null}
 
             <section id="evidence" className={styles.panel}>
-              <h2 className={styles.h2}>Evidence</h2>
-              <div className={styles.section}>
-                <EvidencePanel evidence={cluster.evidence} />
+              <h2 className={styles.h2}>{isSingleSource ? 'Source' : 'Sources'}</h2>
+              <div className={`${styles.section} ${styles.evidenceSection}`}>
+                {isSingleSource ? (
+                  <>
+                    <EvidencePanel
+                      evidence={cluster.evidence}
+                      selectedType={evidenceFilter}
+                      onSelectType={setEvidenceFilter}
+                      relevantItemIds={relevantItemIds}
+                      isSingleSource={isSingleSource}
+                    />
+                    <div className={styles.inlineSummary}>
+                      <TrustBox
+                        contentTypeBreakdown={cluster.content_type_breakdown || {}}
+                        distinctSourceCount={cluster.distinct_source_count}
+                        confidenceBand={cluster.confidence_band}
+                        methodBadges={cluster.method_badges || []}
+                        antiHypeFlags={cluster.anti_hype_flags || []}
+                        sticky={false}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={styles.mobileSummary}>
+                      <TrustBox
+                        contentTypeBreakdown={cluster.content_type_breakdown || {}}
+                        distinctSourceCount={cluster.distinct_source_count}
+                        confidenceBand={cluster.confidence_band}
+                        methodBadges={cluster.method_badges || []}
+                        antiHypeFlags={cluster.anti_hype_flags || []}
+                        sticky={false}
+                      />
+                    </div>
+                    <EvidencePanel
+                      evidence={cluster.evidence}
+                      selectedType={evidenceFilter}
+                      onSelectType={setEvidenceFilter}
+                      relevantItemIds={relevantItemIds}
+                      isSingleSource={isSingleSource}
+                    />
+                  </>
+                )}
               </div>
             </section>
           </section>
 
           <aside className={styles.sidebar}>
             <div className={styles.rail}>
-              <TrustBox
-                contentTypeBreakdown={cluster.content_type_breakdown || {}}
-                distinctSourceCount={cluster.distinct_source_count}
-                confidenceBand={cluster.confidence_band}
-                methodBadges={cluster.method_badges || []}
-                antiHypeFlags={cluster.anti_hype_flags || []}
-              />
+              {!isSingleSource ? (
+                <div className={styles.sidebarSummary}>
+                  <TrustBox
+                    contentTypeBreakdown={cluster.content_type_breakdown || {}}
+                    distinctSourceCount={cluster.distinct_source_count}
+                    confidenceBand={cluster.confidence_band}
+                    methodBadges={cluster.method_badges || []}
+                    antiHypeFlags={cluster.anti_hype_flags || []}
+                    sticky
+                  />
+                </div>
+              ) : null}
               <div className={styles.quickNav}>
                 <p className={styles.quickNavLabel}>Quick jump</p>
                 <div className={styles.quickNavButtons}>

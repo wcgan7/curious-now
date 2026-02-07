@@ -75,4 +75,28 @@ describe('SettingsPage', () => {
 
     expect(patchedMode).toBe('intuition');
   });
+
+  it('allows font toggle without login', async () => {
+    const user = userEvent.setup();
+    vi.mock('next/navigation', () => {
+      return {
+        useRouter: () => ({ replace: vi.fn() }),
+        usePathname: () => '/settings',
+      };
+    });
+
+    server.use(
+      http.get(`${API}/user`, () => HttpResponse.json({ detail: 'unauthorized' }, { status: 401 })),
+      http.get(`${API}/user/prefs`, () => HttpResponse.json({ detail: 'unauthorized' }, { status: 401 }))
+    );
+
+    const { SettingsPage } = await import('./SettingsPage');
+    const { findByRole } = renderWithProviders(<SettingsPage />);
+
+    const serif = await findByRole('button', { name: /^Serif$/i });
+    await user.click(serif);
+
+    expect(window.localStorage.getItem('cn:font:preference')).toBe('serif');
+    expect(document.body.classList.contains('font-serif-mode')).toBe(true);
+  });
 });

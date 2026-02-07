@@ -173,6 +173,55 @@ def _pick_entry_url(entry: Any) -> str | None:
     return None
 
 
+def _extract_image_url(entry: Any) -> str | None:
+    """Extract image URL from RSS entry using common feed patterns."""
+    # Try media_content (Media RSS)
+    media_content = entry.get("media_content")
+    if isinstance(media_content, list):
+        for media in media_content:
+            if not isinstance(media, dict):
+                continue
+            url = media.get("url")
+            medium = (media.get("medium") or "").lower()
+            mtype = (media.get("type") or "").lower()
+            if isinstance(url, str) and url.strip():
+                if medium == "image" or mtype.startswith("image/") or not medium:
+                    return url.strip()
+
+    # Try media_thumbnail (Media RSS)
+    media_thumbnail = entry.get("media_thumbnail")
+    if isinstance(media_thumbnail, list) and media_thumbnail:
+        thumb = media_thumbnail[0]
+        if isinstance(thumb, dict):
+            url = thumb.get("url")
+            if isinstance(url, str) and url.strip():
+                return url.strip()
+
+    # Try links with enclosure or image type
+    links = entry.get("links")
+    if isinstance(links, list):
+        for link_obj in links:
+            if not isinstance(link_obj, dict):
+                continue
+            rel = (link_obj.get("rel") or "").lower()
+            ltype = (link_obj.get("type") or "").lower()
+            href = link_obj.get("href")
+            if rel == "enclosure" and ltype.startswith("image/"):
+                if isinstance(href, str) and href.strip():
+                    return href.strip()
+
+    # Try image field (some feeds)
+    image = entry.get("image")
+    if isinstance(image, dict):
+        href = image.get("href") or image.get("url")
+        if isinstance(href, str) and href.strip():
+            return href.strip()
+    elif isinstance(image, str) and image.strip():
+        return image.strip()
+
+    return None
+
+
 def _strip_html(text: str) -> str:
     # Keep this intentionally simple (feeds often contain small HTML fragments).
     return html.unescape(re.sub(r"<[^>]+>", "", text))
@@ -335,6 +384,7 @@ def _upsert_item(
     content_type: str,
     arxiv_id: str | None,
     doi: str | None,
+    image_url: str | None,
     now_utc: datetime,
 ) -> tuple[bool, bool]:
     canonical_hash = _sha256_hex(canonical_url)
@@ -359,9 +409,10 @@ def _upsert_item(
               canonical_hash,
               arxiv_id,
               doi,
-              full_text_status
+              full_text_status,
+              image_url
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'en',%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'en',%s,%s,%s,%s,%s,%s)
             ON CONFLICT (canonical_hash)
             DO UPDATE SET
               url = EXCLUDED.url,
@@ -380,7 +431,8 @@ def _upsert_item(
                 WHEN EXCLUDED.content_type IN ('preprint', 'peer_reviewed')
                   THEN COALESCE(items.full_text_status, EXCLUDED.full_text_status, 'pending')
                 ELSE items.full_text_status
-              END
+              END,
+              image_url = COALESCE(items.image_url, EXCLUDED.image_url)
             RETURNING (xmax = 0) AS inserted;
             """,
             (
@@ -398,6 +450,7 @@ def _upsert_item(
                 arxiv_id,
                 doi,
                 full_text_status,
+                image_url,
             ),
         )
         row = cur.fetchone()
@@ -486,6 +539,7 @@ def ingest_due_feeds(
                 author = e.get("author") if isinstance(e.get("author"), str) else None
                 snippet = _get_entry_snippet(e)
                 content_type = _guess_content_type(f.source_type)
+                image_url = _extract_image_url(e)
 
                 arxiv_id, doi = _extract_ids(f"{title} {url}")
 
@@ -501,6 +555,7 @@ def ingest_due_feeds(
                     content_type=content_type,
                     arxiv_id=arxiv_id,
                     doi=doi,
+                    image_url=image_url,
                     now_utc=now,
                 )
                 seen += 1

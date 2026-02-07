@@ -11,6 +11,7 @@ import psycopg
 from psycopg import errors as pg_errors
 
 from curious_now.api.schemas import (
+    CategoryChip,
     ClusterCard,
     ClusterDetail,
     ClustersFeedResponse,
@@ -127,11 +128,76 @@ def _load_cluster_topics(
     return out
 
 
+def _load_cluster_categories(
+    conn: psycopg.Connection[Any], cluster_ids: list[UUID]
+) -> dict[UUID, list[CategoryChip]]:
+    """Load categories derived from subtopic assignments."""
+    if not cluster_ids:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                ct.cluster_id,
+                cat.id AS category_id,
+                cat.name AS category_name,
+                MAX(ct.score) AS max_score
+            FROM cluster_topics ct
+            JOIN topics sub ON sub.id = ct.topic_id
+            JOIN topics cat ON cat.id = sub.parent_topic_id
+            WHERE ct.cluster_id = ANY(%s)
+              AND sub.parent_topic_id IS NOT NULL
+            GROUP BY ct.cluster_id, cat.id, cat.name
+            ORDER BY ct.cluster_id, max_score DESC;
+            """,
+            (cluster_ids,),
+        )
+        rows = cur.fetchall()
+
+    out: dict[UUID, list[CategoryChip]] = defaultdict(list)
+    for r in rows:
+        out[r["cluster_id"]].append(
+            CategoryChip(
+                category_id=r["category_id"],
+                name=r["category_name"],
+                score=float(r["max_score"]),
+            )
+        )
+    return out
+
+
+def _load_cluster_featured_images(
+    conn: psycopg.Connection[Any], cluster_ids: list[UUID]
+) -> dict[UUID, str]:
+    """Load the first available image URL for each cluster."""
+    if not cluster_ids:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (ci.cluster_id)
+              ci.cluster_id,
+              i.image_url
+            FROM cluster_items ci
+            JOIN items i ON i.id = ci.item_id
+            WHERE ci.cluster_id = ANY(%s)
+              AND i.image_url IS NOT NULL
+            ORDER BY ci.cluster_id, i.published_at DESC NULLS LAST, i.fetched_at DESC;
+            """,
+            (cluster_ids,),
+        )
+        rows = cur.fetchall()
+
+    return {r["cluster_id"]: r["image_url"] for r in rows}
+
+
 def _cluster_cards_from_rows(
     conn: psycopg.Connection[Any], rows: list[dict[str, Any]]
 ) -> list[ClusterCard]:
     cluster_ids = [r["cluster_id"] for r in rows]
     topics = _load_cluster_topics(conn, cluster_ids)
+    categories = _load_cluster_categories(conn, cluster_ids)
+    featured_images = _load_cluster_featured_images(conn, cluster_ids)
     cards: list[ClusterCard] = []
     for r in rows:
         content_type_badges = _to_content_types(_normalize_pg_array(r.get("content_type_badges")))
@@ -142,11 +208,13 @@ def _cluster_cards_from_rows(
                 updated_at=r["updated_at"],
                 distinct_source_count=r["distinct_source_count"],
                 top_topics=topics.get(r["cluster_id"], [])[:5],
+                top_categories=categories.get(r["cluster_id"], [])[:3],
                 content_type_badges=content_type_badges,
                 method_badges=[str(x) for x in _normalize_json_array(r.get("method_badges"))],
                 takeaway=r.get("takeaway"),
                 confidence_band=r.get("confidence_band"),
                 anti_hype_flags=[str(x) for x in _normalize_json_array(r.get("anti_hype_flags"))],
+                featured_image_url=featured_images.get(r["cluster_id"]),
             )
         )
     return cards
@@ -297,6 +365,7 @@ def get_cluster_detail_or_redirect(
               i.url,
               i.published_at,
               i.content_type,
+              i.image_url,
               s.id AS source_id,
               s.name AS source_name
             FROM cluster_items ci
@@ -311,9 +380,13 @@ def get_cluster_detail_or_redirect(
 
     evidence: dict[str, list[EvidenceItem]] = defaultdict(list)
     breakdown: dict[str, int] = defaultdict(int)
+    featured_image_url: str | None = None
     for r in items:
         ct = r["content_type"]
         breakdown[ct] += 1
+        img_url = r.get("image_url")
+        if featured_image_url is None and img_url:
+            featured_image_url = img_url
         evidence[ct].append(
             EvidenceItem(
                 item_id=r["item_id"],
@@ -322,10 +395,12 @@ def get_cluster_detail_or_redirect(
                 published_at=r["published_at"],
                 content_type=ct,
                 source=ItemSource(source_id=r["source_id"], name=r["source_name"]),
+                image_url=img_url,
             )
         )
 
     topics = _load_cluster_topics(conn, [cluster_id]).get(cluster_id, [])
+    categories = _load_cluster_categories(conn, [cluster_id]).get(cluster_id, [])
     glossary_entries = glossary_entries_for_cluster(conn, cluster_id=cluster_id)
     summary_intuition_eli5, summary_intuition_eli20, deep_dive_markdown = _extract_explainers(
         cluster.get("summary_intuition"),
@@ -338,8 +413,10 @@ def get_cluster_detail_or_redirect(
         updated_at=cluster["updated_at"],
         distinct_source_count=cluster["distinct_source_count"],
         topics=topics[:10],
+        categories=categories,
         content_type_breakdown=dict(breakdown),
         evidence=dict(evidence),
+        featured_image_url=featured_image_url,
         takeaway=cluster["takeaway"],
         summary_intuition=summary_intuition_eli5,
         summary_intuition_eli20=summary_intuition_eli20,

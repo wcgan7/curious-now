@@ -2,13 +2,16 @@
   border: var(--border-1);
   border-radius: 18px;
   background: color-mix(in srgb, var(--surface-1) 94%, var(--surface-2));
-  padding: 18px;
+  padding: var(--s-4);
+}
+
+.sticky {
   position: sticky;
   top: 90px;
 }
 
 .heading {
-  margin: 0 0 var(--s-4);
+  margin: 0 0 var(--s-3);
   font-size: 18px;
   font-family: var(--font-article);
   color: var(--text-2);
@@ -16,9 +19,8 @@
 
 .row {
   display: grid;
-  grid-template-columns: 132px 1fr;
-  gap: var(--s-2);
-  margin: var(--s-2) 0;
+  gap: var(--s-1);
+  margin: var(--s-1) 0;
 }
 
 .label {
@@ -35,7 +37,7 @@
 }
 
 .block {
-  margin-top: var(--s-4);
+  margin-top: var(--s-3);
 }
 
 .tags {
@@ -43,4 +45,8 @@
   flex-wrap: wrap;
   gap: var(--s-2);
   margin-top: var(--s-2);
+}
+
+.filterRow {
+  display: none;
 }

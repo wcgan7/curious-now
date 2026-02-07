@@ -85,10 +85,10 @@ export function IntuitionSection({
     <section className={styles.section} aria-labelledby="intuition-heading">
       <div className={styles.headerRow}>
         <h2 id="intuition-heading" className={styles.h2}>
-          Intuition
+          Quick Explainer
         </h2>
         {showToggle ? (
-          <div className={styles.toggle} role="tablist" aria-label="Intuition level">
+          <div className={styles.toggle} role="tablist" aria-label="Explainer level">
             {modes.map((mode) => (
               <button
                 key={mode.id}
@@ -111,7 +111,7 @@ export function IntuitionSection({
 
       {showEvidence ? (
         <SupportingEvidence
-          label={`Evidence for intuition (${active.label})`}
+          label={`Sources for intuition (${active.label})`}
           itemIds={active.supportingItemIds}
           evidence={evidence}
           onlyPapers={false}
