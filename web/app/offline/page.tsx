@@ -13,18 +13,14 @@ export default function OfflinePage() {
       <div className={styles.card}>
         <h1 className={styles.title}>You&apos;re offline</h1>
         <p className={styles.p}>
-          Check your connection. If you&apos;ve downloaded stories for offline, you can still read them from Saved.
+          Check your connection and try again.
         </p>
         <div className={styles.row}>
-          <Link href="/saved">
-            <Button variant="primary">Saved</Button>
-          </Link>
           <Link href="/">
-            <Button variant="secondary">Home</Button>
+            <Button variant="primary">Home</Button>
           </Link>
         </div>
       </div>
     </main>
   );
 }
-

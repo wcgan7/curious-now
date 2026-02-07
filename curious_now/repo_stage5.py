@@ -416,9 +416,19 @@ def for_you_feed(
               AND (
                 EXISTS (
                   SELECT 1
-                  FROM cluster_topics ct
-                  JOIN user_topic_follows f ON f.topic_id = ct.topic_id
-                  WHERE ct.cluster_id = c.id AND f.user_id = %s
+                  FROM user_topic_follows f
+                  WHERE f.user_id = %s
+                    AND EXISTS (
+                      SELECT 1
+                      FROM cluster_topics ct
+                      WHERE ct.cluster_id = c.id
+                        AND (
+                          ct.topic_id = f.topic_id
+                          OR ct.topic_id IN (
+                            SELECT id FROM topics WHERE parent_topic_id = f.topic_id
+                          )
+                        )
+                    )
                 )
                 OR EXISTS (
                   SELECT 1 FROM user_cluster_saves s WHERE s.user_id = %s AND s.cluster_id = c.id

@@ -5,13 +5,11 @@ import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 
 import styles from './Header.module.css';
-import { useMe } from '@/lib/hooks/useMe';
 
 export function Header() {
   const pathname = usePathname();
-  const me = useMe();
-  const authed = Boolean(me.data?.user);
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const categoriesActive = isActive('/categories') || isActive('/category');
 
   return (
     <header className={styles.header}>
@@ -30,11 +28,8 @@ export function Header() {
           >
             Trending
           </Link>
-          <Link
-            href="/for-you"
-            className={clsx(styles.navLink, isActive('/for-you') && styles.active)}
-          >
-            For you
+          <Link href="/categories" className={clsx(styles.navLink, categoriesActive && styles.active)}>
+            Categories
           </Link>
           <Link
             href="/search"
@@ -43,24 +38,6 @@ export function Header() {
             Search
           </Link>
         </nav>
-
-        <div className={styles.right}>
-          <Link href="/saved" className={styles.iconLink}>
-            Saved
-          </Link>
-          <Link href="/settings" className={styles.iconLink}>
-            Settings
-          </Link>
-          {authed ? (
-            <Link href="/auth/logout" className={styles.iconLink}>
-              Logout
-            </Link>
-          ) : (
-            <Link href="/auth/login" className={styles.iconLink}>
-              Login
-            </Link>
-          )}
-        </div>
       </div>
 
       <nav className={styles.mobileNav} aria-label="Primary mobile">
@@ -74,16 +51,16 @@ export function Header() {
           Trending
         </Link>
         <Link
-          href="/for-you"
-          className={clsx(styles.mobileLink, isActive('/for-you') && styles.activeMobile)}
+          href="/categories"
+          className={clsx(styles.mobileLink, categoriesActive && styles.activeMobile)}
         >
-          For you
+          Categories
         </Link>
         <Link
-          href="/saved"
-          className={clsx(styles.mobileLink, isActive('/saved') && styles.activeMobile)}
+          href="/search"
+          className={clsx(styles.mobileLink, isActive('/search') && styles.activeMobile)}
         >
-          Saved
+          Search
         </Link>
       </nav>
     </header>

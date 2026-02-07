@@ -1,13 +1,10 @@
 """Stage 7: PWA + Performance + Caching routes.
 
 This module provides endpoints for Progressive Web App functionality,
-including offline support, caching hints, and vector search.
+caching hints, and vector search.
 """
 from __future__ import annotations
 
-import hashlib
-import json
-from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID
 
@@ -15,10 +12,9 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from curious_now.api.deps import AuthedUser, get_db, optional_user, require_user
-from curious_now.api.schemas import SimpleOkResponse
+from curious_now.api.deps import get_db, require_admin
+from curious_now.api.schemas import SimpleOkResponse, simple_ok
 from curious_now.cache import get_redis_client
-from curious_now.repo_stage5 import simple_ok
 from curious_now.settings import get_settings
 
 router = APIRouter()
@@ -44,47 +40,6 @@ class ManifestResponse(BaseModel):
     orientation: Literal["portrait", "landscape", "any"] = "any"
     icons: list[dict[str, Any]] = Field(default_factory=list)
     categories: list[str] = Field(default_factory=lambda: ["news", "science", "education"])
-
-
-class OfflineCluster(BaseModel):
-    """Minimal cluster data for offline storage."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    cluster_id: UUID
-    canonical_title: str
-    takeaway: str | None = None
-    updated_at: datetime
-    topic_names: list[str] = []
-
-
-class OfflineClustersResponse(BaseModel):
-    """Response with clusters for offline storage."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    clusters: list[OfflineCluster]
-    sync_token: str
-    generated_at: datetime
-
-
-class OfflineSyncRequest(BaseModel):
-    """Request to sync offline actions."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    actions: list[dict[str, Any]]
-    client_id: UUID | None = None
-
-
-class OfflineSyncResponse(BaseModel):
-    """Response from offline sync."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    synced_count: int
-    failed_count: int
-    errors: list[str] = []
 
 
 class VectorSearchRequest(BaseModel):
@@ -200,166 +155,9 @@ def get_manifest() -> ManifestResponse:
     )
 
 
-@router.get("/offline/clusters", response_model=OfflineClustersResponse)
-def get_offline_clusters(
-    user: AuthedUser = Depends(require_user),
-    conn: psycopg.Connection[Any] = Depends(get_db),
-    limit: int = Query(default=50, ge=1, le=200),
-) -> OfflineClustersResponse:
-    """
-    Get saved clusters for offline storage.
-
-    Returns the user's saved clusters with minimal data for offline reading.
-    """
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT
-                c.id AS cluster_id,
-                c.canonical_title,
-                c.takeaway,
-                c.updated_at,
-                COALESCE(
-                    array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL),
-                    ARRAY[]::text[]
-                ) AS topic_names
-            FROM user_cluster_saves ucs
-            JOIN story_clusters c ON c.id = ucs.cluster_id
-            LEFT JOIN cluster_topics ct ON ct.cluster_id = c.id
-            LEFT JOIN topics t ON t.id = ct.topic_id
-            WHERE ucs.user_id = %s
-              AND c.status = 'active'
-            GROUP BY c.id, c.canonical_title, c.takeaway, c.updated_at
-            ORDER BY ucs.saved_at DESC
-            LIMIT %s;
-            """,
-            (user.user_id, limit),
-        )
-        rows = cur.fetchall()
-
-    clusters = []
-    for r in rows:
-        clusters.append(
-            OfflineCluster(
-                cluster_id=r["cluster_id"],
-                canonical_title=r["canonical_title"],
-                takeaway=r["takeaway"],
-                updated_at=r["updated_at"],
-                topic_names=r["topic_names"] or [],
-            )
-        )
-
-    # Generate sync token from content hash
-    content_hash = hashlib.sha256(
-        json.dumps([str(c.cluster_id) for c in clusters]).encode()
-    ).hexdigest()[:16]
-    sync_token = f"{user.user_id}:{content_hash}"
-
-    return OfflineClustersResponse(
-        clusters=clusters,
-        sync_token=sync_token,
-        generated_at=datetime.now(timezone.utc),
-    )
-
-
-@router.post("/offline/sync", response_model=OfflineSyncResponse)
-def sync_offline_actions(
-    request: OfflineSyncRequest,
-    user: AuthedUser = Depends(require_user),
-    conn: psycopg.Connection[Any] = Depends(get_db),
-) -> OfflineSyncResponse:
-    """
-    Sync offline actions to the server.
-
-    Processes actions that were queued while offline (saves, hides, etc.).
-    """
-    synced = 0
-    failed = 0
-    errors: list[str] = []
-
-    for action in request.actions:
-        action_type = action.get("type")
-        cluster_id = action.get("cluster_id")
-        topic_id = action.get("topic_id")
-
-        try:
-            if action_type == "save" and cluster_id:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO user_cluster_saves (user_id, cluster_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT (user_id, cluster_id) DO NOTHING;
-                        """,
-                        (user.user_id, UUID(cluster_id)),
-                    )
-                synced += 1
-
-            elif action_type == "unsave" and cluster_id:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        DELETE FROM user_cluster_saves
-                        WHERE user_id = %s AND cluster_id = %s;
-                        """,
-                        (user.user_id, UUID(cluster_id)),
-                    )
-                synced += 1
-
-            elif action_type == "hide" and cluster_id:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO user_cluster_hides (user_id, cluster_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT (user_id, cluster_id) DO NOTHING;
-                        """,
-                        (user.user_id, UUID(cluster_id)),
-                    )
-                synced += 1
-
-            elif action_type == "follow_topic" and topic_id:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO user_topic_follows (user_id, topic_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT (user_id, topic_id) DO NOTHING;
-                        """,
-                        (user.user_id, UUID(topic_id)),
-                    )
-                synced += 1
-
-            elif action_type == "unfollow_topic" and topic_id:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        DELETE FROM user_topic_follows
-                        WHERE user_id = %s AND topic_id = %s;
-                        """,
-                        (user.user_id, UUID(topic_id)),
-                    )
-                synced += 1
-
-            else:
-                failed += 1
-                errors.append(f"Unknown action type: {action_type}")
-
-        except Exception as exc:
-            failed += 1
-            errors.append(str(exc))
-
-    return OfflineSyncResponse(
-        synced_count=synced,
-        failed_count=failed,
-        errors=errors[:10],  # Limit error messages
-    )
-
-
 @router.post("/search/semantic", response_model=VectorSearchResponse)
 def semantic_search(
     request: VectorSearchRequest,
-    user: AuthedUser | None = Depends(optional_user),
     conn: psycopg.Connection[Any] = Depends(get_db),
 ) -> VectorSearchResponse:
     """
@@ -517,7 +315,7 @@ def get_cache_stats() -> CacheStatsResponse:
 @router.delete("/cache/invalidate", response_model=SimpleOkResponse)
 def invalidate_cache(
     pattern: str = Query(default="*", description="Key pattern to invalidate"),
-    _: None = Depends(require_user),  # Require auth for cache operations
+    _: None = Depends(require_admin),  # Require admin for cache operations
 ) -> SimpleOkResponse:
     """
     Invalidate cache entries matching a pattern.

@@ -3,7 +3,6 @@ import type { components } from '@/types/api.generated';
 export type ContentType = components['schemas']['ContentType'];
 export type ClustersFeedResponse = components['schemas']['ClustersFeedResponse'];
 export type TopicDetail = components['schemas']['TopicDetail'];
-export type TopicsResponse = components['schemas']['TopicsResponse'];
 export type SearchResponse = components['schemas']['SearchResponse'];
 export type GlossaryLookupResponse = components['schemas']['GlossaryLookupResponse'];
 export type TopicLineageResponse = components['schemas']['TopicLineageResponse'];
@@ -31,6 +30,15 @@ export type CategoryChip = {
   category_id: string;
   name: string;
   score: number;
+};
+
+export type Topic = components['schemas']['Topic'] & {
+  parent_topic_id?: string | null;
+  topic_type?: 'category' | 'subtopic' | null;
+};
+
+export type TopicsResponse = {
+  topics: Topic[];
 };
 
 export type ClusterCard = components['schemas']['ClusterCard'] & {

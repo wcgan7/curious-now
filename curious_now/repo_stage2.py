@@ -220,6 +220,16 @@ def _cluster_cards_from_rows(
     return cards
 
 
+def _topic_match_clause_sql(topic_param: str = "%s") -> str:
+    """Match a subtopic directly or a category through its immediate children."""
+    return (
+        "("
+        f"ct.topic_id = {topic_param} "
+        f"OR ct.topic_id IN (SELECT id FROM topics WHERE parent_topic_id = {topic_param})"
+        ")"
+    )
+
+
 def get_feed(
     conn: psycopg.Connection[Any],
     *,
@@ -236,9 +246,9 @@ def get_feed(
     if topic_id:
         where.append(
             "EXISTS (SELECT 1 FROM cluster_topics ct "
-            "WHERE ct.cluster_id = c.id AND ct.topic_id = %s)"
+            f"WHERE ct.cluster_id = c.id AND {_topic_match_clause_sql()})"
         )
-        params.append(topic_id)
+        params.extend([topic_id, topic_id])
     if content_type:
         where.append(
             "EXISTS (SELECT 1 FROM cluster_items ci "
@@ -442,11 +452,33 @@ def get_cluster_detail_or_redirect(
 
 def list_topics(conn: psycopg.Connection[Any]) -> TopicsResponse:
     with conn.cursor() as cur:
-        cur.execute("SELECT id AS topic_id, name, description_short FROM topics ORDER BY name ASC;")
+        cur.execute(
+            """
+            SELECT
+              id AS topic_id,
+              name,
+              description_short,
+              parent_topic_id,
+              CASE
+                WHEN parent_topic_id IS NULL THEN 'category'
+                ELSE 'subtopic'
+              END AS topic_type
+            FROM topics
+            ORDER BY
+              CASE WHEN parent_topic_id IS NULL THEN 0 ELSE 1 END,
+              name ASC;
+            """
+        )
         rows = cur.fetchall()
     return TopicsResponse(
         topics=[
-            Topic(topic_id=r["topic_id"], name=r["name"], description_short=r["description_short"])
+            Topic(
+                topic_id=r["topic_id"],
+                name=r["name"],
+                description_short=r["description_short"],
+                parent_topic_id=r["parent_topic_id"],
+                topic_type=cast(Literal["category", "subtopic"], r["topic_type"]),
+            )
             for r in rows
         ]
     )
@@ -455,7 +487,19 @@ def list_topics(conn: psycopg.Connection[Any]) -> TopicsResponse:
 def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicDetail:
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id AS topic_id, name, description_short FROM topics WHERE id = %s;",
+            """
+            SELECT
+              id AS topic_id,
+              name,
+              description_short,
+              parent_topic_id,
+              CASE
+                WHEN parent_topic_id IS NULL THEN 'category'
+                ELSE 'subtopic'
+              END AS topic_type
+            FROM topics
+            WHERE id = %s;
+            """,
             (topic_id,),
         )
         row = cur.fetchone()
@@ -466,6 +510,8 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
         topic_id=row["topic_id"],
         name=row["name"],
         description_short=row["description_short"],
+        parent_topic_id=row["parent_topic_id"],
+        topic_type=cast(Literal["category", "subtopic"], row["topic_type"]),
     )
 
     with conn.cursor() as cur:
@@ -488,11 +534,11 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
               ) AS content_type_badges
             FROM story_clusters c
             JOIN cluster_topics ct ON ct.cluster_id = c.id
-            WHERE ct.topic_id = %s AND c.status = 'active'
+            WHERE {_topic_match_clause_sql()} AND c.status = 'active'
             ORDER BY c.updated_at DESC
             LIMIT 20;
             """,
-            (topic_id,),
+            (topic_id, topic_id),
         )
         latest_rows = cur.fetchall()
 
@@ -515,11 +561,11 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
               ) AS content_type_badges
             FROM story_clusters c
             JOIN cluster_topics ct ON ct.cluster_id = c.id
-            WHERE ct.topic_id = %s AND c.status = 'active'
+            WHERE {_topic_match_clause_sql()} AND c.status = 'active'
             ORDER BY c.trending_score DESC, c.updated_at DESC
             LIMIT 20;
             """,
-            (topic_id,),
+            (topic_id, topic_id),
         )
         trending_rows = cur.fetchall()
 
