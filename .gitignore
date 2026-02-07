@@ -13,3 +13,9 @@ build/
 dist/
 *.egg-info/
 
+# Frontend runtime/build artifacts
+web/.next/
+web/node_modules/
+web/test-results/
+web/*.log
+web/tsconfig.tsbuildinfo
