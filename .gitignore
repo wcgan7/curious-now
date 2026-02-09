@@ -1,5 +1,7 @@
 .DS_Store
 .env
+.codex/
+backups/
 .venv/
 .mypy_cache/
 .pytest_cache/
