@@ -1,0 +1,452 @@
+{
+  "sources": [
+    {
+      "name": "arXiv cs.AI",
+      "homepage_url": "https://arxiv.org/list/cs.AI/recent",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access preprints. Artificial Intelligence.",
+      "feeds": [
+        {
+          "feed_url": "https://rss.arxiv.org/rss/cs.AI",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "arXiv cs.LG",
+      "homepage_url": "https://arxiv.org/list/cs.LG/recent",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access preprints. Machine Learning.",
+      "feeds": [
+        {
+          "feed_url": "https://rss.arxiv.org/rss/cs.LG",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "arXiv cs.CL",
+      "homepage_url": "https://arxiv.org/list/cs.CL/recent",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access preprints. Computation and Language / NLP.",
+      "feeds": [
+        {
+          "feed_url": "https://rss.arxiv.org/rss/cs.CL",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "arXiv cs.RO",
+      "homepage_url": "https://arxiv.org/list/cs.RO/recent",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access preprints. Robotics.",
+      "feeds": [
+        {
+          "feed_url": "https://rss.arxiv.org/rss/cs.RO",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "arXiv quant-ph",
+      "homepage_url": "https://arxiv.org/list/quant-ph/recent",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access preprints. Quantum Physics.",
+      "feeds": [
+        {
+          "feed_url": "https://rss.arxiv.org/rss/quant-ph",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "arXiv cond-mat",
+      "homepage_url": "https://arxiv.org/list/cond-mat/recent",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access preprints. Condensed Matter Physics.",
+      "feeds": [
+        {
+          "feed_url": "https://rss.arxiv.org/rss/cond-mat",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "arXiv astro-ph",
+      "homepage_url": "https://arxiv.org/list/astro-ph/recent",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access preprints. Astrophysics.",
+      "feeds": [
+        {
+          "feed_url": "https://rss.arxiv.org/rss/astro-ph",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "arXiv econ",
+      "homepage_url": "https://arxiv.org/list/econ/recent",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access preprints. Economics.",
+      "feeds": [
+        {
+          "feed_url": "https://rss.arxiv.org/rss/econ",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "bioRxiv",
+      "homepage_url": "https://www.biorxiv.org/",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access biology preprints.",
+      "feeds": [
+        {
+          "feed_url": "https://connect.biorxiv.org/biorxiv_xml.php?subject=all",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "medRxiv",
+      "homepage_url": "https://www.medrxiv.org/",
+      "source_type": "preprint_server",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Open access medical preprints.",
+      "feeds": [
+        {
+          "feed_url": "https://connect.medrxiv.org/medrxiv_xml.php?subject=all",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Quanta Magazine",
+      "homepage_url": "https://www.quantamagazine.org/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Free, exceptional science journalism. Math, physics, biology, CS.",
+      "feeds": [
+        {
+          "feed_url": "https://www.quantamagazine.org/feed/",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Ars Technica",
+      "homepage_url": "https://arstechnica.com/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Free tech and science journalism. In-depth coverage.",
+      "feeds": [
+        {
+          "feed_url": "https://feeds.arstechnica.com/arstechnica/index",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "The Verge",
+      "homepage_url": "https://www.theverge.com/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Free tech news and culture.",
+      "feeds": [
+        {
+          "feed_url": "https://www.theverge.com/rss/index.xml",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Hacker News",
+      "homepage_url": "https://news.ycombinator.com/",
+      "source_type": "blog",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Community-curated tech links. Front page only.",
+      "feeds": [
+        {
+          "feed_url": "https://hnrss.org/frontpage",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "BBC Science & Environment",
+      "homepage_url": "https://www.bbc.com/news/science_and_environment",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Free, global science and environment news.",
+      "feeds": [
+        {
+          "feed_url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "NASA",
+      "homepage_url": "https://www.nasa.gov/",
+      "source_type": "government",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Official NASA news. Space and Earth science.",
+      "feeds": [
+        {
+          "feed_url": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "ESA",
+      "homepage_url": "https://www.esa.int/",
+      "source_type": "government",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "European Space Agency news.",
+      "feeds": [
+        {
+          "feed_url": "https://www.esa.int/rssfeed/Our_Activities/Space_Science",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Phys.org",
+      "homepage_url": "https://phys.org/",
+      "source_type": "journalism",
+      "reliability_tier": "tier2",
+      "active": true,
+      "terms_notes": "Science news aggregator. Physics, space, earth, tech.",
+      "feeds": [
+        {
+          "feed_url": "https://phys.org/rss-feed/",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "STAT News",
+      "homepage_url": "https://www.statnews.com/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Health and medicine journalism. Some paywalled.",
+      "feeds": [
+        {
+          "feed_url": "https://www.statnews.com/feed/",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Carbon Brief",
+      "homepage_url": "https://www.carbonbrief.org/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Free, excellent climate science journalism.",
+      "feeds": [
+        {
+          "feed_url": "https://www.carbonbrief.org/feed/",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Canary Media",
+      "homepage_url": "https://www.canarymedia.com/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Free clean energy and climate solutions journalism.",
+      "feeds": [
+        {
+          "feed_url": "https://www.canarymedia.com/feed",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "IEEE Spectrum",
+      "homepage_url": "https://spectrum.ieee.org/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Engineering and technology. Free RSS.",
+      "feeds": [
+        {
+          "feed_url": "https://spectrum.ieee.org/feeds/feed.rss",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Chemistry World",
+      "homepage_url": "https://www.chemistryworld.com/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Royal Society of Chemistry news. Free RSS.",
+      "feeds": [
+        {
+          "feed_url": "https://www.chemistryworld.com/feeds/cw_all.rss",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Nature News",
+      "homepage_url": "https://www.nature.com/news",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Nature news section is free. Research news across all sciences.",
+      "feeds": [
+        {
+          "feed_url": "https://www.nature.com/nature.rss",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Science News",
+      "homepage_url": "https://www.sciencenews.org/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Independent science journalism since 1921.",
+      "feeds": [
+        {
+          "feed_url": "https://www.sciencenews.org/feed",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Neuroscience News",
+      "homepage_url": "https://neurosciencenews.com/",
+      "source_type": "journalism",
+      "reliability_tier": "tier2",
+      "active": true,
+      "terms_notes": "Neuroscience and psychology research news.",
+      "feeds": [
+        {
+          "feed_url": "https://neurosciencenews.com/feed/",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "Mongabay",
+      "homepage_url": "https://www.mongabay.com/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Environmental science and conservation journalism.",
+      "feeds": [
+        {
+          "feed_url": "https://news.mongabay.com/feed/",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 60,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "MIT Technology Review",
+      "homepage_url": "https://www.technologyreview.com/",
+      "source_type": "journalism",
+      "reliability_tier": "tier1",
+      "active": true,
+      "terms_notes": "Tech analysis. Some articles paywalled but RSS has free content.",
+      "feeds": [
+        {
+          "feed_url": "https://www.technologyreview.com/feed/",
+          "feed_type": "rss",
+          "fetch_interval_minutes": 30,
+          "active": true
+        }
+      ]
+    }
+  ]
+}

@@ -34,7 +34,7 @@ scheduler/cron in production).
 
 ## Tech Stack
 
-- Python 3.9+
+- Python 3.13+
 - FastAPI + Pydantic v2
 - Postgres (tested with the docker image in `docker-compose.yml`, includes `pgvector`)
 - Redis (optional; used for caching + rate limiting)
@@ -53,7 +53,7 @@ scheduler/cron in production).
 ## Quick Start (Local Dev)
 
 Prereqs:
-- Python 3.9+
+- Python 3.13+
 - Docker (for Postgres/Redis)
 
 1. Create a virtualenv and install deps:

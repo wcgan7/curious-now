@@ -38,9 +38,21 @@ def _truncate_public_tables(conn: psycopg.Connection) -> None:
 
 @pytest.fixture(scope="session")
 def database_url() -> str:
-    dsn = os.environ.get("CN_DATABASE_URL")
+    # Prefer CN_TEST_DATABASE_URL to avoid accidentally wiping production data
+    dsn = os.environ.get("CN_TEST_DATABASE_URL")
     if not dsn:
-        pytest.skip("CN_DATABASE_URL not set (run Postgres via docker compose)")
+        # Fall back to CN_DATABASE_URL but verify it's a test database
+        dsn = os.environ.get("CN_DATABASE_URL")
+    if not dsn:
+        pytest.skip("CN_TEST_DATABASE_URL or CN_DATABASE_URL not set")
+
+    # Safety check: refuse to run tests on production database
+    if "curious_now_test" not in dsn and "_test" not in dsn:
+        pytest.fail(
+            f"Refusing to run tests on non-test database: {dsn}\n"
+            "Tests truncate all tables! Set CN_TEST_DATABASE_URL to a test database, "
+            "or ensure your database name contains '_test'."
+        )
     return dsn
 
 

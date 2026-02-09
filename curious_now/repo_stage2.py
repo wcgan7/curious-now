@@ -215,6 +215,7 @@ def _cluster_cards_from_rows(
                 confidence_band=r.get("confidence_band"),
                 anti_hype_flags=[str(x) for x in _normalize_json_array(r.get("anti_hype_flags"))],
                 featured_image_url=featured_images.get(r["cluster_id"]),
+                deep_dive_skip_reason=r.get("deep_dive_skip_reason"),
             )
         )
     return cards
@@ -275,6 +276,7 @@ def get_feed(
               c.takeaway,
               c.confidence_band,
               c.method_badges,
+              c.deep_dive_skip_reason,
               c.anti_hype_flags,
               (
                 SELECT array_agg(DISTINCT i.content_type)
@@ -356,7 +358,8 @@ def get_cluster_detail_or_redirect(
               anti_hype_flags,
               takeaway_supporting_item_ids,
               summary_intuition_supporting_item_ids,
-              summary_deep_dive_supporting_item_ids
+              summary_deep_dive_supporting_item_ids,
+              deep_dive_skip_reason
             FROM story_clusters
             WHERE id = %s;
             """,
@@ -431,6 +434,7 @@ def get_cluster_detail_or_redirect(
         summary_intuition=summary_intuition_eli5,
         summary_intuition_eli20=summary_intuition_eli20,
         summary_deep_dive=deep_dive_markdown,
+        deep_dive_skip_reason=cluster.get("deep_dive_skip_reason"),
         assumptions=[str(x) for x in _normalize_json_array(cluster.get("assumptions"))],
         limitations=[str(x) for x in _normalize_json_array(cluster.get("limitations"))],
         what_could_change_this=[
@@ -525,6 +529,7 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
               c.takeaway,
               c.confidence_band,
               c.method_badges,
+              c.deep_dive_skip_reason,
               c.anti_hype_flags,
               (
                 SELECT array_agg(DISTINCT i.content_type)
@@ -552,6 +557,7 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
               c.takeaway,
               c.confidence_band,
               c.method_badges,
+              c.deep_dive_skip_reason,
               c.anti_hype_flags,
               (
                 SELECT array_agg(DISTINCT i.content_type)
@@ -588,6 +594,7 @@ def search(conn: psycopg.Connection[Any], *, query: str) -> SearchResponse:
           c.takeaway,
           c.confidence_band,
           c.method_badges,
+          c.deep_dive_skip_reason,
           c.anti_hype_flags,
           (
             SELECT array_agg(DISTINCT i.content_type)

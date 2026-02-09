@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # Email sender defaults
     email_from_address: str = "hello@curious.now"
     email_from_name: str = "Curious Now"
+    unpaywall_email: str | None = None
 
     # Structured logging
     log_format: str = "json"  # "json" or "text"
@@ -46,6 +47,10 @@ class Settings(BaseSettings):
     # LLM configuration (for AI features)
     llm_adapter: str = "ollama"  # "ollama", "claude-cli", "codex-cli", "mock"
     llm_model: str | None = None  # Model name (adapter-specific, uses default if None)
+
+    # Paper text hydration debug (ops-only)
+    paper_text_debug_dump_dir: str | None = None
+    paper_text_debug_dump_pdf_rejected: bool = False
 
 
 @lru_cache(maxsize=1)

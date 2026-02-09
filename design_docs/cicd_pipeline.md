@@ -1011,8 +1011,9 @@ jobs:
 
       - name: Run pip-audit (backend)
         run: |
+          pip install ".[dev]"
           pip install pip-audit
-          pip-audit -r requirements.txt
+          pip-audit
         continue-on-error: true
 
   # ─────────────────────────────────────────────────────────────────
@@ -1035,7 +1036,7 @@ jobs:
       - name: Check for outdated Python packages
         run: |
           pip install pip-tools
-          pip-compile --upgrade requirements.in --dry-run || echo "No updates available"
+          pip-compile pyproject.toml --extra dev --upgrade --dry-run || echo "No updates available"
 ```
 
 ---

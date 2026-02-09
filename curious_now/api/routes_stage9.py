@@ -17,9 +17,8 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict
 
 from curious_now.api.deps import get_db, require_admin
-from curious_now.api.schemas import ClusterCard, SimpleOkResponse
+from curious_now.api.schemas import ClusterCard, SimpleOkResponse, simple_ok
 from curious_now.cache import get_redis_client
-from curious_now.repo_stage5 import simple_ok
 
 router = APIRouter()
 

@@ -4,7 +4,7 @@ venv:
 	python -m venv .venv
 
 install:
-	.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+	.venv/bin/pip install ".[dev]"
 
 dev-up:
 	docker compose up -d
@@ -28,4 +28,3 @@ typecheck:
 	.venv/bin/python -m mypy curious_now
 
 check: test lint typecheck
-

@@ -357,6 +357,7 @@ def list_saved_clusters(conn: psycopg.Connection[Any], *, user_id: UUID) -> User
               c.takeaway,
               c.confidence_band,
               c.method_badges,
+              c.deep_dive_skip_reason,
               c.anti_hype_flags,
               (
                 SELECT array_agg(DISTINCT i.content_type)
@@ -401,6 +402,7 @@ def for_you_feed(
               c.takeaway,
               c.confidence_band,
               c.method_badges,
+              c.deep_dive_skip_reason,
               c.anti_hype_flags,
               (
                 SELECT array_agg(DISTINCT i.content_type)

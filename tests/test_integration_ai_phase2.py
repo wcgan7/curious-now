@@ -34,9 +34,10 @@ from curious_now.ai.deep_dive import (
 from curious_now.ai.intuition import (
     IntuitionInput,
     IntuitionResult,
-    generate_eli20,
     generate_eli5,
+    generate_eli20,
     generate_intuition,
+    generate_intuition_from_abstracts,
 )
 from curious_now.ai.llm_adapter import ClaudeCLIAdapter, MockAdapter
 
@@ -256,6 +257,19 @@ class TestGenerateIntuitionMock:
 
         assert result.success is False
         assert result.error is not None and "deep dive" in result.error.lower()
+
+    def test_generate_intuition_from_abstracts_returns_eli5_only(
+        self,
+        mock_adapter: MockAdapter,
+    ) -> None:
+        result = generate_intuition_from_abstracts(
+            cluster_title="CRISPR abstract-only cluster",
+            abstracts_text="This abstract describes a CRISPR variant with improved targeting.",
+            adapter=mock_adapter,
+        )
+        assert result.success is True
+        assert len(result.eli5) > 0
+        assert result.eli20 == ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────

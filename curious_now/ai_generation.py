@@ -14,6 +14,7 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
+from psycopg.rows import dict_row
 
 from curious_now.ai.deep_dive import (
     DeepDiveInput,
@@ -32,6 +33,7 @@ from curious_now.ai.intuition import (
     IntuitionInput,
     IntuitionResult,
     generate_intuition,
+    generate_intuition_from_abstracts,
 )
 from curious_now.ai.llm_adapter import LLMAdapter, get_llm_adapter
 from curious_now.ai.takeaways import (
@@ -44,6 +46,24 @@ from curious_now.paper_text_hydration import hydrate_paper_text
 
 logger = logging.getLogger(__name__)
 _PAPER_CONTENT_TYPES = {"preprint", "peer_reviewed"}
+_ABSTRACT_TEXT_SOURCES = {"arxiv_api", "crossref", "openalex"}
+_FULLTEXT_TEXT_SOURCES = {
+    "landing_page",
+    "arxiv_pdf",
+    "arxiv_html",
+    "arxiv_eprint",
+    "unpaywall_pdf",
+    "unpaywall_landing",
+    "openalex_pdf",
+    "openalex_landing",
+    "crossref_pdf",
+    "crossref_landing",
+    "pmc_oa",
+    "publisher_pdf",
+}
+_DEEP_DIVE_SKIP_REASON_NO_FULLTEXT = "no_fulltext"
+_DEEP_DIVE_SKIP_REASON_ABSTRACT_ONLY = "abstract_only"
+_DEEP_DIVE_SKIP_REASON_GEN_FAILED = "generation_failed"
 
 
 @dataclass
@@ -91,7 +111,7 @@ def _get_clusters_needing_takeaways(
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     """Get clusters that need takeaway generation."""
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT
@@ -115,7 +135,7 @@ def _get_cluster_items_for_takeaway(
     cluster_id: UUID,
 ) -> list[dict[str, Any]]:
     """Get items for a cluster to use in takeaway generation."""
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT
@@ -124,6 +144,9 @@ def _get_cluster_items_for_takeaway(
                 i.snippet,
                 i.full_text,
                 i.full_text_status,
+                i.full_text_source,
+                i.full_text_kind,
+                i.full_text_license,
                 s.name AS source_name,
                 i.content_type AS source_type,
                 i.published_at
@@ -139,12 +162,64 @@ def _get_cluster_items_for_takeaway(
         return cur.fetchall()
 
 
-def _ensure_required_paper_text(
+def _paper_text_kind(item: dict[str, Any]) -> str:
+    """Classify hydrated paper text quality for generation gates."""
+    text = item.get("full_text")
+    if not (text and str(text).strip()):
+        return "missing"
+    kind = str(item.get("full_text_kind") or "").strip().lower()
+    if kind in {"fulltext", "abstract"}:
+        return kind
+    source = str(item.get("full_text_source") or "").strip().lower()
+    if source in _FULLTEXT_TEXT_SOURCES:
+        return "fulltext"
+    if source in _ABSTRACT_TEXT_SOURCES:
+        return "abstract"
+    # Safety default: unknown provenance is treated as abstract-grade.
+    return "abstract"
+
+
+def _build_abstract_context(items: list[dict[str, Any]], *, max_sources: int = 5) -> str | None:
+    """Build compact abstract-only context for ELI5 fallback generation."""
+    parts: list[str] = []
+    for item in items[:max_sources]:
+        text = item.get("full_text")
+        if not (text and str(text).strip()):
+            continue
+        title = str(item.get("title") or "Untitled source").strip()
+        source_name = str(item.get("source_name") or "").strip()
+        header = f"- {title}"
+        if source_name:
+            header += f" [{source_name}]"
+        parts.append(f"{header}\n{text}")
+    if not parts:
+        return None
+    return "\n\n".join(parts)
+
+
+def _split_paper_items_by_text_quality(
+    items: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split paper items into fulltext-backed and abstract-backed subsets."""
+    fulltext_items: list[dict[str, Any]] = []
+    abstract_items: list[dict[str, Any]] = []
+    for item in items:
+        if item.get("source_type") not in _PAPER_CONTENT_TYPES:
+            continue
+        kind = _paper_text_kind(item)
+        if kind == "fulltext":
+            fulltext_items.append(item)
+        elif kind == "abstract":
+            abstract_items.append(item)
+    return fulltext_items, abstract_items
+
+
+def _ensure_paper_text_hydrated(
     conn: psycopg.Connection[Any],
     cluster_id: UUID,
     items: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], bool]:
-    """Ensure paper sources have hydrated text before deep-dive generation."""
+) -> list[dict[str, Any]]:
+    """Ensure paper sources have hydrated text before explainer generation."""
     missing_ids = [
         item["item_id"]
         for item in items
@@ -152,24 +227,11 @@ def _ensure_required_paper_text(
         and not (item.get("full_text") and str(item.get("full_text")).strip())
     ]
     if not missing_ids:
-        return items, True
+        return items
 
     hydrate_paper_text(conn, limit=len(missing_ids), item_ids=missing_ids)
     reloaded = _get_cluster_items_for_takeaway(conn, cluster_id)
-    still_missing = [
-        item["item_id"]
-        for item in reloaded
-        if item.get("source_type") in _PAPER_CONTENT_TYPES
-        and not (item.get("full_text") and str(item.get("full_text")).strip())
-    ]
-    if still_missing:
-        logger.warning(
-            "Cluster %s blocked: missing required paper full text for %s item(s)",
-            cluster_id,
-            len(still_missing),
-        )
-        return reloaded, False
-    return reloaded, True
+    return reloaded
 
 
 def _get_cluster_topics(
@@ -177,7 +239,7 @@ def _get_cluster_topics(
     cluster_id: UUID,
 ) -> list[str]:
     """Get topic names for a cluster."""
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT t.name
@@ -201,7 +263,7 @@ def _update_cluster_takeaway(
     """Update cluster with generated takeaway."""
     # Convert UUIDs to JSON array of strings for JSONB column
     item_ids_json = json.dumps([str(uid) for uid in item_ids])
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             UPDATE story_clusters
@@ -344,7 +406,7 @@ def _get_clusters_needing_embeddings(
             LIMIT %s;
         """
 
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(query, (limit,))
         return cur.fetchall()
 
@@ -417,7 +479,7 @@ def _upsert_cluster_embedding(
     source_text_hash: str,
 ) -> None:
     """Insert or update cluster embedding."""
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             INSERT INTO cluster_embeddings
@@ -438,7 +500,7 @@ def _get_existing_embedding_hash(
     cluster_id: UUID,
 ) -> str | None:
     """Get existing embedding source text hash if it exists."""
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             "SELECT source_text_hash FROM cluster_embeddings WHERE cluster_id = %s;",
             (cluster_id,),
@@ -566,7 +628,7 @@ def _get_clusters_needing_stage3(
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     """Get clusters that need Stage 3 enrichment (missing intuition or deep-dive)."""
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT
@@ -593,7 +655,7 @@ def _get_clusters_needing_intuition(
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     """Get clusters that need intuition (have takeaway but no intuition)."""
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT
@@ -625,7 +687,7 @@ def _get_clusters_needing_deep_dive(
     Only returns clusters where items are papers (preprint or peer_reviewed),
     since articles/press releases don't need deep dives.
     """
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT DISTINCT
@@ -654,7 +716,7 @@ def _get_cluster_content_types(
     cluster_id: UUID,
 ) -> list[str]:
     """Get distinct content types for items in a cluster."""
-    with conn.cursor() as cur:
+    with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT DISTINCT i.content_type
@@ -804,6 +866,27 @@ def _update_cluster_stage3(
         )
 
 
+def _set_deep_dive_skip_reason(
+    conn: psycopg.Connection[Any],
+    cluster_id: UUID,
+    reason: str | None,
+) -> None:
+    """Persist explainable reason for why deep-dive is absent."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE story_clusters
+                SET deep_dive_skip_reason = %s
+                WHERE id = %s;
+                """,
+                (reason, cluster_id),
+            )
+    except psycopg.errors.UndefinedColumn:
+        # Compatibility during rolling deploys before migration is applied.
+        return
+
+
 def enrich_stage3_for_clusters(
     conn: psycopg.Connection[Any],
     *,
@@ -858,39 +941,115 @@ def enrich_stage3_for_clusters(
             # ─────────────────────────────────────────────────────────────
             deep_dive_markdown = _get_deep_dive_markdown(cluster.get("summary_deep_dive"))
             summary_deep_dive: dict[str, Any] | None = None
+            abstract_fallback_intuition: str | None = None
+            abstract_fallback_item_ids: list[UUID] | None = None
             if not deep_dive_markdown:
                 if has_paper_sources:
-                    items, paper_ready = _ensure_required_paper_text(conn, cluster_id, items)
-                    if not paper_ready:
-                        failed += 1
-                        continue
-                source_summaries = [
-                    SourceSummary(
-                        title=item["title"],
-                        snippet=item.get("snippet"),
-                        source_name=item.get("source_name"),
-                        source_type=item.get("source_type"),
-                        full_text=item.get("full_text"),
-                    )
-                    for item in items
-                ]
-
-                deep_dive_input = DeepDiveInput(
-                    cluster_title=canonical_title,
-                    source_summaries=source_summaries,
-                )
-                deep_dive_result: DeepDiveResult = generate_deep_dive(
-                    deep_dive_input, adapter=adapter
-                )
-                if deep_dive_result.success and deep_dive_result.content:
-                    deep_dive_markdown = deep_dive_result.content.markdown
-                    summary_deep_dive = deep_dive_to_json(deep_dive_result.content)
+                    items = _ensure_paper_text_hydrated(conn, cluster_id, items)
+                    fulltext_items, abstract_items = _split_paper_items_by_text_quality(items)
+                    if not fulltext_items:
+                        abstract_context = _build_abstract_context(abstract_items)
+                        if abstract_context:
+                            _set_deep_dive_skip_reason(
+                                conn,
+                                cluster_id,
+                                _DEEP_DIVE_SKIP_REASON_ABSTRACT_ONLY,
+                            )
+                            abstract_result = generate_intuition_from_abstracts(
+                                cluster_title=canonical_title,
+                                abstracts_text=abstract_context,
+                                adapter=adapter,
+                            )
+                            if abstract_result.success and abstract_result.eli5:
+                                abstract_fallback_intuition = abstract_result.eli5
+                                abstract_fallback_item_ids = [
+                                    item["item_id"] for item in abstract_items
+                                ]
+                        logger.info(
+                            "Cluster %s: skipped deep-dive (no full text paper sources)",
+                            cluster_id,
+                        )
+                        if not abstract_context:
+                            _set_deep_dive_skip_reason(
+                                conn,
+                                cluster_id,
+                                _DEEP_DIVE_SKIP_REASON_NO_FULLTEXT,
+                            )
+                    else:
+                        source_summaries = [
+                            SourceSummary(
+                                title=item["title"],
+                                snippet=item.get("snippet"),
+                                source_name=item.get("source_name"),
+                                source_type=item.get("source_type"),
+                                full_text=item.get("full_text"),
+                            )
+                            for item in fulltext_items
+                        ]
+                        deep_dive_input = DeepDiveInput(
+                            cluster_title=canonical_title,
+                            source_summaries=source_summaries,
+                        )
+                        deep_dive_result: DeepDiveResult = generate_deep_dive(
+                            deep_dive_input, adapter=adapter
+                        )
+                        if deep_dive_result.success and deep_dive_result.content:
+                            deep_dive_markdown = deep_dive_result.content.markdown
+                            summary_deep_dive = deep_dive_to_json(deep_dive_result.content)
+                            _set_deep_dive_skip_reason(conn, cluster_id, None)
+                        else:
+                            logger.warning(
+                                "Deep-dive generation failed for cluster %s: %s",
+                                cluster_id,
+                                deep_dive_result.error,
+                            )
+                            _set_deep_dive_skip_reason(
+                                conn,
+                                cluster_id,
+                                _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
+                            )
                 else:
-                    logger.warning(
-                        "Deep-dive generation failed for cluster %s: %s",
-                        cluster_id,
-                        deep_dive_result.error,
+                    source_summaries = [
+                        SourceSummary(
+                            title=item["title"],
+                            snippet=item.get("snippet"),
+                            source_name=item.get("source_name"),
+                            source_type=item.get("source_type"),
+                            full_text=item.get("full_text"),
+                        )
+                        for item in items
+                    ]
+                    deep_dive_input = DeepDiveInput(
+                        cluster_title=canonical_title,
+                        source_summaries=source_summaries,
                     )
+                    deep_dive_result = generate_deep_dive(deep_dive_input, adapter=adapter)
+                    if deep_dive_result.success and deep_dive_result.content:
+                        deep_dive_markdown = deep_dive_result.content.markdown
+                        summary_deep_dive = deep_dive_to_json(deep_dive_result.content)
+                        _set_deep_dive_skip_reason(conn, cluster_id, None)
+                    else:
+                        logger.warning(
+                            "Deep-dive generation failed for cluster %s: %s",
+                            cluster_id,
+                            deep_dive_result.error,
+                        )
+                        _set_deep_dive_skip_reason(
+                            conn,
+                            cluster_id,
+                            _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
+                        )
+
+            if abstract_fallback_intuition and not deep_dive_markdown:
+                summary_intuition = abstract_fallback_intuition
+                _update_cluster_stage3(
+                    conn,
+                    cluster_id,
+                    summary_intuition=summary_intuition,
+                    summary_intuition_item_ids=abstract_fallback_item_ids or item_ids,
+                )
+                succeeded += 1
+                continue
 
             # ─────────────────────────────────────────────────────────────
             # Generate layered intuition: Deep Dive -> ELI20 -> ELI5
@@ -1030,35 +1189,101 @@ def generate_intuition_for_clusters(
             if not deep_dive_markdown:
                 has_paper_sources = any(ct in _PAPER_CONTENT_TYPES for ct in content_types)
                 if has_paper_sources:
-                    items, paper_ready = _ensure_required_paper_text(conn, cluster_id, items)
-                    if not paper_ready:
-                        failed += 1
+                    items = _ensure_paper_text_hydrated(conn, cluster_id, items)
+                    fulltext_items, abstract_items = _split_paper_items_by_text_quality(items)
+                    if not fulltext_items:
+                        abstract_context = _build_abstract_context(abstract_items)
+                        if not abstract_context:
+                            skipped += 1
+                            _set_deep_dive_skip_reason(
+                                conn,
+                                cluster_id,
+                                _DEEP_DIVE_SKIP_REASON_NO_FULLTEXT,
+                            )
+                            logger.info(
+                                "Cluster %s skipped intuition: no deep-dive full text or abstracts",
+                                cluster_id,
+                            )
+                            continue
+                        _set_deep_dive_skip_reason(
+                            conn,
+                            cluster_id,
+                            _DEEP_DIVE_SKIP_REASON_ABSTRACT_ONLY,
+                        )
+                        abstract_result = generate_intuition_from_abstracts(
+                            cluster_title=canonical_title,
+                            abstracts_text=abstract_context,
+                            adapter=adapter,
+                        )
+                        if not abstract_result.success:
+                            failed += 1
+                            logger.warning(
+                                "Abstract-only intuition generation failed for cluster %s: %s",
+                                cluster_id,
+                                abstract_result.error,
+                            )
+                            continue
+                        confidence_band = _compute_confidence_band(content_types, source_count)
+                        anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
+                        method_badges = _compute_method_badges(content_types)
+                        _update_cluster_stage3(
+                            conn,
+                            cluster_id,
+                            summary_intuition=abstract_result.eli5,
+                            summary_intuition_item_ids=[
+                                item["item_id"] for item in abstract_items
+                            ],
+                            confidence_band=confidence_band,
+                            anti_hype_flags=anti_hype_flags,
+                            method_badges=method_badges,
+                        )
+                        succeeded += 1
+                        logger.info(
+                            "Intuition generated from abstracts for cluster %s (eli5_words=%s)",
+                            cluster_id,
+                            abstract_result.eli5_word_count,
+                        )
                         continue
-                source_summaries = [
-                    SourceSummary(
-                        title=item["title"],
-                        snippet=item.get("snippet"),
-                        source_name=item.get("source_name"),
-                        source_type=item.get("source_type"),
-                        full_text=item.get("full_text"),
-                    )
-                    for item in items
-                ]
+                    source_summaries = [
+                        SourceSummary(
+                            title=item["title"],
+                            snippet=item.get("snippet"),
+                            source_name=item.get("source_name"),
+                            source_type=item.get("source_type"),
+                            full_text=item.get("full_text"),
+                        )
+                        for item in fulltext_items
+                    ]
+                else:
+                    source_summaries = [
+                        SourceSummary(
+                            title=item["title"],
+                            snippet=item.get("snippet"),
+                            source_name=item.get("source_name"),
+                            source_type=item.get("source_type"),
+                            full_text=item.get("full_text"),
+                        )
+                        for item in items
+                    ]
                 deep_dive_input = DeepDiveInput(
                     cluster_title=canonical_title,
                     source_summaries=source_summaries,
                 )
-                deep_dive_result: DeepDiveResult = generate_deep_dive(
-                    deep_dive_input, adapter=adapter
-                )
+                deep_dive_result = generate_deep_dive(deep_dive_input, adapter=adapter)
                 if deep_dive_result.success and deep_dive_result.content:
                     deep_dive_markdown = deep_dive_result.content.markdown
                     summary_deep_dive_text = deep_dive_to_json(deep_dive_result.content)
+                    _set_deep_dive_skip_reason(conn, cluster_id, None)
                 else:
                     logger.warning(
                         "Deep-dive generation failed for cluster %s before intuition: %s",
                         cluster_id,
                         deep_dive_result.error,
+                    )
+                    _set_deep_dive_skip_reason(
+                        conn,
+                        cluster_id,
+                        _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
                     )
                     failed += 1
                     continue
@@ -1176,12 +1401,53 @@ def generate_deep_dives_for_clusters(
 
         try:
             items = _get_cluster_items_for_takeaway(conn, cluster_id)
-            item_ids = [item["item_id"] for item in items]
-            items, paper_ready = _ensure_required_paper_text(conn, cluster_id, items)
-            if not paper_ready:
+            items = _ensure_paper_text_hydrated(conn, cluster_id, items)
+            fulltext_items, abstract_items = _split_paper_items_by_text_quality(items)
+            fulltext_item_ids = [item["item_id"] for item in fulltext_items]
+            if not fulltext_items:
+                abstract_context = _build_abstract_context(abstract_items)
+                if abstract_context:
+                    _set_deep_dive_skip_reason(
+                        conn,
+                        cluster_id,
+                        _DEEP_DIVE_SKIP_REASON_ABSTRACT_ONLY,
+                    )
+                    abstract_result = generate_intuition_from_abstracts(
+                        cluster_title=canonical_title,
+                        abstracts_text=abstract_context,
+                        adapter=adapter,
+                    )
+                    if abstract_result.success and abstract_result.eli5:
+                        _update_cluster_stage3(
+                            conn,
+                            cluster_id,
+                            summary_intuition=abstract_result.eli5,
+                            summary_intuition_item_ids=[
+                                item["item_id"] for item in abstract_items
+                            ],
+                        )
+                        logger.info(
+                            "Cluster %s: generated abstract-only intuition, skipped deep-dive",
+                            cluster_id,
+                        )
+                    else:
+                        logger.warning(
+                            "Cluster %s: abstract-only intuition failed: %s",
+                            cluster_id,
+                            abstract_result.error if abstract_context else "no abstract context",
+                        )
+                else:
+                    _set_deep_dive_skip_reason(
+                        conn,
+                        cluster_id,
+                        _DEEP_DIVE_SKIP_REASON_NO_FULLTEXT,
+                    )
+                    logger.info(
+                        "Cluster %s: skipped deep-dive (no full text paper sources)",
+                        cluster_id,
+                    )
                 skipped += 1
                 continue
-            item_ids = [item["item_id"] for item in items]
 
             # Build source summaries for deep dive
             source_summaries = [
@@ -1192,7 +1458,7 @@ def generate_deep_dives_for_clusters(
                     source_type=item.get("source_type"),
                     full_text=item.get("full_text"),
                 )
-                for item in items
+                for item in fulltext_items
             ]
 
             # Generate deep dive
@@ -1205,6 +1471,7 @@ def generate_deep_dives_for_clusters(
             )
 
             if deep_dive_result.success and deep_dive_result.content:
+                _set_deep_dive_skip_reason(conn, cluster_id, None)
                 deep_dive_markdown = deep_dive_result.content.markdown
                 intuition_result = generate_intuition(
                     IntuitionInput(
@@ -1226,10 +1493,10 @@ def generate_deep_dives_for_clusters(
                         intuition_result.eli5 if intuition_result.success else None
                     ),
                     summary_intuition_item_ids=(
-                        item_ids if intuition_result.success else None
+                        fulltext_item_ids if intuition_result.success else None
                     ),
                     summary_deep_dive=summary_deep_dive,
-                    summary_deep_dive_item_ids=item_ids,
+                    summary_deep_dive_item_ids=fulltext_item_ids,
                 )
                 succeeded += 1
                 logger.info(
@@ -1239,6 +1506,11 @@ def generate_deep_dives_for_clusters(
                     "yes" if intuition_result.success and intuition_result.eli5 else "no",
                 )
             else:
+                _set_deep_dive_skip_reason(
+                    conn,
+                    cluster_id,
+                    _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
+                )
                 logger.warning(
                     "Deep dive generation failed for cluster %s: %s",
                     cluster_id,

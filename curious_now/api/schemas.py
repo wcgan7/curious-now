@@ -160,6 +160,7 @@ class ClusterCard(BaseModel):
     is_watched: bool | None = None
     why_in_feed: WhyInFeed | None = None
     featured_image_url: str | None = None
+    deep_dive_skip_reason: str | None = None
 
 
 class ClustersFeedResponse(BaseModel):
@@ -200,6 +201,7 @@ class ClusterDetail(BaseModel):
     summary_intuition: str | None = None
     summary_intuition_eli20: str | None = None
     summary_deep_dive: str | None = None
+    deep_dive_skip_reason: str | None = None
     assumptions: list[str] = []
     limitations: list[str] = []
     what_could_change_this: list[str] = []
@@ -357,6 +359,57 @@ class SimpleOkResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     status: Literal["ok"]
+
+
+class SavedCluster(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    saved_at: datetime
+    cluster: ClusterCard
+
+
+class User(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    email: str
+    created_at: datetime
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user: User
+
+
+class UserPrefs(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    reading_mode_default: Literal["intuition", "deep"] = "intuition"
+    followed_topic_ids: list[UUID] = []
+    followed_entity_ids: list[UUID] = []
+    blocked_source_ids: list[UUID] = []
+    saved_cluster_ids: list[UUID] = []
+    hidden_cluster_ids: list[UUID] = []
+    notification_settings: dict[str, Any] = {}
+
+
+class UserPrefsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    prefs: UserPrefs
+
+
+class UserSavesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    saved: list[SavedCluster]
+
+
+class UserFollowedEntitiesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    entities: list[Entity]
 
 
 def simple_ok() -> SimpleOkResponse:
@@ -746,3 +799,4 @@ class ClusterUpdatesResponse(BaseModel):
 ClusterDetail.model_rebuild()
 SearchResponse.model_rebuild()
 EntityDetail.model_rebuild()
+UserFollowedEntitiesResponse.model_rebuild()

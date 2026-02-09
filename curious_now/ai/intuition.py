@@ -145,6 +145,34 @@ Constraints:
 - Do not force analogies.
 - Output ONLY the paragraph text."""
 
+ABSTRACT_ELI5_SYSTEM_PROMPT = """You are explaining a research abstract to a curious general reader.
+
+Goal: Provide a plain-language short explainer (ELI5-style) based only on the supplied abstracts.
+
+Rules:
+- Stay strictly grounded in the provided abstract text.
+- Do not add methods, results, or implications that are not explicitly present.
+- Avoid certainty language when abstracts are limited.
+- No hype, no filler."""
+
+ABSTRACT_ELI5_USER_PROMPT_TEMPLATE = """Topic: {cluster_title}
+
+Abstract sources:
+{abstracts_text}
+
+Task:
+Write one short paragraph that explains:
+- What this research is about
+- The problem it addresses
+- What appears to be the main idea at a high level
+
+Constraints:
+- Use only what is present in the abstracts.
+- Do not introduce new facts, numbers, or claims.
+- Mention that this is based on abstracts only.
+- Target length: ~60-100 words.
+- Output ONLY the paragraph text."""
+
 
 def _word_count(text: str) -> int:
     return len(text.split())
@@ -354,6 +382,65 @@ def generate_intuition(
         eli5_rerun_shorten=eli5_rerun,
         eli20_new_digit_flag=eli20_digit_flag,
         eli5_new_digit_flag=eli5_digit_flag,
+    )
+
+
+def generate_intuition_from_abstracts(
+    *,
+    cluster_title: str,
+    abstracts_text: str,
+    adapter: LLMAdapter | None = None,
+) -> IntuitionResult:
+    """Generate ELI5-only intuition from abstract text when full text is unavailable."""
+    if not cluster_title:
+        return IntuitionResult.failure("No cluster title provided")
+    if not abstracts_text or not abstracts_text.strip():
+        return IntuitionResult.failure("No abstract text provided")
+
+    if adapter is None:
+        adapter = get_llm_adapter()
+
+    user_prompt = ABSTRACT_ELI5_USER_PROMPT_TEMPLATE.format(
+        cluster_title=cluster_title,
+        abstracts_text=abstracts_text,
+    )
+    response = adapter.complete(
+        user_prompt,
+        system_prompt=ABSTRACT_ELI5_SYSTEM_PROMPT,
+        max_tokens=350,
+        temperature=0.25,
+    )
+    if not response.success:
+        return IntuitionResult.failure(response.error or "ELI5 from abstracts generation failed")
+
+    eli5_text = _clean_output(response.text)
+    if not eli5_text:
+        return IntuitionResult.failure("ELI5 from abstracts generation failed")
+
+    eli5_words = _word_count(eli5_text)
+    new_digit_flag = _has_new_digits(abstracts_text, eli5_text)
+    confidence = 0.62
+    if ELI5_TARGET_MIN_WORDS <= eli5_words <= ELI5_TARGET_MAX_WORDS:
+        confidence += 0.08
+    elif eli5_words > ELI5_HARD_MAX_WORDS or eli5_words < 30:
+        confidence -= 0.1
+    if new_digit_flag:
+        confidence -= 0.1
+    confidence = max(0.0, min(1.0, confidence))
+
+    return IntuitionResult(
+        intuition=eli5_text,
+        eli20="",
+        eli5=eli5_text,
+        confidence=confidence,
+        model=response.model,
+        success=True,
+        eli20_word_count=0,
+        eli5_word_count=eli5_words,
+        eli20_rerun_shorten=False,
+        eli5_rerun_shorten=False,
+        eli20_new_digit_flag=False,
+        eli5_new_digit_flag=new_digit_flag,
     )
 
 
