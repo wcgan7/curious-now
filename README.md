@@ -69,8 +69,8 @@ Prereqs:
    - `make migrate`
 5. Import a source pack (sample included):
    - `python -m curious_now.cli import-source-pack config/source_pack.sample.v0.json`
-6. (Optional) Seed topics (sample included):
-   - `python -m curious_now.cli seed-topics`
+6. (Optional) Seed topics (v1 taxonomy, sample included):
+   - `python -m curious_now.cli seed-topics-v1`
 7. Run the API:
    - `make api`
 
@@ -149,7 +149,7 @@ All CLI commands are invoked as `python -m curious_now.cli ...` (or via the `mak
 - Purge logs by retention policy (dry-run by default): `python -m curious_now.cli purge-logs`
 - Ingest due feeds: `python -m curious_now.cli ingest --force`
 - Cluster unassigned items: `python -m curious_now.cli cluster`
-- Seed topics: `python -m curious_now.cli seed-topics`
+- Seed topics (v1): `python -m curious_now.cli seed-topics-v1`
 - Tag topics for recent clusters: `python -m curious_now.cli tag-topics`
 - Recompute trending: `python -m curious_now.cli recompute-trending`
 - Run end-to-end pipeline: `python -m curious_now.cli pipeline --force`

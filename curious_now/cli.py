@@ -32,12 +32,10 @@ from curious_now.retention import purge_logs
 from curious_now.settings import get_settings
 from curious_now.topic_tagging import (
     backfill_topics_v1,
-    load_topic_seed,
     load_topic_seed_v1,
     quarantine_untaggable_clusters,
     rebuild_empty_search_texts,
     run_tagging_maintenance,
-    seed_topics,
     seed_topics_v1,
     tag_recent_clusters,
     tag_recent_clusters_hybrid,
@@ -190,13 +188,20 @@ def cmd_recompute_trending(args: argparse.Namespace) -> int:
 
 
 def cmd_seed_topics(args: argparse.Namespace) -> int:
+    """Seed topics from v1 format (legacy command alias)."""
     settings = get_settings()
     db = DB(settings.database_url)
     now = _parse_now(args.now)
-    topics = load_topic_seed(Path(args.path) if args.path else None)
+    seed = load_topic_seed_v1(Path(args.path) if args.path else None)
     with db.connect(autocommit=True) as conn:
-        inserted = seed_topics(conn, topics=topics, now_utc=now)
-    print(f"Seeded topics: {inserted} inserted; {len(topics) - inserted} updated.")
+        result = seed_topics_v1(conn, seed=seed, now_utc=now)
+    print(
+        f"Seeded topics: "
+        f"{result.categories_inserted} categories inserted, "
+        f"{result.categories_updated} updated; "
+        f"{result.subtopics_inserted} subtopics inserted, "
+        f"{result.subtopics_updated} updated."
+    )
     return 0
 
 
@@ -372,10 +377,16 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
         )
 
     if args.seed_topics:
-        topics = load_topic_seed(Path(args.topics_seed) if args.topics_seed else None)
+        seed = load_topic_seed_v1(Path(args.topics_seed) if args.topics_seed else None)
         with db.connect(autocommit=True) as conn:
-            inserted = seed_topics(conn, topics=topics, now_utc=now)
-        print(f"Seeded topics: {inserted} inserted; {len(topics) - inserted} updated.")
+            result = seed_topics_v1(conn, seed=seed, now_utc=now)
+        print(
+            "Seeded topics: "
+            f"{result.categories_inserted} categories inserted, "
+            f"{result.categories_updated} updated; "
+            f"{result.subtopics_inserted} subtopics inserted, "
+            f"{result.subtopics_updated} updated."
+        )
 
     with db.connect(autocommit=True) as conn:
         ing = ingest_due_feeds(
@@ -585,8 +596,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_trending.set_defaults(func=cmd_recompute_trending)
 
-    p_seed_topics = sub.add_parser("seed-topics", help="Seed topics from a JSON file (idempotent)")
-    p_seed_topics.add_argument("--path", type=str, default=None, help="Path to topics.seed.v0.json")
+    p_seed_topics = sub.add_parser(
+        "seed-topics",
+        help="Seed topics from v1 format (alias of seed-topics-v1)",
+    )
+    p_seed_topics.add_argument("--path", type=str, default=None, help="Path to topics.seed.v1.json")
     p_seed_topics.add_argument(
         "--now", type=str, default=None, help="Override current time (ISO-8601)"
     )
@@ -697,7 +711,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_pipeline.add_argument("--source-pack", type=str, default=None)
     p_pipeline.add_argument("--seed-topics", action="store_true", default=False)
-    p_pipeline.add_argument("--topics-seed", type=str, default=None)
+    p_pipeline.add_argument(
+        "--topics-seed",
+        type=str,
+        default=None,
+        help="Path to topics.seed.v1.json (used with --seed-topics)",
+    )
     p_pipeline.add_argument("--feed-id", type=UUID, default=None)
     p_pipeline.add_argument("--limit-feeds", type=int, default=25)
     p_pipeline.add_argument("--max-items-per-feed", type=int, default=200)

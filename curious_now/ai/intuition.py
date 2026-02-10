@@ -171,7 +171,43 @@ Constraints:
 - Do not introduce new facts, numbers, or claims.
 - Mention that this is based on abstracts only.
 - Target length: ~60-100 words.
-- Output ONLY the paragraph text."""
+- Output ONLY the paragraph text.
+- If there is not enough information in the abstracts to write a meaningful summary, output exactly: INSUFFICIENT_CONTEXT"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# News/Article Summary (for non-paper sources)
+# ─────────────────────────────────────────────────────────────────────────────
+
+NEWS_SUMMARY_MIN_CONTENT_CHARS = 300  # Minimum content length to attempt summary
+
+NEWS_SUMMARY_SYSTEM_PROMPT = """You are summarizing a news article or press release for a curious reader.
+
+Goal: Provide a brief, factual summary of what this news item is about.
+
+Rules:
+- Stay strictly grounded in the provided title and content.
+- Do not invent details, statistics, or implications not present in the source.
+- Do not speculate about causes, consequences, or future developments.
+- Use plain language.
+- No hype, no filler."""
+
+NEWS_SUMMARY_USER_PROMPT_TEMPLATE = """Title: {title}
+
+Content:
+{content}
+
+Task:
+Write 1-2 sentences summarizing what this news item is about.
+
+Constraints:
+- Use ONLY information present in the title and content above.
+- Do NOT invent or hallucinate any details, numbers, or claims.
+- If the content is too brief or vague to summarize meaningfully, output exactly: INSUFFICIENT_CONTEXT
+- Target length: 30-60 words.
+- Output ONLY the summary text (or INSUFFICIENT_CONTEXT)."""
+
+INSUFFICIENT_CONTEXT_MARKER = "INSUFFICIENT_CONTEXT"
 
 
 def _word_count(text: str) -> int:
@@ -414,6 +450,12 @@ def generate_intuition_from_abstracts(
         return IntuitionResult.failure(response.error or "ELI5 from abstracts generation failed")
 
     eli5_text = _clean_output(response.text)
+
+    # Check if LLM indicated insufficient context
+    if INSUFFICIENT_CONTEXT_MARKER in eli5_text.upper():
+        logger.info("Abstract ELI5: LLM indicated insufficient context for: %s", cluster_title)
+        return IntuitionResult.failure("Insufficient context in abstracts")
+
     if not eli5_text:
         return IntuitionResult.failure("ELI5 from abstracts generation failed")
 
@@ -464,3 +506,143 @@ def generate_intuition_from_db_data(
     )
 
     return generate_intuition(input_data, adapter=adapter)
+
+
+@dataclass
+class NewsSummaryResult:
+    """Result of news/article summary generation."""
+
+    summary: str
+    confidence: float
+    model: str
+    success: bool = True
+    error: str | None = None
+    word_count: int = 0
+    insufficient_context: bool = False
+
+    @staticmethod
+    def failure(error: str) -> NewsSummaryResult:
+        """Create a failure result."""
+        return NewsSummaryResult(
+            summary="",
+            confidence=0.0,
+            model="unknown",
+            success=False,
+            error=error,
+        )
+
+    @staticmethod
+    def no_context() -> NewsSummaryResult:
+        """Create an insufficient context result."""
+        return NewsSummaryResult(
+            summary="",
+            confidence=0.0,
+            model="unknown",
+            success=True,  # Not a failure, just insufficient content
+            insufficient_context=True,
+        )
+
+
+def generate_news_summary(
+    *,
+    title: str,
+    snippet: str | None = None,
+    full_text: str | None = None,
+    adapter: LLMAdapter | None = None,
+) -> NewsSummaryResult:
+    """Generate a brief summary for news articles and other non-paper sources.
+
+    This is simpler than ELI5/ELI20 - just a factual summary of what the news is about.
+    Returns insufficient_context=True if there's not enough information.
+
+    Content selection (tiered):
+    1. full_text if available and >= threshold
+    2. snippet if >= threshold
+    3. insufficient_context otherwise
+
+    Args:
+        title: Article title
+        snippet: Article snippet/excerpt (may be None or short)
+        full_text: Full article text if available (preferred over snippet)
+        adapter: LLM adapter to use
+
+    Returns:
+        NewsSummaryResult with summary or insufficient_context flag
+    """
+    if not title:
+        return NewsSummaryResult.failure("No title provided")
+
+    # Tiered content selection: full_text → snippet → skip
+    full_text_clean = (full_text or "").strip()
+    snippet_clean = (snippet or "").strip()
+
+    content_text: str | None = None
+    content_source: str = ""
+
+    if len(full_text_clean) >= NEWS_SUMMARY_MIN_CONTENT_CHARS:
+        # Truncate full_text to reasonable length for LLM (first ~2000 chars)
+        content_text = full_text_clean[:2000]
+        content_source = "full_text"
+    elif len(snippet_clean) >= NEWS_SUMMARY_MIN_CONTENT_CHARS:
+        content_text = snippet_clean
+        content_source = "snippet"
+    else:
+        logger.info(
+            "News summary skipped: insufficient content (full_text=%d, snippet=%d chars < %d minimum)",
+            len(full_text_clean),
+            len(snippet_clean),
+            NEWS_SUMMARY_MIN_CONTENT_CHARS,
+        )
+        return NewsSummaryResult.no_context()
+
+    if adapter is None:
+        adapter = get_llm_adapter()
+
+    user_prompt = NEWS_SUMMARY_USER_PROMPT_TEMPLATE.format(
+        title=title,
+        content=content_text,
+    )
+
+    logger.debug("Generating news summary from %s (%d chars)", content_source, len(content_text))
+
+    response = adapter.complete(
+        user_prompt,
+        system_prompt=NEWS_SUMMARY_SYSTEM_PROMPT,
+        max_tokens=150,
+        temperature=0.2,
+    )
+
+    if not response.success:
+        return NewsSummaryResult.failure(response.error or "News summary generation failed")
+
+    summary_text = _clean_output(response.text)
+
+    # Check if LLM indicated insufficient context
+    if INSUFFICIENT_CONTEXT_MARKER in summary_text.upper():
+        logger.info("News summary: LLM indicated insufficient context for title: %s", title)
+        return NewsSummaryResult.no_context()
+
+    if not summary_text:
+        return NewsSummaryResult.failure("News summary generation returned empty")
+
+    word_count = _word_count(summary_text)
+    new_digit_flag = _has_new_digits(f"{title} {content_text}", summary_text)
+
+    # Simple confidence calculation
+    confidence = 0.70
+    if 30 <= word_count <= 60:
+        confidence += 0.1
+    elif word_count > 100 or word_count < 15:
+        confidence -= 0.15
+    if new_digit_flag:
+        confidence -= 0.15  # Penalize hallucinated numbers
+
+    confidence = max(0.0, min(1.0, confidence))
+
+    return NewsSummaryResult(
+        summary=summary_text,
+        confidence=confidence,
+        model=response.model,
+        success=True,
+        word_count=word_count,
+    )

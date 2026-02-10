@@ -77,7 +77,11 @@ export function SearchPage() {
                 </h2>
                 <div className={styles.topicGrid}>
                   {query.data.topics.map((t) => (
-                    <Link key={t.topic_id} href={`/topic/${t.topic_id}`} className={styles.topicCard}>
+                    <Link
+                      key={t.topic_id}
+                      href={`${t.topic_type === 'category' ? '/category' : '/topic'}/${t.topic_id}`}
+                      className={styles.topicCard}
+                    >
                       <div className={styles.topicName}>{t.name}</div>
                       {t.description_short ? (
                         <div className={styles.topicDesc}>{t.description_short}</div>
@@ -106,4 +110,3 @@ export function SearchPage() {
     </main>
   );
 }
-

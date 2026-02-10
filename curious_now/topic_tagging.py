@@ -16,16 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class TopicSeed:
-    """V0 format: flat list of topics with optional parent_topic_id."""
-
-    name: str
-    description_short: str | None
-    aliases: list[str]
-    parent_topic_id: UUID | None
-
-
-@dataclass(frozen=True)
 class CategorySeed:
     """V1 format: top-level category."""
 
@@ -99,40 +89,6 @@ def _contains_phrase(haystack_norm: str, phrase_norm: str) -> bool:
     if not phrase_norm:
         return False
     return f" {phrase_norm} " in haystack_norm
-
-
-def load_topic_seed(path: Path | None = None) -> list[TopicSeed]:
-    p = path or (_repo_root() / "config" / "topics.seed.v0.json")
-    raw = json.loads(p.read_text(encoding="utf-8"))
-    topics = raw.get("topics")
-    if not isinstance(topics, list):
-        raise ValueError("topics.seed.v0.json must contain a top-level 'topics' array")
-
-    out: list[TopicSeed] = []
-    for t in topics:
-        if not isinstance(t, dict):
-            continue
-        name = t.get("name")
-        if not isinstance(name, str) or not name.strip():
-            continue
-        aliases_raw = t.get("aliases")
-        aliases = [str(a) for a in aliases_raw] if isinstance(aliases_raw, list) else []
-        parent_topic_id = t.get("parent_topic_id")
-        out.append(
-            TopicSeed(
-                name=" ".join(name.split()),
-                description_short=(
-                    " ".join(str(t.get("description_short")).split())
-                    if isinstance(t.get("description_short"), str)
-                    else None
-                ),
-                aliases=[a for a in (" ".join(x.split()) for x in aliases) if a],
-                parent_topic_id=(
-                    UUID(str(parent_topic_id)) if isinstance(parent_topic_id, str) else None
-                ),
-            )
-        )
-    return out
 
 
 def load_topic_seed_v1(path: Path | None = None) -> TopicSeedV1:
@@ -288,39 +244,6 @@ def seed_topics_v1(
         subtopics_inserted=subtopics_inserted,
         subtopics_updated=subtopics_updated,
     )
-
-
-def seed_topics(
-    conn: psycopg.Connection[Any],
-    *,
-    topics: list[TopicSeed],
-    now_utc: datetime | None = None,
-) -> int:
-    now = now_utc or datetime.now(timezone.utc)
-    if now.tzinfo is None:
-        raise ValueError("now_utc must be timezone-aware")
-
-    inserted = 0
-    with conn.cursor() as cur:
-        for t in topics:
-            cur.execute(
-                """
-                INSERT INTO topics(name, description_short, aliases, parent_topic_id, updated_at)
-                VALUES (%s,%s,%s,%s,%s)
-                ON CONFLICT (name)
-                DO UPDATE SET
-                  description_short = EXCLUDED.description_short,
-                  aliases = EXCLUDED.aliases,
-                  parent_topic_id = EXCLUDED.parent_topic_id,
-                  updated_at = EXCLUDED.updated_at
-                RETURNING (xmax = 0) AS inserted;
-                """,
-                (t.name, t.description_short, Jsonb(t.aliases), t.parent_topic_id, now),
-            )
-            row = cur.fetchone()
-            if row and bool(_row_get(row, "inserted", 0)):
-                inserted += 1
-    return inserted
 
 
 def _load_topics(conn: psycopg.Connection[Any]) -> list[TopicDef]:

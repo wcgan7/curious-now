@@ -7,8 +7,8 @@ import { env } from '@/lib/config/env';
 import styles from './TopicPage.module.css';
 
 export function TopicPage({ detail }: { detail: TopicDetail }) {
-  const topicType = (detail as TopicDetail & { topic_type?: 'category' | 'subtopic' | null })
-    .topic_type;
+  const topic = detail.topic;
+  const topicType = topic.topic_type;
   const isCategory = topicType === 'category';
 
   return (
@@ -17,19 +17,19 @@ export function TopicPage({ detail }: { detail: TopicDetail }) {
         <header className={styles.header}>
           <div className={styles.topRow}>
             <div className={styles.titleBlock}>
-              <h1 className={styles.title}>{detail.name}</h1>
-              {detail.description_short ? (
-                <p className={styles.subtitle}>{detail.description_short}</p>
+              <h1 className={styles.title}>{topic.name}</h1>
+              {topic.description_short ? (
+                <p className={styles.subtitle}>{topic.description_short}</p>
               ) : null}
             </div>
           </div>
 
           <div className={styles.links}>
-            <Link className={styles.link} href={`/search?q=${encodeURIComponent(detail.name)}`}>
+            <Link className={styles.link} href={`/search?q=${encodeURIComponent(topic.name)}`}>
               Search related
             </Link>
-            {env.features.lineage ? (
-              <Link className={styles.link} href={`/topic/${detail.topic_id}/lineage`}>
+            {env.features.lineage && !isCategory ? (
+              <Link className={styles.link} href={`/topic/${topic.topic_id}/lineage`}>
                 Lineage
               </Link>
             ) : null}

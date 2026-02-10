@@ -34,6 +34,8 @@ from curious_now.ai.intuition import (
     IntuitionResult,
     generate_intuition,
     generate_intuition_from_abstracts,
+    generate_news_summary,
+    NEWS_SUMMARY_MIN_CONTENT_CHARS,
 )
 from curious_now.ai.llm_adapter import LLMAdapter, get_llm_adapter
 from curious_now.ai.takeaways import (
@@ -1254,38 +1256,87 @@ def generate_intuition_for_clusters(
                         )
                         for item in fulltext_items
                     ]
-                else:
-                    source_summaries = [
-                        SourceSummary(
-                            title=item["title"],
-                            snippet=item.get("snippet"),
-                            source_name=item.get("source_name"),
-                            source_type=item.get("source_type"),
-                            full_text=item.get("full_text"),
-                        )
-                        for item in items
-                    ]
-                deep_dive_input = DeepDiveInput(
-                    cluster_title=canonical_title,
-                    source_summaries=source_summaries,
-                )
-                deep_dive_result = generate_deep_dive(deep_dive_input, adapter=adapter)
-                if deep_dive_result.success and deep_dive_result.content:
-                    deep_dive_markdown = deep_dive_result.content.markdown
-                    summary_deep_dive_text = deep_dive_to_json(deep_dive_result.content)
-                    _set_deep_dive_skip_reason(conn, cluster_id, None)
-                else:
-                    logger.warning(
-                        "Deep-dive generation failed for cluster %s before intuition: %s",
-                        cluster_id,
-                        deep_dive_result.error,
+                    # Generate deep dive only for paper sources with full text
+                    deep_dive_input = DeepDiveInput(
+                        cluster_title=canonical_title,
+                        source_summaries=source_summaries,
                     )
-                    _set_deep_dive_skip_reason(
+                    deep_dive_result = generate_deep_dive(deep_dive_input, adapter=adapter)
+                    if deep_dive_result.success and deep_dive_result.content:
+                        deep_dive_markdown = deep_dive_result.content.markdown
+                        summary_deep_dive_text = deep_dive_to_json(deep_dive_result.content)
+                        _set_deep_dive_skip_reason(conn, cluster_id, None)
+                    else:
+                        logger.warning(
+                            "Deep-dive generation failed for cluster %s before intuition: %s",
+                            cluster_id,
+                            deep_dive_result.error,
+                        )
+                        _set_deep_dive_skip_reason(
+                            conn,
+                            cluster_id,
+                            _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
+                        )
+                        failed += 1
+                        continue
+                else:
+                    # Non-paper sources (news, journalism, etc.): use simple news summary
+                    # No deep dive for these - the article itself is the explanation
+                    if not items:
+                        skipped += 1
+                        logger.info(
+                            "Cluster %s skipped: no items for news summary",
+                            cluster_id,
+                        )
+                        continue
+
+                    # Use first item's content for news summary (prefer full_text over snippet)
+                    first_item = items[0]
+                    news_result = generate_news_summary(
+                        title=first_item.get("title", canonical_title),
+                        snippet=first_item.get("snippet"),
+                        full_text=first_item.get("full_text"),
+                        adapter=adapter,
+                    )
+
+                    if news_result.insufficient_context:
+                        skipped += 1
+                        logger.info(
+                            "Cluster %s skipped: insufficient context for news summary",
+                            cluster_id,
+                        )
+                        continue
+
+                    if not news_result.success:
+                        failed += 1
+                        logger.warning(
+                            "News summary generation failed for cluster %s: %s",
+                            cluster_id,
+                            news_result.error,
+                        )
+                        continue
+
+                    # Store news summary in summary_intuition (no deep dive, no ELI20)
+                    confidence_band = _compute_confidence_band(content_types, source_count)
+                    anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
+                    method_badges = _compute_method_badges(content_types)
+
+                    _update_cluster_stage3(
                         conn,
                         cluster_id,
-                        _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
+                        summary_intuition=news_result.summary,
+                        summary_intuition_item_ids=item_ids,
+                        confidence_band=confidence_band,
+                        anti_hype_flags=anti_hype_flags,
+                        method_badges=method_badges,
                     )
-                    failed += 1
+                    succeeded += 1
+                    logger.info(
+                        "News summary generated for cluster %s (words=%s confidence=%.2f)",
+                        cluster_id,
+                        news_result.word_count,
+                        news_result.confidence,
+                    )
                     continue
 
             # Generate layered intuition from deep-dive only

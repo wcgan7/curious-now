@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Maximum character length for takeaways
 MAX_TAKEAWAY_LENGTH = 280
 
+# Minimum content requirements for takeaway generation
+MIN_TOTAL_CONTENT_CHARS = 80  # Minimum total chars across title + snippets
+INSUFFICIENT_CONTEXT_MARKER = "INSUFFICIENT_CONTEXT"
+
 
 @dataclass
 class TakeawayInput:
@@ -92,8 +96,10 @@ Requirements:
 - Maximum {max_length} characters
 - Plain language, no jargon
 - Be specific about what this means for people
+- Do NOT invent or hallucinate any details not present in the articles
+- If there is not enough information to write a meaningful takeaway, output exactly: INSUFFICIENT_CONTEXT
 
-Respond with ONLY the takeaway text, nothing else."""
+Respond with ONLY the takeaway text (or INSUFFICIENT_CONTEXT), nothing else."""
 
 
 def _format_articles(items: list[ItemSummary]) -> str:
@@ -118,6 +124,15 @@ def _format_topics(topic_names: list[str] | None) -> str:
     return f"Topics: {', '.join(topic_names)}\n"
 
 
+def _calculate_total_content_length(input_data: TakeawayInput) -> int:
+    """Calculate total content length from title and snippets."""
+    total = len(input_data.cluster_title or "")
+    for item in input_data.items:
+        total += len(item.title or "")
+        total += len(item.snippet or "")
+    return total
+
+
 def generate_takeaway(
     input_data: TakeawayInput,
     *,
@@ -140,6 +155,17 @@ def generate_takeaway(
 
     if not input_data.cluster_title:
         return TakeawayResult.failure("No cluster title provided")
+
+    # Content gating: check minimum content threshold
+    total_content = _calculate_total_content_length(input_data)
+    if total_content < MIN_TOTAL_CONTENT_CHARS:
+        logger.info(
+            "Takeaway skipped: insufficient content (%d chars < %d minimum) for '%s'",
+            total_content,
+            MIN_TOTAL_CONTENT_CHARS,
+            input_data.cluster_title[:50],
+        )
+        return TakeawayResult.failure("Insufficient content for takeaway generation")
 
     # Get adapter
     if adapter is None:
@@ -176,6 +202,14 @@ def generate_takeaway(
         takeaway = takeaway[1:-1]
     if takeaway.startswith("'") and takeaway.endswith("'"):
         takeaway = takeaway[1:-1]
+
+    # Check if LLM indicated insufficient context
+    if INSUFFICIENT_CONTEXT_MARKER in takeaway.upper():
+        logger.info(
+            "Takeaway skipped: LLM returned insufficient context for '%s'",
+            input_data.cluster_title[:50],
+        )
+        return TakeawayResult.failure("LLM indicated insufficient context")
 
     # Truncate if too long (LLM might exceed limit)
     if len(takeaway) > max_length:

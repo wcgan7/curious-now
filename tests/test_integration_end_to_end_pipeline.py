@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from curious_now.clustering import cluster_unassigned_items
 from curious_now.ingestion import ingest_due_feeds
-from curious_now.topic_tagging import load_topic_seed, seed_topics, tag_recent_clusters
+from curious_now.topic_tagging import load_topic_seed_v1, seed_topics_v1, tag_recent_clusters
 
 
 @pytest.fixture()
@@ -72,8 +72,8 @@ def test_end_to_end_pipeline_ingest_cluster_tag(
     feed_id = uuid4()
 
     # Seed topics so Stage 2 tagging has something to attach.
-    topics = load_topic_seed()
-    seed_topics(db_conn, topics=topics, now_utc=now)
+    seed = load_topic_seed_v1()
+    seed_topics_v1(db_conn, seed=seed, now_utc=now)
 
     with db_conn.cursor() as cur:
         cur.execute(

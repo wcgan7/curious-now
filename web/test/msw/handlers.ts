@@ -45,7 +45,11 @@ export const handlers = [
             },
           ],
           topics: [
-            { topic_id: '00000000-0000-0000-0000-000000000010', name: 'Artificial Intelligence' },
+            {
+              topic_id: '00000000-0000-0000-0000-000000000010',
+              name: 'Artificial Intelligence',
+              topic_type: 'category',
+            },
           ],
         },
         { status: 200 }

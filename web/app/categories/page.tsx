@@ -4,9 +4,27 @@ import { getTopics } from '@/lib/api/topics';
 
 import styles from './page.module.css';
 
+const SEEDED_CATEGORY_ORDER = [
+  'Artificial Intelligence',
+  'Computing',
+  'Life Sciences',
+  'Health & Medicine',
+  'Physics',
+  'Chemistry',
+  'Earth & Environment',
+  'Climate',
+  'Space',
+  'Energy',
+  'Materials & Engineering',
+  'Math & Economics',
+  'Mind & Behavior',
+] as const;
+const SEEDED_CATEGORY_RANK: ReadonlyMap<string, number> = new Map(
+  SEEDED_CATEGORY_ORDER.map((name, idx) => [name, idx] as const)
+);
+
 export default async function CategoriesPage() {
   const topics = await getTopics();
-  const categories = topics.topics.filter((topic) => topic.topic_type === 'category');
   const subtopicsByCategory = new Map<string, number>();
 
   for (const topic of topics.topics) {
@@ -16,6 +34,20 @@ export default async function CategoriesPage() {
       (subtopicsByCategory.get(topic.parent_topic_id) || 0) + 1
     );
   }
+  const categories = topics.topics
+    .filter(
+      (topic) => topic.topic_type === 'category' && (subtopicsByCategory.get(topic.topic_id) || 0) > 0
+    )
+    .sort((a, b) => {
+      const aIdx = SEEDED_CATEGORY_RANK.get(a.name);
+      const bIdx = SEEDED_CATEGORY_RANK.get(b.name);
+      if (aIdx != null || bIdx != null) {
+        if (aIdx == null) return 1;
+        if (bIdx == null) return -1;
+        return aIdx - bIdx;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
   return (
     <main className={styles.main}>

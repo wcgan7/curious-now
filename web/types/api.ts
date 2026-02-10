@@ -2,8 +2,6 @@ import type { components } from '@/types/api.generated';
 
 export type ContentType = components['schemas']['ContentType'];
 export type ClustersFeedResponse = components['schemas']['ClustersFeedResponse'];
-export type TopicDetail = components['schemas']['TopicDetail'];
-export type SearchResponse = components['schemas']['SearchResponse'];
 export type GlossaryLookupResponse = components['schemas']['GlossaryLookupResponse'];
 export type TopicLineageResponse = components['schemas']['TopicLineageResponse'];
 export type ClusterUpdatesResponse = components['schemas']['ClusterUpdatesResponse'];
@@ -37,8 +35,20 @@ export type Topic = components['schemas']['Topic'] & {
   topic_type?: 'category' | 'subtopic' | null;
 };
 
+export type TopicDetail = {
+  topic: Topic;
+  latest_clusters: ClusterCard[];
+  trending_clusters?: ClusterCard[];
+};
+
 export type TopicsResponse = {
   topics: Topic[];
+};
+
+export type SearchResponse = {
+  query: string;
+  clusters: ClusterCard[];
+  topics?: Topic[] | null;
 };
 
 export type ClusterCard = components['schemas']['ClusterCard'] & {

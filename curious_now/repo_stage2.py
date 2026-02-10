@@ -520,7 +520,7 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
 
     with conn.cursor() as cur:
         cur.execute(
-            """
+            f"""
             SELECT
               c.id AS cluster_id,
               c.canonical_title,
@@ -548,7 +548,7 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
         latest_rows = cur.fetchall()
 
         cur.execute(
-            """
+            f"""
             SELECT
               c.id AS cluster_id,
               c.canonical_title,
