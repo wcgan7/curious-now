@@ -40,7 +40,6 @@ describe('StoryPage intuition fallback from deep-dive payload', () => {
           assumptions: [],
           limitations: [],
           what_could_change_this: [],
-          confidence_band: 'early',
           method_badges: [],
           anti_hype_flags: [],
           takeaway_supporting_item_ids: ['21111111-1111-1111-1111-111111111111'],

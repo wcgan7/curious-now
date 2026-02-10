@@ -26,7 +26,7 @@ export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
         </div>
       ) : null}
       <Card.Content>
-        {topCategories.length || topSubtopics.length || cluster.confidence_band ? (
+        {topCategories.length || topSubtopics.length ? (
           <div className={styles.metaRow}>
             <div className={styles.badges}>
               {topCategories.slice(0, 1).map((category) => (
@@ -37,7 +37,6 @@ export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
               {topSubtopics.map((topic) => (
                 <Badge key={topic.topic_id}>{topic.name}</Badge>
               ))}
-              {cluster.confidence_band ? <Badge>{cluster.confidence_band}</Badge> : null}
             </div>
           </div>
         ) : null}

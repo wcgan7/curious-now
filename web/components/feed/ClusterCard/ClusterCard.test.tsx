@@ -14,7 +14,6 @@ describe('ClusterCard', () => {
           distinct_source_count: 2,
           top_topics: [],
           content_type_badges: ['news'],
-          confidence_band: null,
           takeaway: null,
           anti_hype_flags: [],
         }}
@@ -27,4 +26,3 @@ describe('ClusterCard', () => {
     expect(anchors[0].getAttribute('href')).toBe('/story/00000000-0000-0000-0000-000000000001');
   });
 });
-

@@ -481,7 +481,7 @@ def cmd_generate_embeddings(args: argparse.Namespace) -> int:
 
 
 def cmd_enrich_stage3(args: argparse.Namespace) -> int:
-    """Generate Stage 3 enrichment (intuition, deep-dive, confidence, anti-hype flags)."""
+    """Generate Stage 3 enrichment (intuition, deep-dive, anti-hype flags)."""
     settings = get_settings()
     db = DB(settings.database_url)
     with db.connect(autocommit=True) as conn:
@@ -495,7 +495,7 @@ def cmd_enrich_stage3(args: argparse.Namespace) -> int:
         f"{result.clusters_failed} failed."
     )
     if result.clusters_succeeded > 0:
-        print("Generated: intuition, deep-dive, confidence bands, and anti-hype flags.")
+        print("Generated: intuition, deep-dive, and anti-hype flags.")
     return 0
 
 
@@ -776,7 +776,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_enrich = sub.add_parser(
         "enrich-stage3",
-        help="[Legacy] Generate deep-dives, intuition, confidence bands, anti-hype flags"
+        help="[Legacy] Generate deep-dives, intuition, anti-hype flags"
     )
     p_enrich.add_argument(
         "--limit", type=int, default=50, help="Max clusters to process"

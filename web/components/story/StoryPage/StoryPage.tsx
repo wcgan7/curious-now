@@ -255,7 +255,6 @@ export function StoryPage({
                       <TrustBox
                         contentTypeBreakdown={cluster.content_type_breakdown || {}}
                         distinctSourceCount={cluster.distinct_source_count}
-                        confidenceBand={cluster.confidence_band}
                         methodBadges={cluster.method_badges || []}
                         antiHypeFlags={cluster.anti_hype_flags || []}
                         sticky={false}
@@ -268,7 +267,6 @@ export function StoryPage({
                       <TrustBox
                         contentTypeBreakdown={cluster.content_type_breakdown || {}}
                         distinctSourceCount={cluster.distinct_source_count}
-                        confidenceBand={cluster.confidence_band}
                         methodBadges={cluster.method_badges || []}
                         antiHypeFlags={cluster.anti_hype_flags || []}
                         sticky={false}
@@ -294,7 +292,6 @@ export function StoryPage({
                   <TrustBox
                     contentTypeBreakdown={cluster.content_type_breakdown || {}}
                     distinctSourceCount={cluster.distinct_source_count}
-                    confidenceBand={cluster.confidence_band}
                     methodBadges={cluster.method_badges || []}
                     antiHypeFlags={cluster.anti_hype_flags || []}
                     sticky

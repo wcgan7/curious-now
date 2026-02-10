@@ -668,10 +668,6 @@ def admin_patch_cluster(
         fields.append("what_could_change_this = %s")
         params.append(Jsonb(patch.what_could_change_this))
         changed_cols.append("what_could_change_this")
-    if "confidence_band" in fields_set:
-        fields.append("confidence_band = %s")
-        params.append(patch.confidence_band)
-        changed_cols.append("confidence_band")
     if "method_badges" in fields_set:
         fields.append("method_badges = %s")
         params.append(Jsonb(patch.method_badges))

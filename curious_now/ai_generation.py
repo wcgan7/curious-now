@@ -732,29 +732,6 @@ def _get_cluster_content_types(
         return [row["content_type"] for row in cur.fetchall()]
 
 
-def _compute_confidence_band(
-    content_types: list[str],
-    source_count: int,
-) -> str | None:
-    """
-    Compute confidence band based on evidence types.
-
-    Returns: 'early', 'growing', 'established', or None
-    """
-    has_peer_reviewed = "peer_reviewed" in content_types
-    has_preprint = "preprint" in content_types
-    has_report = "report" in content_types
-    has_primary = has_peer_reviewed or has_preprint or has_report
-
-    if has_peer_reviewed and source_count >= 3:
-        return "established"
-    elif has_primary and source_count >= 2:
-        return "growing"
-    elif source_count >= 1:
-        return "early"
-    return None
-
-
 def _compute_anti_hype_flags(
     content_types: list[str],
     source_count: int,
@@ -812,7 +789,6 @@ def _update_cluster_stage3(
     summary_intuition_item_ids: list[UUID] | None = None,
     summary_deep_dive: dict[str, Any] | None = None,
     summary_deep_dive_item_ids: list[UUID] | None = None,
-    confidence_band: str | None = None,
     anti_hype_flags: list[str] | None = None,
     method_badges: list[str] | None = None,
     limitations: list[str] | None = None,
@@ -834,10 +810,6 @@ def _update_cluster_stage3(
         params.append(json.dumps(summary_deep_dive))
         updates.append("summary_deep_dive_supporting_item_ids = %s")
         params.append(json.dumps([str(i) for i in (summary_deep_dive_item_ids or [])]))
-
-    if confidence_band is not None:
-        updates.append("confidence_band = %s")
-        params.append(confidence_band)
 
     if anti_hype_flags is not None:
         updates.append("anti_hype_flags = %s")
@@ -1096,7 +1068,6 @@ def enrich_stage3_for_clusters(
             # ─────────────────────────────────────────────────────────────
             # Compute heuristics
             # ─────────────────────────────────────────────────────────────
-            confidence_band = _compute_confidence_band(content_types, source_count)
             anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
             method_badges = _compute_method_badges(content_types)
 
@@ -1110,7 +1081,6 @@ def enrich_stage3_for_clusters(
                 summary_intuition_item_ids=item_ids if summary_intuition else None,
                 summary_deep_dive=summary_deep_dive,
                 summary_deep_dive_item_ids=item_ids if summary_deep_dive else None,
-                confidence_band=confidence_band,
                 anti_hype_flags=anti_hype_flags,
                 method_badges=method_badges,
             )
@@ -1118,11 +1088,10 @@ def enrich_stage3_for_clusters(
             succeeded += 1
             logger.info(
                 "Stage 3 enrichment complete for cluster %s "
-                "(intuition: %s, deep-dive: %s, confidence: %s)",
+                "(intuition: %s, deep-dive: %s)",
                 cluster_id,
                 "yes" if summary_intuition else "no",
                 "yes" if summary_deep_dive else "no",
-                confidence_band,
             )
 
         except Exception as e:
@@ -1225,7 +1194,6 @@ def generate_intuition_for_clusters(
                                 abstract_result.error,
                             )
                             continue
-                        confidence_band = _compute_confidence_band(content_types, source_count)
                         anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
                         method_badges = _compute_method_badges(content_types)
                         _update_cluster_stage3(
@@ -1235,7 +1203,6 @@ def generate_intuition_for_clusters(
                             summary_intuition_item_ids=[
                                 item["item_id"] for item in abstract_items
                             ],
-                            confidence_band=confidence_band,
                             anti_hype_flags=anti_hype_flags,
                             method_badges=method_badges,
                         )
@@ -1317,7 +1284,6 @@ def generate_intuition_for_clusters(
                         continue
 
                     # Store news summary in summary_intuition (no deep dive, no ELI20)
-                    confidence_band = _compute_confidence_band(content_types, source_count)
                     anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
                     method_badges = _compute_method_badges(content_types)
 
@@ -1326,7 +1292,6 @@ def generate_intuition_for_clusters(
                         cluster_id,
                         summary_intuition=news_result.summary,
                         summary_intuition_item_ids=item_ids,
-                        confidence_band=confidence_band,
                         anti_hype_flags=anti_hype_flags,
                         method_badges=method_badges,
                     )
@@ -1357,7 +1322,6 @@ def generate_intuition_for_clusters(
                     eli5=intuition_result.eli5,
                 )
                 # Also compute heuristics (confidence, flags) since we're here
-                confidence_band = _compute_confidence_band(content_types, source_count)
                 anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
                 method_badges = _compute_method_badges(content_types)
 
@@ -1368,7 +1332,6 @@ def generate_intuition_for_clusters(
                     summary_intuition_item_ids=item_ids,
                     summary_deep_dive=summary_deep_dive,
                     summary_deep_dive_item_ids=item_ids,
-                    confidence_band=confidence_band,
                     anti_hype_flags=anti_hype_flags,
                     method_badges=method_badges,
                 )
