@@ -155,6 +155,8 @@ class ClusterCard(BaseModel):
     method_badges: list[str] = []
     takeaway: str | None = None
     anti_hype_flags: list[str] = []
+    high_impact_label: bool = False
+    high_impact_reasons: list[str] = []
     is_saved: bool | None = None
     is_watched: bool | None = None
     why_in_feed: WhyInFeed | None = None
@@ -206,6 +208,10 @@ class ClusterDetail(BaseModel):
     what_could_change_this: list[str] = []
     method_badges: list[str] = []
     anti_hype_flags: list[str] = []
+    high_impact_label: bool = False
+    high_impact_reasons: list[str] = []
+    high_impact_final_score: float | None = None
+    high_impact_confidence: float | None = None
     takeaway_supporting_item_ids: list[UUID] = []
     summary_intuition_supporting_item_ids: list[UUID] = []
     summary_deep_dive_supporting_item_ids: list[UUID] = []

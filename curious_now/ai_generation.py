@@ -29,13 +29,17 @@ from curious_now.ai.embeddings import (
     generate_cluster_embedding,
     get_embedding_provider,
 )
+from curious_now.ai.impact_rater import (
+    ImpactRaterInput,
+    blend_impact_scores,
+    rate_impact_with_llm,
+)
 from curious_now.ai.intuition import (
     IntuitionInput,
     IntuitionResult,
     generate_intuition,
     generate_intuition_from_abstracts,
     generate_news_summary,
-    NEWS_SUMMARY_MIN_CONTENT_CHARS,
 )
 from curious_now.ai.llm_adapter import LLMAdapter, get_llm_adapter
 from curious_now.ai.takeaways import (
@@ -43,6 +47,15 @@ from curious_now.ai.takeaways import (
     TakeawayInput,
     TakeawayResult,
     generate_takeaway,
+)
+from curious_now.impact_scoring import (
+    HighImpactInput,
+    compute_components,
+    compute_high_impact_score,
+    get_high_impact_rate_windows,
+    high_impact_passes_gates,
+    is_absolute_high_qualifier,
+    resolve_threshold_for_cluster,
 )
 from curious_now.paper_text_hydration import hydrate_paper_text
 
@@ -105,6 +118,34 @@ class GenerateDeepDivesResult:
     clusters_succeeded: int
     clusters_failed: int
     clusters_skipped: int  # Skipped because not a paper
+
+
+@dataclass
+class GenerateHighImpactResult:
+    """Result of high-impact scoring batch."""
+
+    clusters_processed: int
+    clusters_succeeded: int
+    clusters_failed: int
+    clusters_labeled: int
+    clusters_provisional_only: int
+    weekly_rate: float | None = None
+    monthly_rate: float | None = None
+    weekly_in_band: bool | None = None
+    monthly_in_band: bool | None = None
+    llm_attempted: int = 0
+    llm_succeeded: int = 0
+    llm_failed: int = 0
+
+
+@dataclass
+class BackfillTrustSignalsResult:
+    """Result of trust signal backfill batch."""
+
+    clusters_processed: int
+    clusters_updated: int
+    clusters_unchanged: int
+    clusters_failed: int
 
 
 def _get_clusters_needing_takeaways(
@@ -732,6 +773,124 @@ def _get_cluster_content_types(
         return [row["content_type"] for row in cur.fetchall()]
 
 
+def _get_clusters_needing_high_impact(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+    force: bool = False,
+) -> list[dict[str, Any]]:
+    """Get clusters for high-impact scoring."""
+    query = """
+        SELECT
+            c.id AS cluster_id,
+            c.canonical_title,
+            c.takeaway,
+            c.distinct_source_count,
+            c.anti_hype_flags,
+            c.high_impact_assessed_at,
+            c.summary_deep_dive
+        FROM story_clusters c
+        WHERE c.status = 'active'
+          AND c.takeaway IS NOT NULL
+    """
+    if not force:
+        query += """
+          AND (
+            c.high_impact_assessed_at IS NULL
+            OR c.high_impact_assessed_at < c.updated_at
+          )
+        """
+    query += """
+        ORDER BY c.updated_at DESC
+        LIMIT %s;
+    """
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(query, (limit,))
+        return cur.fetchall()
+
+
+def _update_cluster_high_impact(
+    conn: psycopg.Connection[Any],
+    cluster_id: UUID,
+    *,
+    provisional_score: float,
+    final_score: float | None,
+    confidence: float,
+    label: bool,
+    reasons: list[str],
+    version: str,
+    eligible: bool,
+    threshold_bucket: str | None,
+    threshold_value: float | None,
+    debug: dict[str, Any] | None = None,
+) -> None:
+    """Persist high-impact scoring fields on story_clusters."""
+    params = (
+        provisional_score,
+        final_score,
+        confidence,
+        label,
+        json.dumps(reasons),
+        version,
+        eligible,
+        threshold_bucket,
+        threshold_value,
+        json.dumps(debug or {}),
+        cluster_id,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE story_clusters
+                SET high_impact_provisional_score = %s,
+                    high_impact_final_score = %s,
+                    high_impact_confidence = %s,
+                    high_impact_label = %s,
+                    high_impact_reasons = %s::jsonb,
+                    high_impact_version = %s,
+                    high_impact_assessed_at = now(),
+                    high_impact_eligible = %s,
+                    high_impact_threshold_bucket = %s,
+                    high_impact_threshold_value = %s,
+                    high_impact_debug = %s::jsonb
+                WHERE id = %s;
+                """,
+                params,
+            )
+    except psycopg.errors.UndefinedColumn:
+        # Compatibility during rolling deploys before debug migration is applied.
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE story_clusters
+                SET high_impact_provisional_score = %s,
+                    high_impact_final_score = %s,
+                    high_impact_confidence = %s,
+                    high_impact_label = %s,
+                    high_impact_reasons = %s::jsonb,
+                    high_impact_version = %s,
+                    high_impact_assessed_at = now(),
+                    high_impact_eligible = %s,
+                    high_impact_threshold_bucket = %s,
+                    high_impact_threshold_value = %s
+                WHERE id = %s;
+                """,
+                (
+                    provisional_score,
+                    final_score,
+                    confidence,
+                    label,
+                    json.dumps(reasons),
+                    version,
+                    eligible,
+                    threshold_bucket,
+                    threshold_value,
+                    cluster_id,
+                ),
+            )
+
+
 def _compute_anti_hype_flags(
     content_types: list[str],
     source_count: int,
@@ -779,6 +938,83 @@ def _compute_method_badges(content_types: list[str]) -> list[str]:
         badges.append("benchmark")
 
     return badges
+
+
+def backfill_trust_signals_for_clusters(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 5000,
+) -> BackfillTrustSignalsResult:
+    """
+    Recompute anti-hype flags and method badges for active clusters.
+
+    This repairs stale trust metadata for clusters that were enriched before
+    current heuristics or went through partial Stage 3 update paths.
+    """
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT
+                c.id AS cluster_id,
+                c.distinct_source_count,
+                c.anti_hype_flags,
+                c.method_badges,
+                array_remove(array_agg(DISTINCT i.content_type::text), NULL) AS content_types
+            FROM story_clusters c
+            LEFT JOIN cluster_items ci ON ci.cluster_id = c.id
+            LEFT JOIN items i ON i.id = ci.item_id
+            WHERE c.status = 'active'
+            GROUP BY c.id, c.distinct_source_count, c.anti_hype_flags, c.method_badges
+            ORDER BY c.updated_at DESC
+            LIMIT %s;
+            """,
+            (limit,),
+        )
+        rows = cur.fetchall()
+
+    processed = 0
+    updated = 0
+    unchanged = 0
+    failed = 0
+
+    for row in rows:
+        cluster_id = row["cluster_id"]
+        processed += 1
+        try:
+            source_count = int(row.get("distinct_source_count") or 0)
+            content_types = [str(x) for x in (row.get("content_types") or []) if x]
+            expected_flags = _compute_anti_hype_flags(content_types, source_count)
+            expected_badges = _compute_method_badges(content_types)
+
+            current_flags = [str(x) for x in (row.get("anti_hype_flags") or [])]
+            if isinstance(row.get("anti_hype_flags"), str):
+                current_flags = [str(x) for x in (json.loads(row["anti_hype_flags"]) or [])]
+
+            current_badges = [str(x) for x in (row.get("method_badges") or [])]
+            if isinstance(row.get("method_badges"), str):
+                current_badges = [str(x) for x in (json.loads(row["method_badges"]) or [])]
+
+            if current_flags == expected_flags and current_badges == expected_badges:
+                unchanged += 1
+                continue
+
+            _update_cluster_stage3(
+                conn,
+                cluster_id,
+                anti_hype_flags=expected_flags,
+                method_badges=expected_badges,
+            )
+            updated += 1
+        except Exception:
+            logger.exception("Failed trust signal backfill for cluster %s", cluster_id)
+            failed += 1
+
+    return BackfillTrustSignalsResult(
+        clusters_processed=processed,
+        clusters_updated=updated,
+        clusters_unchanged=unchanged,
+        clusters_failed=failed,
+    )
 
 
 def _update_cluster_stage3(
@@ -1541,4 +1777,283 @@ def generate_deep_dives_for_clusters(
         clusters_succeeded=succeeded,
         clusters_failed=failed,
         clusters_skipped=skipped,
+    )
+
+
+def generate_high_impact_for_clusters(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+    force: bool = False,
+    llm_shadow: bool = False,
+    llm_blend: bool = False,
+    adapter: LLMAdapter | None = None,
+) -> GenerateHighImpactResult:
+    """
+    Compute provisional/final high-impact scores and assign calibrated labels.
+
+    Final top-1% labels require full-text eligibility; provisional scores are
+    still persisted for non-eligible clusters to support queue prioritization.
+    """
+    clusters = _get_clusters_needing_high_impact(conn, limit=limit, force=force)
+    processed = 0
+    succeeded = 0
+    failed = 0
+    labeled = 0
+    provisional_only = 0
+    llm_attempted = 0
+    llm_succeeded = 0
+    llm_failed = 0
+    prepared: list[dict[str, Any]] = []
+    llm_mode_enabled = llm_shadow or llm_blend
+    llm_adapter = adapter if llm_mode_enabled else None
+    if llm_mode_enabled and llm_adapter is None:
+        llm_adapter = get_llm_adapter()
+
+    for cluster in clusters:
+        cluster_id = cluster["cluster_id"]
+        processed += 1
+        try:
+            items = _get_cluster_items_for_takeaway(conn, cluster_id)
+            content_types = _get_cluster_content_types(conn, cluster_id)
+            anti_hype_flags = [str(x) for x in (cluster.get("anti_hype_flags") or [])]
+            if isinstance(cluster.get("anti_hype_flags"), str):
+                anti_hype_flags = [
+                    str(x) for x in (json.loads(cluster.get("anti_hype_flags")) or [])
+                ]
+            has_full_text_paper = any(
+                i.get("source_type") in _PAPER_CONTENT_TYPES
+                and _paper_text_kind(i) == "fulltext"
+                for i in items
+            )
+            has_deep_dive = bool(_get_deep_dive_markdown(cluster.get("summary_deep_dive")))
+            input_data = HighImpactInput(
+                takeaway=str(cluster.get("takeaway") or ""),
+                canonical_title=str(cluster.get("canonical_title") or ""),
+                content_types=content_types,
+                anti_hype_flags=anti_hype_flags,
+                distinct_source_count=int(cluster.get("distinct_source_count") or 0),
+                has_full_text_paper=has_full_text_paper and has_deep_dive,
+            )
+            score = compute_high_impact_score(input_data)
+            components = compute_components(input_data)
+            llm_shadow_payload: dict[str, Any] | None = None
+            effective_final_score = score.final_score
+            if llm_mode_enabled:
+                llm_attempted += 1
+                llm_input = ImpactRaterInput(
+                    cluster_title=str(cluster.get("canonical_title") or ""),
+                    takeaway=str(cluster.get("takeaway") or ""),
+                    deep_dive_markdown=_get_deep_dive_markdown(cluster.get("summary_deep_dive")),
+                    content_types=content_types,
+                    distinct_source_count=int(cluster.get("distinct_source_count") or 0),
+                )
+                llm_result = rate_impact_with_llm(llm_input, adapter=llm_adapter)
+                llm_shadow_payload = {
+                    "success": llm_result.success,
+                    "error": llm_result.error,
+                    "model": llm_result.model,
+                    "novelty_score": llm_result.novelty_score,
+                    "translation_score": llm_result.translation_score,
+                    "evidence_score": llm_result.evidence_score,
+                    "impact_score": llm_result.impact_score,
+                    "confidence": llm_result.confidence,
+                    "reasoning": llm_result.reasoning,
+                }
+                if llm_result.success:
+                    llm_succeeded += 1
+                    if llm_blend and score.final_score is not None:
+                        effective_final_score = blend_impact_scores(
+                            score.final_score,
+                            llm_result.impact_score,
+                            deterministic_weight=0.4,
+                            llm_weight=0.6,
+                        )
+                        llm_shadow_payload["blend_applied"] = True
+                        llm_shadow_payload["blended_score"] = effective_final_score
+                else:
+                    llm_failed += 1
+                    if llm_blend:
+                        llm_shadow_payload["blend_applied"] = False
+                        llm_shadow_payload["blended_score"] = score.final_score
+            prepared.append(
+                {
+                    "cluster_id": cluster_id,
+                    "score": score,
+                    "components": components,
+                    "llm_shadow": llm_shadow_payload,
+                    "effective_final_score": effective_final_score,
+                }
+            )
+        except Exception as exc:
+            logger.exception(
+                "Error preparing high-impact score for cluster %s: %s",
+                cluster_id,
+                exc,
+            )
+            failed += 1
+
+    qualified_set_count = sum(
+        1
+        for row in prepared
+        if is_absolute_high_qualifier(
+            final_score=row.get("effective_final_score"),
+            confidence=row["score"].confidence,
+            evidence_score=row["components"].evidence_score,
+        )
+    )
+
+    for row in prepared:
+        cluster_id = row["cluster_id"]
+        score = row["score"]
+        components = row["components"]
+        llm_shadow_payload = row.get("llm_shadow")
+        effective_final_score = row.get("effective_final_score")
+        # First persist pass ensures threshold queries in second pass see current-run scores.
+        try:
+            debug_payload = {
+                "novelty_score": components.novelty_score,
+                "translation_score": components.translation_score,
+                "evidence_score": components.evidence_score,
+                "deterministic_final_score": score.final_score,
+                "effective_final_score": effective_final_score,
+                "threshold": None,
+                "threshold_delta": None,
+                "passed_threshold": False,
+                "passed_confidence": bool(score.confidence >= 0.75),
+                "passed_evidence_gate": bool(components.evidence_score >= 0.35),
+                "qualified_set_count": int(qualified_set_count),
+            }
+            if llm_shadow_payload is not None:
+                debug_payload["llm_shadow"] = llm_shadow_payload
+            threshold_bucket: str | None = None
+            threshold_value: float | None = None
+            _update_cluster_high_impact(
+                conn,
+                cluster_id,
+                provisional_score=score.provisional_score,
+                final_score=score.final_score,
+                confidence=score.confidence,
+                label=False,
+                reasons=list(score.reasons),
+                version=score.version,
+                eligible=score.eligible_for_final,
+                threshold_bucket=threshold_bucket,
+                threshold_value=threshold_value,
+                debug=debug_payload,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Error persisting first-pass high-impact score for cluster %s: %s",
+                cluster_id,
+                exc,
+            )
+            failed += 1
+            continue
+
+        try:
+            threshold_bucket = None
+            threshold_value = None
+            label = False
+            debug_payload = {
+                "novelty_score": components.novelty_score,
+                "translation_score": components.translation_score,
+                "evidence_score": components.evidence_score,
+                "deterministic_final_score": score.final_score,
+                "effective_final_score": effective_final_score,
+                "threshold": None,
+                "threshold_delta": None,
+                "passed_threshold": False,
+                "passed_confidence": bool(score.confidence >= 0.75),
+                "passed_evidence_gate": bool(components.evidence_score >= 0.35),
+                "qualified_set_count": int(qualified_set_count),
+            }
+            if llm_shadow_payload is not None:
+                debug_payload["llm_shadow"] = llm_shadow_payload
+            if score.eligible_for_final and effective_final_score is not None:
+                threshold = resolve_threshold_for_cluster(conn, cluster_id=cluster_id)
+                threshold_bucket = threshold.bucket
+                threshold_value = threshold.threshold
+                debug_payload["threshold"] = threshold.threshold
+                debug_payload["threshold_delta"] = effective_final_score - threshold.threshold
+                debug_payload["passed_threshold"] = bool(
+                    effective_final_score >= threshold.threshold
+                )
+                label = high_impact_passes_gates(
+                    final_score=effective_final_score,
+                    confidence=score.confidence,
+                    evidence_score=components.evidence_score,
+                    threshold=threshold.threshold,
+                    qualified_set_count=qualified_set_count,
+                )
+                if label:
+                    labeled += 1
+            else:
+                provisional_only += 1
+
+            reasons = list(score.reasons)
+            if (
+                label
+                and qualified_set_count >= 2
+                and is_absolute_high_qualifier(
+                    final_score=effective_final_score,
+                    confidence=score.confidence,
+                    evidence_score=components.evidence_score,
+                )
+                and "qualified_set_override" not in reasons
+            ):
+                reasons.append("qualified_set_override")
+
+            _update_cluster_high_impact(
+                conn,
+                cluster_id,
+                provisional_score=score.provisional_score,
+                final_score=effective_final_score,
+                confidence=score.confidence,
+                label=label,
+                reasons=reasons,
+                version=score.version,
+                eligible=score.eligible_for_final,
+                threshold_bucket=threshold_bucket,
+                threshold_value=threshold_value,
+                debug=debug_payload,
+            )
+            succeeded += 1
+        except Exception as exc:
+            logger.exception(
+                "Error persisting second-pass high-impact score for cluster %s: %s",
+                cluster_id,
+                exc,
+            )
+            failed += 1
+
+    weekly_rate: float | None = None
+    monthly_rate: float | None = None
+    weekly_in_band: bool | None = None
+    monthly_in_band: bool | None = None
+    try:
+        windows = get_high_impact_rate_windows(conn, windows_days=(7, 30))
+        for window in windows:
+            if window.days == 7:
+                weekly_rate = window.rate
+                weekly_in_band = window.in_guardrail_band
+            elif window.days == 30:
+                monthly_rate = window.rate
+                monthly_in_band = window.in_guardrail_band
+    except Exception as exc:
+        logger.warning("High-impact rate guardrail audit failed: %s", exc)
+
+    return GenerateHighImpactResult(
+        clusters_processed=processed,
+        clusters_succeeded=succeeded,
+        clusters_failed=failed,
+        clusters_labeled=labeled,
+        clusters_provisional_only=provisional_only,
+        weekly_rate=weekly_rate,
+        monthly_rate=monthly_rate,
+        weekly_in_band=weekly_in_band,
+        monthly_in_band=monthly_in_band,
+        llm_attempted=llm_attempted,
+        llm_succeeded=llm_succeeded,
+        llm_failed=llm_failed,
     )

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import json
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
 from curious_now.ai_generation import (
+    backfill_trust_signals_for_clusters,
     enrich_stage3_for_clusters,
     generate_deep_dives_for_clusters,
     generate_embeddings_for_clusters,
+    generate_high_impact_for_clusters,
     generate_intuition_for_clusters,
     generate_takeaways_for_clusters,
 )
@@ -19,6 +23,7 @@ from curious_now.clustering import (
     recompute_trending,
 )
 from curious_now.db import DB
+from curious_now.impact_scoring import get_high_impact_debug_report, get_high_impact_rate_windows
 from curious_now.ingestion import ingest_due_feeds
 from curious_now.migrations import migrate
 from curious_now.notifications import (
@@ -241,7 +246,8 @@ def cmd_backfill_topics_v1(args: argparse.Namespace) -> int:
         )
     print(
         f"Backfill complete:\n"
-        f"  - Categories: {result.categories_inserted} inserted, {result.categories_updated} updated\n"
+        f"  - Categories: {result.categories_inserted} inserted, "
+        f"{result.categories_updated} updated\n"
         f"  - Subtopics: {result.subtopics_inserted} inserted, {result.subtopics_updated} updated\n"
         f"  - Old assignments cleared: {result.old_assignments_cleared}\n"
         f"  - Clusters tagged: {result.clusters_tagged}/{result.clusters_scanned}"
@@ -535,6 +541,175 @@ def cmd_generate_deep_dives(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_generate_high_impact(args: argparse.Namespace) -> int:
+    """Generate provisional/final high-impact paper scores."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        result = generate_high_impact_for_clusters(
+            conn,
+            limit=int(args.limit),
+            force=bool(args.force),
+            llm_shadow=bool(args.llm_shadow),
+            llm_blend=bool(args.llm_blend),
+        )
+    print(
+        f"High-impact scoring complete: "
+        f"{result.clusters_succeeded}/{result.clusters_processed} succeeded; "
+        f"{result.clusters_failed} failed; "
+        f"{result.clusters_labeled} labeled; "
+        f"{result.clusters_provisional_only} provisional-only."
+    )
+    if result.weekly_rate is not None and result.monthly_rate is not None:
+        weekly_status = "in-band" if result.weekly_in_band else "out-of-band"
+        monthly_status = "in-band" if result.monthly_in_band else "out-of-band"
+        print(
+            "Rate guardrails: "
+            f"7d={result.weekly_rate:.2%} ({weekly_status}), "
+            f"30d={result.monthly_rate:.2%} ({monthly_status})"
+        )
+    if bool(args.llm_shadow) or bool(args.llm_blend):
+        print(
+            "LLM shadow: "
+            f"{result.llm_succeeded}/{result.llm_attempted} succeeded; "
+            f"{result.llm_failed} failed."
+        )
+    if bool(args.llm_blend):
+        print("LLM blend mode: effective final score = 40% deterministic + 60% LLM")
+    return 0
+
+
+def cmd_backfill_trust_signals(args: argparse.Namespace) -> int:
+    """Backfill anti-hype flags and method badges for active clusters."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        result = backfill_trust_signals_for_clusters(
+            conn,
+            limit=int(args.limit),
+        )
+    print(
+        f"Trust signal backfill complete: "
+        f"{result.clusters_updated}/{result.clusters_processed} updated; "
+        f"{result.clusters_unchanged} unchanged; "
+        f"{result.clusters_failed} failed."
+    )
+    return 0
+
+
+def cmd_audit_high_impact_rates(_: argparse.Namespace) -> int:
+    """Audit high-impact label rate guardrails."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        windows = get_high_impact_rate_windows(conn, windows_days=(7, 30))
+    print("High-impact label rate audit:")
+    for window in windows:
+        status = "in-band" if window.in_guardrail_band else "out-of-band"
+        print(
+            f"  - {window.days}d: {window.rate:.2%} "
+            f"(labeled={window.labeled_count}, eligible={window.eligible_count}) [{status}]"
+        )
+    return 0
+
+
+def cmd_report_high_impact_debug(args: argparse.Namespace) -> int:
+    """Print top labeled rows and near-misses with score breakdowns."""
+    settings = get_settings()
+    db = DB(settings.database_url)
+    limit = int(args.limit)
+    eligible_only = not bool(args.all)
+    with db.connect(autocommit=True) as conn:
+        passes, near_misses = get_high_impact_debug_report(
+            conn,
+            limit=limit,
+            eligible_only=eligible_only,
+        )
+    if bool(args.json):
+        payload = {
+            "limit": limit,
+            "eligible_only": eligible_only,
+            "top_passes": [asdict(row) for row in passes],
+            "top_near_misses": [asdict(row) for row in near_misses],
+        }
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print(
+        "High-impact debug report "
+        f"(limit={limit}, eligible_only={'yes' if eligible_only else 'no'})"
+    )
+
+    print("\nTop passes:")
+    if not passes:
+        print("  - none")
+    for i, row in enumerate(passes, 1):
+        print(f"{i}. {row.title}")
+        print(
+            "   "
+            f"final={row.final_score:.3f} "
+            f"threshold={row.threshold:.3f} "
+            f"delta={row.threshold_delta:.3f} "
+            f"conf={row.confidence:.2f}"
+        )
+        print(
+            "   "
+            f"components: novelty={row.novelty_score:.3f} "
+            f"translation={row.translation_score:.3f} "
+            f"evidence={row.evidence_score:.3f}"
+        )
+        print(
+            "   "
+            f"gates: threshold={row.passed_threshold} "
+            f"confidence={row.passed_confidence} "
+            f"evidence={row.passed_evidence_gate}"
+        )
+        if row.llm_shadow:
+            print(
+                "   "
+                f"llm_shadow: success={row.llm_shadow.get('success')} "
+                f"impact={row.llm_shadow.get('impact_score')} "
+                f"conf={row.llm_shadow.get('confidence')} "
+                f"model={row.llm_shadow.get('model')}"
+            )
+        print(f"   id={row.cluster_id}")
+
+    print("\nTop near-misses:")
+    if not near_misses:
+        print("  - none")
+    for i, row in enumerate(near_misses, 1):
+        print(f"{i}. {row.title}")
+        print(
+            "   "
+            f"final={row.final_score:.3f} "
+            f"threshold={row.threshold:.3f} "
+            f"delta={row.threshold_delta:.3f} "
+            f"conf={row.confidence:.2f}"
+        )
+        print(
+            "   "
+            f"components: novelty={row.novelty_score:.3f} "
+            f"translation={row.translation_score:.3f} "
+            f"evidence={row.evidence_score:.3f}"
+        )
+        print(
+            "   "
+            f"gates: threshold={row.passed_threshold} "
+            f"confidence={row.passed_confidence} "
+            f"evidence={row.passed_evidence_gate}"
+        )
+        if row.llm_shadow:
+            print(
+                "   "
+                f"llm_shadow: success={row.llm_shadow.get('success')} "
+                f"impact={row.llm_shadow.get('impact_score')} "
+                f"conf={row.llm_shadow.get('confidence')} "
+                f"model={row.llm_shadow.get('model')}"
+            )
+        print(f"   id={row.cluster_id}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="curious-now")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -800,6 +975,72 @@ def main(argv: list[str] | None = None) -> int:
         "--limit", type=int, default=50, help="Max clusters to process"
     )
     p_deep_dives.set_defaults(func=cmd_generate_deep_dives)
+
+    p_high_impact = sub.add_parser(
+        "generate-high-impact",
+        help="Generate calibrated high-impact scores/labels for paper clusters",
+    )
+    p_high_impact.add_argument(
+        "--limit", type=int, default=100, help="Max clusters to process"
+    )
+    p_high_impact.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Re-score even if already assessed",
+    )
+    p_high_impact.add_argument(
+        "--llm-shadow",
+        action="store_true",
+        default=False,
+        help="Run LLM impact rater in shadow mode (no effect on labels)",
+    )
+    p_high_impact.add_argument(
+        "--llm-blend",
+        action="store_true",
+        default=False,
+        help="Use blended score (40% deterministic + 60% LLM) for labeling",
+    )
+    p_high_impact.set_defaults(func=cmd_generate_high_impact)
+
+    p_trust_backfill = sub.add_parser(
+        "backfill-trust-signals",
+        help="Recompute anti-hype flags and method badges for active clusters",
+    )
+    p_trust_backfill.add_argument(
+        "--limit",
+        type=int,
+        default=5000,
+        help="Max clusters to process",
+    )
+    p_trust_backfill.set_defaults(func=cmd_backfill_trust_signals)
+
+    p_high_impact_audit = sub.add_parser(
+        "audit-high-impact-rates",
+        help="Audit 7d/30d high-impact label-rate guardrails",
+    )
+    p_high_impact_audit.set_defaults(func=cmd_audit_high_impact_rates)
+
+    p_high_impact_report = sub.add_parser(
+        "report-high-impact-debug",
+        help="Show top passes and near-misses with component breakdown",
+    )
+    p_high_impact_report.add_argument(
+        "--limit", type=int, default=10, help="Rows per section"
+    )
+    p_high_impact_report.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="Include all assessed rows (default: eligible-only)",
+    )
+    p_high_impact_report.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="Output report as JSON",
+    )
+    p_high_impact_report.set_defaults(func=cmd_report_high_impact_debug)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

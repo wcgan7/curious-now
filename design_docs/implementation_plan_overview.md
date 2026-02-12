@@ -18,6 +18,7 @@ This file is the **stage-by-stage roadmap**. Related detailed docs:
 * `design_docs/stage8.md` (governance + editorial tooling)
 * `design_docs/stage9.md` (platform hardening + search/ranking upgrades)
 * `design_docs/stage10.md` (mature ecosystem: entities + experiments + extensibility)
+* `design_docs/high_impact_feature_plan.md` (Top 1% paper impact signal plan)
 * `design_docs/source_pack_v0.md` (seed format for sources + feeds)
 * `design_docs/url_normalization_v0.md` (deterministic canonical URLs + idempotency)
 
