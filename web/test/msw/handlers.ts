@@ -39,7 +39,6 @@ export const handlers = [
               distinct_source_count: 2,
               top_topics: [],
               content_type_badges: ['news'],
-              confidence_band: null,
               takeaway: 'Short takeaway',
               anti_hype_flags: [],
             },

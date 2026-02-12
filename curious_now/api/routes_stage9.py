@@ -622,7 +622,6 @@ def enhanced_search(
                 c.canonical_title,
                 c.updated_at,
                 c.takeaway,
-                c.confidence_band,
                 COUNT(DISTINCT ci.item_id) FILTER (
                     WHERE i.source_id IS NOT NULL
                 ) AS distinct_source_count,
@@ -633,8 +632,7 @@ def enhanced_search(
             LEFT JOIN items i ON i.id = ci.item_id
             WHERE c.status = 'active'
               AND sd.search_tsv @@ plainto_tsquery('english', %s)
-            GROUP BY c.id, c.canonical_title, c.updated_at, c.takeaway,
-                     c.confidence_band, sd.search_tsv
+            GROUP BY c.id, c.canonical_title, c.updated_at, c.takeaway, sd.search_tsv
             ORDER BY rank DESC
             LIMIT %s;
             """,
@@ -651,7 +649,6 @@ def enhanced_search(
                 updated_at=r["updated_at"],
                 distinct_source_count=r["distinct_source_count"] or 0,
                 takeaway=r["takeaway"],
-                confidence_band=r["confidence_band"],
             )
         )
 

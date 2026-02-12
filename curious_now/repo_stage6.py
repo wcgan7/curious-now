@@ -37,7 +37,6 @@ def list_watches(conn: psycopg.Connection[Any], *, user_id: UUID) -> UserWatches
               c.updated_at,
               c.distinct_source_count,
               c.takeaway,
-              c.confidence_band,
               c.method_badges,
               c.anti_hype_flags,
               (

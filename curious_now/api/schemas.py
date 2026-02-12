@@ -154,8 +154,9 @@ class ClusterCard(BaseModel):
     content_type_badges: list[ContentType] = []
     method_badges: list[str] = []
     takeaway: str | None = None
-    confidence_band: Literal["early", "growing", "established"] | None = None
     anti_hype_flags: list[str] = []
+    high_impact_label: bool = False
+    high_impact_reasons: list[str] = []
     is_saved: bool | None = None
     is_watched: bool | None = None
     why_in_feed: WhyInFeed | None = None
@@ -205,9 +206,12 @@ class ClusterDetail(BaseModel):
     assumptions: list[str] = []
     limitations: list[str] = []
     what_could_change_this: list[str] = []
-    confidence_band: Literal["early", "growing", "established"] | None = None
     method_badges: list[str] = []
     anti_hype_flags: list[str] = []
+    high_impact_label: bool = False
+    high_impact_reasons: list[str] = []
+    high_impact_final_score: float | None = None
+    high_impact_confidence: float | None = None
     takeaway_supporting_item_ids: list[UUID] = []
     summary_intuition_supporting_item_ids: list[UUID] = []
     summary_deep_dive_supporting_item_ids: list[UUID] = []
@@ -543,7 +547,6 @@ class AdminClusterPatchRequest(BaseModel):
     assumptions: list[str] = []
     limitations: list[str] = []
     what_could_change_this: list[str] = []
-    confidence_band: Literal["early", "growing", "established"] | None = None
     method_badges: list[str] = []
     anti_hype_flags: list[str] = []
 

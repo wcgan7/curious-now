@@ -161,18 +161,6 @@
   gap: var(--s-4);
 }
 
-.mobileSummary {
-  display: none;
-}
-
-.inlineSummary {
-  display: block;
-}
-
-.sidebarSummary {
-  display: block;
-}
-
 .tabNav {
   position: sticky;
   top: calc(var(--story-sticky-top) + env(safe-area-inset-top, 0px));
@@ -304,15 +292,6 @@
 @media (max-width: 1023px) {
   .sidebar {
     order: 2;
-  }
-
-  .mobileSummary {
-    display: block;
-    margin-bottom: 0;
-  }
-
-  .sidebarSummary {
-    display: none;
   }
 }
 

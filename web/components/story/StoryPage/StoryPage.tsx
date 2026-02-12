@@ -6,7 +6,6 @@ import { useMemo, useState } from 'react';
 import type { ClusterDetail } from '@/types/api';
 
 import styles from './StoryPage.module.css';
-import { TrustBox } from '@/components/story/TrustBox/TrustBox';
 import { EvidencePanel } from '@/components/story/EvidencePanel/EvidencePanel';
 import { DeepDive } from '@/components/story/DeepDive/DeepDive';
 import { IntuitionSection } from '@/components/story/IntuitionSection/IntuitionSection';
@@ -242,65 +241,19 @@ export function StoryPage({
             <section id="evidence" className={styles.panel}>
               <h2 className={styles.h2}>{isSingleSource ? 'Source' : 'Sources'}</h2>
               <div className={`${styles.section} ${styles.evidenceSection}`}>
-                {isSingleSource ? (
-                  <>
-                    <EvidencePanel
-                      evidence={cluster.evidence}
-                      selectedType={evidenceFilter}
-                      onSelectType={setEvidenceFilter}
-                      relevantItemIds={relevantItemIds}
-                      isSingleSource={isSingleSource}
-                    />
-                    <div className={styles.inlineSummary}>
-                      <TrustBox
-                        contentTypeBreakdown={cluster.content_type_breakdown || {}}
-                        distinctSourceCount={cluster.distinct_source_count}
-                        confidenceBand={cluster.confidence_band}
-                        methodBadges={cluster.method_badges || []}
-                        antiHypeFlags={cluster.anti_hype_flags || []}
-                        sticky={false}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className={styles.mobileSummary}>
-                      <TrustBox
-                        contentTypeBreakdown={cluster.content_type_breakdown || {}}
-                        distinctSourceCount={cluster.distinct_source_count}
-                        confidenceBand={cluster.confidence_band}
-                        methodBadges={cluster.method_badges || []}
-                        antiHypeFlags={cluster.anti_hype_flags || []}
-                        sticky={false}
-                      />
-                    </div>
-                    <EvidencePanel
-                      evidence={cluster.evidence}
-                      selectedType={evidenceFilter}
-                      onSelectType={setEvidenceFilter}
-                      relevantItemIds={relevantItemIds}
-                      isSingleSource={isSingleSource}
-                    />
-                  </>
-                )}
+                <EvidencePanel
+                  evidence={cluster.evidence}
+                  selectedType={evidenceFilter}
+                  onSelectType={setEvidenceFilter}
+                  relevantItemIds={relevantItemIds}
+                  isSingleSource={isSingleSource}
+                />
               </div>
             </section>
           </section>
 
           <aside className={styles.sidebar}>
             <div className={styles.rail}>
-              {!isSingleSource ? (
-                <div className={styles.sidebarSummary}>
-                  <TrustBox
-                    contentTypeBreakdown={cluster.content_type_breakdown || {}}
-                    distinctSourceCount={cluster.distinct_source_count}
-                    confidenceBand={cluster.confidence_band}
-                    methodBadges={cluster.method_badges || []}
-                    antiHypeFlags={cluster.anti_hype_flags || []}
-                    sticky
-                  />
-                </div>
-              ) : null}
               <div className={styles.quickNav}>
                 <p className={styles.quickNavLabel}>Quick jump</p>
                 <div className={styles.quickNavButtons}>

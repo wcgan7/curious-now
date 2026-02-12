@@ -9,7 +9,13 @@ export async function FeedPage({
 }: {
   tab: 'latest' | 'trending';
 }) {
-  const feed: ClustersFeedResponse = await getFeed({ tab });
+  let feed: ClustersFeedResponse | null = null;
+  let hasFeedError = false;
+  try {
+    feed = await getFeed({ tab });
+  } catch {
+    hasFeedError = true;
+  }
 
   return (
     <main className={styles.main}>
@@ -25,8 +31,16 @@ export async function FeedPage({
               : 'What readers are exploring right now, with context before hype.'}
           </p>
         </header>
+        {hasFeedError ? (
+          <p className={styles.errorNotice}>
+            Couldn&apos;t load the feed right now. Please refresh in a moment.
+          </p>
+        ) : null}
+        {!hasFeedError && feed && feed.results.length === 0 ? (
+          <p className={styles.emptyNotice}>No stories available yet.</p>
+        ) : null}
         <div className={styles.list}>
-          {feed.results.map((c) => (
+          {(feed?.results ?? []).map((c) => (
             <ClusterCard key={c.cluster_id} cluster={c} />
           ))}
         </div>

@@ -5,24 +5,23 @@ import styles from './TrustBox.module.css';
 export function TrustBox({
   contentTypeBreakdown,
   distinctSourceCount,
-  confidenceBand,
   methodBadges,
   antiHypeFlags,
   sticky = true,
 }: {
   contentTypeBreakdown: Record<string, number>;
   distinctSourceCount: number;
-  confidenceBand?: 'early' | 'growing' | 'established' | null;
   methodBadges: string[];
   antiHypeFlags: string[];
   sticky?: boolean;
 }) {
   const isSingleSource = distinctSourceCount <= 1;
-  const confidenceLabels: Record<string, string> = {
-    early: 'Early — limited evidence, may change significantly',
-    growing: 'Growing — multiple sources, gaining clarity',
-    established: 'Established — consistent reporting over time',
-  };
+  const visibleAntiHypeFlags = antiHypeFlags.filter((flag) => flag !== 'single_source');
+  const hasMethodBadges = methodBadges.length > 0;
+  const hasAntiHypeFlags = visibleAntiHypeFlags.length > 0;
+  const hasMultiSourceSummary = distinctSourceCount > 1;
+
+  if (!hasMultiSourceSummary && !hasMethodBadges && !hasAntiHypeFlags) return null;
 
   return (
     <aside
@@ -36,14 +35,7 @@ export function TrustBox({
         </h2>
       ) : null}
 
-      {confidenceBand ? (
-        <div className={styles.row}>
-          <span className={styles.label}>Confidence</span>
-          <span className={styles.value}>{confidenceLabels[confidenceBand]}</span>
-        </div>
-      ) : null}
-
-      {distinctSourceCount > 1 ? (
+      {hasMultiSourceSummary ? (
         <div className={styles.row}>
           <span className={styles.label}>Independent sources</span>
           <span className={styles.value}>{distinctSourceCount}</span>
@@ -63,7 +55,7 @@ export function TrustBox({
         </div>
       ) : null}
 
-      {methodBadges.length ? (
+      {hasMethodBadges ? (
         <div className={styles.block}>
           <span className={styles.label}>Method</span>
           <div className={styles.tags}>
@@ -74,11 +66,11 @@ export function TrustBox({
         </div>
       ) : null}
 
-      {antiHypeFlags.length ? (
+      {hasAntiHypeFlags ? (
         <div className={styles.block}>
           <span className={styles.label}>Notes</span>
           <div className={styles.tags}>
-            {antiHypeFlags.slice(0, 6).map((b) => (
+            {visibleAntiHypeFlags.slice(0, 6).map((b) => (
               <Badge key={b} variant="warning">
                 {b.replace(/_/g, ' ')}
               </Badge>

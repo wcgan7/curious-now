@@ -2526,8 +2526,6 @@ export interface components {
             content_type_badges?: components["schemas"]["ContentType"][];
             method_badges?: string[];
             takeaway?: string | null;
-            /** @enum {string|null} */
-            confidence_band?: "early" | "growing" | "established" | null;
             anti_hype_flags?: string[];
             is_saved?: boolean | null;
             is_watched?: boolean | null;
@@ -2574,8 +2572,6 @@ export interface components {
             assumptions?: string[];
             limitations?: string[];
             what_could_change_this?: string[];
-            /** @enum {string|null} */
-            confidence_band?: "early" | "growing" | "established" | null;
             method_badges?: string[];
             anti_hype_flags?: string[];
             takeaway_supporting_item_ids?: string[];
@@ -2999,8 +2995,6 @@ export interface components {
             assumptions?: string[];
             limitations?: string[];
             what_could_change_this?: string[];
-            /** @enum {string|null} */
-            confidence_band?: "early" | "growing" | "established" | null;
             method_badges?: string[];
             anti_hype_flags?: string[];
         };
