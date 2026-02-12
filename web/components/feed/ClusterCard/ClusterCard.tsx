@@ -12,6 +12,7 @@ export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
   const topSubtopics = (cluster.top_topics || [])
     .filter((topic) => !categoryNameSet.has(topic.name.toLowerCase()))
     .slice(0, 2);
+  const sourceTypeBadges = cluster.content_type_badges || [];
 
   return (
     <Card as="article" href={`/story/${cluster.cluster_id}`}>
@@ -45,11 +46,11 @@ export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
 
         {cluster.takeaway ? <p className={styles.takeaway}>{cluster.takeaway}</p> : null}
 
-        {cluster.anti_hype_flags?.length ? (
-          <div className={styles.flags} aria-label="Anti-hype flags">
-            {cluster.anti_hype_flags.slice(0, 2).map((flag) => (
-              <span key={flag} className={styles.flag}>
-                {flag.replace(/_/g, ' ')}
+        {sourceTypeBadges.length ? (
+          <div className={styles.sourceTypes} aria-label="Source types">
+            {sourceTypeBadges.slice(0, 2).map((type) => (
+              <span key={type} className={styles.sourceType}>
+                {type.replace(/_/g, ' ')}
               </span>
             ))}
           </div>

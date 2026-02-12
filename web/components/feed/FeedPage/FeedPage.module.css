@@ -53,6 +53,24 @@
   gap: 18px;
 }
 
+.errorNotice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #d0312d 28%, var(--border));
+  background: color-mix(in srgb, #d0312d 8%, var(--surface));
+  color: color-mix(in srgb, #d0312d 72%, var(--text-1));
+}
+
+.emptyNotice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+}
+
 @media (max-width: 640px) {
   .main {
     padding-top: 18px;

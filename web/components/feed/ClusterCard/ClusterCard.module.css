@@ -41,20 +41,21 @@
   font-size: 1.05rem;
 }
 
-.flags {
+.sourceTypes {
   display: flex;
   gap: var(--s-2);
   flex-wrap: wrap;
   margin-top: var(--s-3);
 }
 
-.flag {
+.sourceType {
   font-size: 12px;
-  color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 12%, var(--surface-1));
-  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--surface-2) 56%, white);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, white);
   border-radius: 999px;
   padding: 3px 8px;
+  text-transform: capitalize;
 }
 
 .spacer {
@@ -73,12 +74,12 @@
     line-height: 1.55;
   }
 
-  .flags {
+  .sourceTypes {
     margin-top: 8px;
     gap: 6px;
   }
 
-  .flag {
+  .sourceType {
     font-size: 12px;
     padding: 2px 7px;
   }

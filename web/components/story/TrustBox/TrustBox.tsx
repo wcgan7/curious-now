@@ -16,6 +16,12 @@ export function TrustBox({
   sticky?: boolean;
 }) {
   const isSingleSource = distinctSourceCount <= 1;
+  const visibleAntiHypeFlags = antiHypeFlags.filter((flag) => flag !== 'single_source');
+  const hasMethodBadges = methodBadges.length > 0;
+  const hasAntiHypeFlags = visibleAntiHypeFlags.length > 0;
+  const hasMultiSourceSummary = distinctSourceCount > 1;
+
+  if (!hasMultiSourceSummary && !hasMethodBadges && !hasAntiHypeFlags) return null;
 
   return (
     <aside
@@ -29,7 +35,7 @@ export function TrustBox({
         </h2>
       ) : null}
 
-      {distinctSourceCount > 1 ? (
+      {hasMultiSourceSummary ? (
         <div className={styles.row}>
           <span className={styles.label}>Independent sources</span>
           <span className={styles.value}>{distinctSourceCount}</span>
@@ -49,7 +55,7 @@ export function TrustBox({
         </div>
       ) : null}
 
-      {methodBadges.length ? (
+      {hasMethodBadges ? (
         <div className={styles.block}>
           <span className={styles.label}>Method</span>
           <div className={styles.tags}>
@@ -60,11 +66,11 @@ export function TrustBox({
         </div>
       ) : null}
 
-      {antiHypeFlags.length ? (
+      {hasAntiHypeFlags ? (
         <div className={styles.block}>
           <span className={styles.label}>Notes</span>
           <div className={styles.tags}>
-            {antiHypeFlags.slice(0, 6).map((b) => (
+            {visibleAntiHypeFlags.slice(0, 6).map((b) => (
               <Badge key={b} variant="warning">
                 {b.replace(/_/g, ' ')}
               </Badge>
