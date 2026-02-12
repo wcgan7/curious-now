@@ -53,6 +53,38 @@
   gap: 18px;
 }
 
+.sentinel {
+  height: 1px;
+  width: 100%;
+}
+
+.loadingNotice {
+  margin: 16px 0 0;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.loadMoreButton {
+  border: var(--border-1);
+  background: color-mix(in srgb, var(--surface-2) 72%, white);
+  color: var(--text-1);
+  border-radius: 9999px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.loadMoreButton:hover {
+  background: color-mix(in srgb, var(--surface-2) 56%, white);
+}
+
 .errorNotice {
   margin: 0 0 16px;
   padding: 12px 14px;

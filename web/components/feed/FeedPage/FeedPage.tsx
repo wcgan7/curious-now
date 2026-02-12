@@ -1,6 +1,6 @@
 import { getFeed } from '@/lib/api/feed';
 import type { ClustersFeedResponse } from '@/types/api';
-import { ClusterCard } from '@/components/feed/ClusterCard/ClusterCard';
+import { InfiniteFeedList } from '@/components/feed/FeedPage/InfiniteFeedList';
 
 import styles from './FeedPage.module.css';
 
@@ -39,11 +39,11 @@ export async function FeedPage({
         {!hasFeedError && feed && feed.results.length === 0 ? (
           <p className={styles.emptyNotice}>No stories available yet.</p>
         ) : null}
-        <div className={styles.list}>
-          {(feed?.results ?? []).map((c) => (
-            <ClusterCard key={c.cluster_id} cluster={c} />
-          ))}
-        </div>
+        <InfiniteFeedList
+          tab={tab}
+          initialItems={feed?.results ?? []}
+          hasInitialError={hasFeedError}
+        />
       </div>
     </main>
   );

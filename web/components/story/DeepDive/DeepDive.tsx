@@ -13,6 +13,7 @@ type StructuredDeepDive = {
 
 type MarkdownList = {
   ordered: boolean;
+  start?: number;
   items: MarkdownListItem[];
 };
 
@@ -93,7 +94,8 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
   function parseList(
     start: number,
     ordered: boolean,
-    baseIndent: number
+    baseIndent: number,
+    startNumber?: number
   ): { list: MarkdownList; next: number } {
     const items: MarkdownListItem[] = [];
     let cursor = start;
@@ -102,12 +104,16 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
     while (cursor < lines.length) {
       const line = lines[cursor];
       const ul = line.match(/^(\s*)[-*+]\s+(.+)$/);
-      const ol = line.match(/^(\s*)\d+\.\s+(.+)$/);
+      const ol = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
       const isOrderedLine = Boolean(ol);
       const match = ol || ul;
       if (!match) {
         const trimmed = line.trim();
-        if (!trimmed) break;
+        if (!trimmed) {
+          // Keep list continuity across blank lines between list items.
+          cursor += 1;
+          continue;
+        }
         const indent = indentWidth((line.match(/^(\s*)/)?.[1] ?? ''));
         if (lastItem && indent > baseIndent) {
           if (lastItem.children.length > 0) {
@@ -122,12 +128,17 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
       }
 
       const indent = indentWidth(match[1]);
-      const text = match[2].trim();
+      const text = (ol ? ol[3] : ul?.[2] ?? '').trim();
       if (indent < baseIndent) break;
 
       if (indent > baseIndent) {
         if (!lastItem) break;
-        const nested = parseList(cursor, isOrderedLine, indent);
+        const nested = parseList(
+          cursor,
+          isOrderedLine,
+          indent,
+          ol ? Number.parseInt(ol[2] ?? '1', 10) : undefined
+        );
         if (nested.list.items.length) {
           lastItem.children.push(nested.list);
         }
@@ -143,7 +154,7 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
       cursor += 1;
     }
 
-    return { list: { ordered, items }, next: cursor };
+    return { list: { ordered, start: ordered ? startNumber ?? 1 : undefined, items }, next: cursor };
   }
 
   while (i < lines.length) {
@@ -173,9 +184,9 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
       continue;
     }
 
-    const ol = raw.match(/^(\s*)\d+\.\s+(.+)$/);
+    const ol = raw.match(/^(\s*)(\d+)\.\s+(.+)$/);
     if (ol) {
-      const parsed = parseList(i, true, indentWidth(ol[1]));
+      const parsed = parseList(i, true, indentWidth(ol[1]), Number.parseInt(ol[2], 10));
       if (parsed.list.items.length) blocks.push({ type: 'list', list: parsed.list });
       i = parsed.next;
       continue;
@@ -200,19 +211,28 @@ function parseMarkdownBlocks(raw: string): MarkdownBlock[] {
 }
 
 function renderList(list: MarkdownList, key: string): React.ReactElement {
-  const ListTag = list.ordered ? 'ol' : 'ul';
-  return (
-    <ListTag key={key} className={styles.list}>
-      {list.items.map((item, idx) => (
-        <li key={`${key}-${idx}`}>
-          {renderInline(item.text)}
-          {item.children.map((child, childIdx) => renderList(child, `${key}-${idx}-${childIdx}`))}
-          {item.trailingText.map((line, lineIdx) => (
-            <div key={`${key}-${idx}-tail-${lineIdx}`}>{renderInline(line)}</div>
-          ))}
-        </li>
+  const children = list.items.map((item, idx) => (
+    <li key={`${key}-${idx}`}>
+      {renderInline(item.text)}
+      {item.children.map((child, childIdx) => renderList(child, `${key}-${idx}-${childIdx}`))}
+      {item.trailingText.map((line, lineIdx) => (
+        <div key={`${key}-${idx}-tail-${lineIdx}`}>{renderInline(line)}</div>
       ))}
-    </ListTag>
+    </li>
+  ));
+
+  if (list.ordered) {
+    return (
+      <ol key={key} className={styles.list} start={list.start && list.start > 1 ? list.start : undefined}>
+        {children}
+      </ol>
+    );
+  }
+
+  return (
+    <ul key={key} className={styles.list}>
+      {children}
+    </ul>
   );
 }
 
