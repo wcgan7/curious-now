@@ -1,8 +1,7 @@
 """LLM-based topic classification for story clusters.
 
 This module provides semantic topic classification using LLMs,
-designed to work as a fallback when phrase matching produces
-low-confidence or no results.
+and is the default topic-tagging path.
 """
 
 from __future__ import annotations

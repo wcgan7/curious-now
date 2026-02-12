@@ -84,7 +84,7 @@ The core data flow is:
 
 1. **Ingest** RSS/Atom feeds into `items`
 2. **Cluster** unassigned items into `story_clusters` + `cluster_items`
-3. **Tag topics** (optional) by keyword matching into `cluster_topics`
+3. **Tag topics** (optional) by LLM classification into `cluster_topics`
 4. **Recompute trending** metrics
 
 Run it as a single command:

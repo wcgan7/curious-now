@@ -48,4 +48,46 @@ describe('ClusterCard', () => {
     expect(screen.queryByText('single source')).toBeNull();
     expect(screen.queryByText('preprint not peer reviewed')).toBeNull();
   });
+
+  it('prefers focused category chip when provided', () => {
+    render(
+      <ClusterCard
+        focusCategory={{
+          categoryId: 'cat-ai',
+          name: 'Artificial Intelligence',
+        }}
+        cluster={{
+          cluster_id: '00000000-0000-0000-0000-000000000004',
+          canonical_title: 'Focused category card',
+          updated_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          distinct_source_count: 1,
+          top_topics: [
+            {
+              topic_id: 'topic-1',
+              name: 'Molecular & Cell Biology',
+              score: 0.8,
+            },
+          ],
+          top_categories: [
+            {
+              category_id: 'cat-materials',
+              name: 'Materials & Engineering',
+              score: 0.9,
+            },
+            {
+              category_id: 'cat-ai',
+              name: 'Artificial Intelligence',
+              score: 0.7,
+            },
+          ],
+          content_type_badges: [],
+          takeaway: null,
+          anti_hype_flags: [],
+        }}
+      />
+    );
+
+    expect(screen.getByText('Artificial Intelligence')).toBeInTheDocument();
+    expect(screen.queryByText('Materials & Engineering')).toBeNull();
+  });
 });

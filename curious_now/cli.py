@@ -43,7 +43,6 @@ from curious_now.topic_tagging import (
     run_tagging_maintenance,
     seed_topics_v1,
     tag_recent_clusters,
-    tag_recent_clusters_hybrid,
     tag_untagged_clusters_llm,
 )
 
@@ -315,6 +314,7 @@ def cmd_tagging_maintenance(args: argparse.Namespace) -> int:
 
 
 def cmd_tag_topics(args: argparse.Namespace) -> int:
+    """Tag recent clusters using LLM-only classification (default)."""
     settings = get_settings()
     db = DB(settings.database_url)
     now = _parse_now(args.now)
@@ -326,28 +326,7 @@ def cmd_tag_topics(args: argparse.Namespace) -> int:
             limit_clusters=int(args.limit_clusters),
             max_topics_per_cluster=int(args.max_topics_per_cluster),
         )
-    print(f"Tagged {result.clusters_updated}/{result.clusters_scanned} clusters.")
-    return 0
-
-
-def cmd_tag_topics_hybrid(args: argparse.Namespace) -> int:
-    """Tag topics using hybrid approach (phrase match + LLM fallback)."""
-    settings = get_settings()
-    db = DB(settings.database_url)
-    now = _parse_now(args.now)
-    with db.connect(autocommit=True) as conn:
-        result = tag_recent_clusters_hybrid(
-            conn,
-            now_utc=now,
-            lookback_days=int(args.lookback_days),
-            limit_clusters=int(args.limit_clusters),
-            max_topics_per_cluster=int(args.max_topics_per_cluster),
-            phrase_match_threshold=float(args.phrase_threshold),
-        )
-    print(
-        f"Tagged {result.clusters_updated}/{result.clusters_scanned} clusters "
-        f"(phrase: {result.phrase_match_count}, llm: {result.llm_fallback_count})."
-    )
+    print(f"LLM-tagged {result.clusters_updated}/{result.clusters_scanned} clusters.")
     return 0
 
 
@@ -842,7 +821,7 @@ def main(argv: list[str] | None = None) -> int:
     p_maintenance.set_defaults(func=cmd_tagging_maintenance)
 
     p_tag_topics = sub.add_parser(
-        "tag-topics", help="Auto-tag recent clusters with topics (Stage 2)"
+        "tag-topics", help="Auto-tag recent clusters with LLM-only classification"
     )
     p_tag_topics.add_argument("--lookback-days", type=int, default=14)
     p_tag_topics.add_argument("--limit-clusters", type=int, default=500)
@@ -851,24 +830,6 @@ def main(argv: list[str] | None = None) -> int:
         "--now", type=str, default=None, help="Override current time (ISO-8601)"
     )
     p_tag_topics.set_defaults(func=cmd_tag_topics)
-
-    p_tag_hybrid = sub.add_parser(
-        "tag-topics-hybrid",
-        help="Tag topics using hybrid approach (phrase match + LLM fallback)",
-    )
-    p_tag_hybrid.add_argument("--lookback-days", type=int, default=14)
-    p_tag_hybrid.add_argument("--limit-clusters", type=int, default=500)
-    p_tag_hybrid.add_argument("--max-topics-per-cluster", type=int, default=3)
-    p_tag_hybrid.add_argument(
-        "--phrase-threshold",
-        type=float,
-        default=0.5,
-        help="Minimum phrase match score before LLM fallback (default: 0.5)",
-    )
-    p_tag_hybrid.add_argument(
-        "--now", type=str, default=None, help="Override current time (ISO-8601)"
-    )
-    p_tag_hybrid.set_defaults(func=cmd_tag_topics_hybrid)
 
     p_tag_llm = sub.add_parser(
         "tag-untagged-llm",
@@ -945,7 +906,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_embeddings.add_argument(
         "--provider", type=str, default=None,
-        help="Embedding provider (ollama, sentence-transformers, mock)"
+        help="Embedding provider (ollama, mock)"
     )
     p_embeddings.set_defaults(func=cmd_generate_embeddings)
 

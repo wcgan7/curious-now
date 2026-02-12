@@ -27,6 +27,13 @@ describe('StoryPage (evidence-only)', () => {
           },
           topics: [],
           content_type_breakdown: { news: 1 },
+          categories: [
+            {
+              category_id: 'c1',
+              name: 'Artificial Intelligence',
+              score: 0.91,
+            },
+          ],
           takeaway: null,
           summary_intuition: null,
           summary_deep_dive: null,
@@ -46,6 +53,7 @@ describe('StoryPage (evidence-only)', () => {
     );
 
     expect(getByText('Evidence-only story')).toBeInTheDocument();
+    expect(getByText('Artificial Intelligence')).toBeInTheDocument();
     expect(getByText('Evidence item title')).toBeInTheDocument();
     expect(getByRole('link', { name: /read the article/i })).toHaveAttribute(
       'href',

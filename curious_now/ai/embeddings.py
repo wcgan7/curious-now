@@ -5,8 +5,7 @@ semantic search capabilities using pgvector.
 
 Note: Embeddings can be generated via:
 1. LLM CLI tools that support embeddings
-2. Local sentence-transformers models
-3. API calls (OpenAI, Cohere, etc.)
+2. API calls (OpenAI, Cohere, etc.)
 
 This implementation focuses on CLI-based approaches to avoid API costs.
 """
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_EMBEDDING_DIM = 1536
 
 # Supported embedding providers
-EMBEDDING_PROVIDERS = ["ollama", "sentence-transformers", "mock"]
+EMBEDDING_PROVIDERS = ["ollama", "mock"]
 
 
 @dataclass
@@ -216,57 +215,6 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             return EmbeddingResult.failure(f"Ollama API error: {e}")
 
 
-class SentenceTransformersProvider(EmbeddingProvider):
-    """
-    Generate embeddings using sentence-transformers library.
-
-    This runs locally without any API calls, but requires the
-    sentence-transformers package to be installed.
-    """
-
-    def __init__(self, model: str = "all-MiniLM-L6-v2") -> None:
-        self.model_name = model
-        self._model: Any = None
-
-    @property
-    def name(self) -> str:
-        return "sentence-transformers"
-
-    def is_available(self) -> bool:
-        """Check if sentence-transformers is available."""
-        try:
-            from sentence_transformers import SentenceTransformer  # noqa: F401
-
-            return True
-        except ImportError:
-            return False
-
-    def _load_model(self) -> Any:
-        """Lazy load the model."""
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-
-            self._model = SentenceTransformer(self.model_name)
-        return self._model
-
-    def generate(self, text: str) -> EmbeddingResult:
-        """Generate embedding using sentence-transformers."""
-        try:
-            model = self._load_model()
-            embedding = model.encode(text, convert_to_numpy=True)
-            embedding_list = embedding.tolist()
-
-            return EmbeddingResult(
-                embedding=embedding_list,
-                model=self.model_name,
-                provider=self.name,
-                source_text_hash=_compute_text_hash(text),
-                dimensions=len(embedding_list),
-            )
-        except Exception as e:
-            return EmbeddingResult.failure(str(e))
-
-
 class MockEmbeddingProvider(EmbeddingProvider):
     """
     Mock embedding provider for testing.
@@ -312,7 +260,7 @@ def get_embedding_provider(provider_type: str | None = None) -> EmbeddingProvide
     Get an embedding provider by type.
 
     Args:
-        provider_type: Type of provider ("ollama", "sentence-transformers", "mock")
+        provider_type: Type of provider ("ollama", "mock")
                       If None, tries providers in order until one is available.
 
     Returns:
@@ -323,7 +271,6 @@ def get_embedding_provider(provider_type: str | None = None) -> EmbeddingProvide
     """
     providers: dict[str, type[EmbeddingProvider]] = {
         "ollama": OllamaEmbeddingProvider,
-        "sentence-transformers": SentenceTransformersProvider,
         "mock": MockEmbeddingProvider,
     }
 
@@ -333,7 +280,7 @@ def get_embedding_provider(provider_type: str | None = None) -> EmbeddingProvide
         return providers[provider_type]()
 
     # Try providers in preference order
-    for name in ["sentence-transformers", "ollama", "mock"]:
+    for name in ["ollama", "mock"]:
         provider = providers[name]()
         if provider.is_available():
             logger.info("Using embedding provider: %s", name)
@@ -427,8 +374,7 @@ async def generate_embeddings_batch(
     """
     Generate embeddings for multiple clusters.
 
-    Note: Currently processes sequentially. sentence-transformers
-    can batch internally for better performance.
+    Note: Currently processes sequentially.
 
     Args:
         clusters: List of ClusterEmbeddingInput objects

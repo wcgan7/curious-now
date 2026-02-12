@@ -563,7 +563,7 @@ Each topic has:
 
 Tagging approach (Stage 2):
 
-* keyword matching over cluster canonical title + top evidence titles
+* LLM-based semantic classification over cluster canonical title + aggregated cluster content
 * source-based boosts (e.g., NASA → Space)
 * preprint category mapping (e.g., arXiv subject feeds → topics)
 

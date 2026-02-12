@@ -45,4 +45,10 @@ describe('IntuitionSection', () => {
     expect(screen.getByText('ELI20')).toBeInTheDocument();
     expect(screen.getByText('Only technical')).toBeInTheDocument();
   });
+
+  it('does not show ELI5 chip when only ELI5 exists', () => {
+    render(<IntuitionSection eli5="Only simple" evidence={evidence} />);
+    expect(screen.getByText('Only simple')).toBeInTheDocument();
+    expect(screen.queryByText('ELI5')).toBeNull();
+  });
 });

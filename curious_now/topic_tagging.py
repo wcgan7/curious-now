@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -77,18 +76,6 @@ def _normalize_json_array(value: Any) -> list[Any]:
             return []
         return parsed if isinstance(parsed, list) else []
     return []
-
-
-def _normalize_text(text: str) -> str:
-    s = text.lower().replace("-", " ")
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
-    return " ".join(s.split())
-
-
-def _contains_phrase(haystack_norm: str, phrase_norm: str) -> bool:
-    if not phrase_norm:
-        return False
-    return f" {phrase_norm} " in haystack_norm
 
 
 def load_topic_seed_v1(path: Path | None = None) -> TopicSeedV1:
@@ -390,25 +377,6 @@ def has_subtopics(conn: psycopg.Connection[Any]) -> bool:
         return cur.fetchone() is not None
 
 
-def _score_topic(
-    *,
-    topic: TopicDef,
-    title_norm: str,
-    text_norm: str,
-) -> float:
-    score = 0.0
-    phrases = [topic.name, *topic.aliases]
-    for p in phrases:
-        pn = _normalize_text(p)
-        if not pn:
-            continue
-        if _contains_phrase(title_norm, pn):
-            score += 1.0 if p == topic.name else 0.8
-        elif _contains_phrase(text_norm, pn):
-            score += 0.6 if p == topic.name else 0.5
-    return score
-
-
 def _get_cluster_text(
     conn: psycopg.Connection[Any], *, cluster_id: UUID
 ) -> tuple[str, str] | None:
@@ -438,6 +406,7 @@ def tag_cluster_topics(
     now_utc: datetime | None = None,
     max_topics: int = 3,
 ) -> bool:
+    """Tag a single cluster using LLM-only classification."""
     now = now_utc or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("now_utc must be timezone-aware")
@@ -447,58 +416,22 @@ def tag_cluster_topics(
         return False
     title, search_text = cluster_text
 
-    title_norm = f" {_normalize_text(title)} "
-    text_norm = f" {_normalize_text(search_text)} "
-
-    scored: list[tuple[UUID, float]] = []
-    for t in topics:
-        s = _score_topic(topic=t, title_norm=title_norm, text_norm=text_norm)
-        if s <= 0:
-            continue
-        scored.append((t.topic_id, s))
-    scored.sort(key=lambda x: (-x[1], str(x[0])))
-    selected = scored[: max(0, int(max_topics))]
-
-    selected_ids = [tid for (tid, _) in selected]
-    change_count = 0
-    with conn.transaction():
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                DELETE FROM cluster_topics
-                WHERE cluster_id = %s
-                  AND assignment_source = 'auto'
-                  AND locked = false
-                  AND NOT (topic_id = ANY(%s::uuid[]));
-                """,
-                (cluster_id, selected_ids),
-            )
-            change_count += int(cur.rowcount)
-
-            for topic_id, score in selected:
-                cur.execute(
-                    """
-                    INSERT INTO cluster_topics(
-                      cluster_id, topic_id, score, assignment_source, locked
-                    )
-                    VALUES (%s,%s,%s,'auto',false)
-                    ON CONFLICT (cluster_id, topic_id)
-                    DO UPDATE SET
-                      score = EXCLUDED.score
-                    WHERE cluster_topics.assignment_source = 'auto'
-                      AND cluster_topics.locked = false;
-                    """,
-                    (cluster_id, topic_id, float(score)),
-                )
-                change_count += int(cur.rowcount)
-
-            if change_count > 0:
-                cur.execute(
-                    "UPDATE story_clusters SET updated_at = %s WHERE id = %s;",
-                    (now, cluster_id),
-                )
-
-    return change_count > 0
+    assignments = _llm_assignments_for_cluster(
+        title=title,
+        search_text=search_text,
+        topics=topics,
+        max_topics=max_topics,
+    )
+    if not assignments:
+        return False
+    return _apply_topic_assignments(
+        conn,
+        cluster_id=cluster_id,
+        assignments=assignments,
+        assignment_source="llm",
+        now_utc=now,
+        replace_all_unlocked=True,
+    )
 
 
 def tag_recent_clusters(
@@ -509,16 +442,17 @@ def tag_recent_clusters(
     limit_clusters: int = 500,
     max_topics_per_cluster: int = 3,
 ) -> TopicTaggingResult:
+    """
+    Tag recent clusters using LLM-only classification.
+
+    This is the default production tagging path.
+    """
     now = now_utc or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("now_utc must be timezone-aware")
     since = now - timedelta(days=int(lookback_days))
 
-    # Use subtopics if v1 format is present, otherwise use all topics
-    if has_subtopics(conn):
-        topics = _load_subtopics(conn)
-    else:
-        topics = _load_topics(conn)
+    topics = _load_subtopics(conn) if has_subtopics(conn) else _load_topics(conn)
 
     if not topics:
         return TopicTaggingResult(clusters_scanned=0, clusters_updated=0)
@@ -542,49 +476,29 @@ def tag_recent_clusters(
     updated = 0
     for cid in cluster_ids:
         scanned += 1
-        if tag_cluster_topics(
+        cluster_text = _get_cluster_text(conn, cluster_id=cid)
+        if cluster_text is None:
+            continue
+        title, search_text = cluster_text
+        llm_assignments = _llm_assignments_for_cluster(
+            title=title,
+            search_text=search_text,
+            topics=topics,
+            max_topics=max_topics_per_cluster,
+        )
+        if not llm_assignments:
+            continue
+        if _apply_topic_assignments(
             conn,
             cluster_id=cid,
-            topics=topics,
+            assignments=llm_assignments,
+            assignment_source="llm",
             now_utc=now,
-            max_topics=max_topics_per_cluster,
+            replace_all_unlocked=True,
         ):
             updated += 1
 
     return TopicTaggingResult(clusters_scanned=scanned, clusters_updated=updated)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Hybrid tagging (phrase match + LLM fallback)
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class HybridTaggingResult:
-    """Result of hybrid topic tagging."""
-
-    clusters_scanned: int
-    clusters_updated: int
-    phrase_match_count: int
-    llm_fallback_count: int
-
-
-def _get_phrase_match_score(
-    topics: list[TopicDef],
-    title: str,
-    search_text: str,
-) -> list[tuple[UUID, float]]:
-    """Get phrase match scores for a cluster."""
-    title_norm = f" {_normalize_text(title)} "
-    text_norm = f" {_normalize_text(search_text)} "
-
-    scored: list[tuple[UUID, float]] = []
-    for t in topics:
-        s = _score_topic(topic=t, title_norm=title_norm, text_norm=text_norm)
-        if s > 0:
-            scored.append((t.topic_id, s))
-    scored.sort(key=lambda x: (-x[1], str(x[0])))
-    return scored
 
 
 def _apply_topic_assignments(
@@ -594,6 +508,7 @@ def _apply_topic_assignments(
     assignments: list[tuple[UUID, float]],
     assignment_source: str,
     now_utc: datetime,
+    replace_all_unlocked: bool = False,
 ) -> bool:
     """Apply topic assignments to a cluster."""
     selected_ids = [tid for (tid, _) in assignments]
@@ -601,17 +516,30 @@ def _apply_topic_assignments(
 
     with conn.transaction():
         with conn.cursor() as cur:
-            # Remove old auto assignments not in new list
-            cur.execute(
-                """
-                DELETE FROM cluster_topics
-                WHERE cluster_id = %s
-                  AND assignment_source = %s
-                  AND locked = false
-                  AND NOT (topic_id = ANY(%s::uuid[]));
-                """,
-                (cluster_id, assignment_source, selected_ids),
-            )
+            # Remove unlocked assignments not in new list.
+            # LLM-only default uses replace_all_unlocked=True to fully refresh
+            # non-editor assignments.
+            if replace_all_unlocked:
+                cur.execute(
+                    """
+                    DELETE FROM cluster_topics
+                    WHERE cluster_id = %s
+                      AND locked = false
+                      AND NOT (topic_id = ANY(%s::uuid[]));
+                    """,
+                    (cluster_id, selected_ids),
+                )
+            else:
+                cur.execute(
+                    """
+                    DELETE FROM cluster_topics
+                    WHERE cluster_id = %s
+                      AND assignment_source = %s
+                      AND locked = false
+                      AND NOT (topic_id = ANY(%s::uuid[]));
+                    """,
+                    (cluster_id, assignment_source, selected_ids),
+                )
             change_count += int(cur.rowcount)
 
             # Upsert new assignments
@@ -641,197 +569,31 @@ def _apply_topic_assignments(
     return change_count > 0
 
 
-def tag_cluster_hybrid(
-    conn: psycopg.Connection[Any],
+def _llm_assignments_for_cluster(
     *,
-    cluster_id: UUID,
+    title: str,
+    search_text: str,
     topics: list[TopicDef],
-    now_utc: datetime | None = None,
-    max_topics: int = 3,
-    phrase_match_threshold: float = 0.5,
-) -> tuple[bool, str]:
-    """
-    Tag a cluster using hybrid approach: phrase match first, LLM fallback.
+    max_topics: int,
+) -> list[tuple[UUID, float]]:
+    from curious_now.ai.topic_classification import TopicDefinition, classify_topics
 
-    Args:
-        conn: Database connection
-        cluster_id: Cluster to tag
-        topics: Available topics
-        now_utc: Current timestamp
-        max_topics: Maximum topics to assign
-        phrase_match_threshold: Minimum score for phrase match to be accepted
-
-    Returns:
-        Tuple of (was_updated, method_used) where method is 'phrase' or 'llm'
-    """
-    # Import here to avoid circular imports
-    from curious_now.ai.topic_classification import (
-        ClassificationResult,
-        TopicDefinition,
-        classify_topics,
-    )
-
-    now = now_utc or datetime.now(timezone.utc)
-    if now.tzinfo is None:
-        raise ValueError("now_utc must be timezone-aware")
-
-    cluster_text = _get_cluster_text(conn, cluster_id=cluster_id)
-    if cluster_text is None:
-        return False, "none"
-
-    title, search_text = cluster_text
-
-    # Step 1: Try phrase matching
-    phrase_scores = _get_phrase_match_score(topics, title, search_text)
-
-    # Check if phrase match is good enough
-    if phrase_scores and phrase_scores[0][1] >= phrase_match_threshold:
-        selected = phrase_scores[: max(0, int(max_topics))]
-        updated = _apply_topic_assignments(
-            conn,
-            cluster_id=cluster_id,
-            assignments=selected,
-            assignment_source="auto",
-            now_utc=now,
-        )
-        return updated, "phrase"
-
-    # Step 2: Fall back to LLM
-    logger.debug("Phrase match below threshold for cluster %s, using LLM", cluster_id)
-
-    topic_defs = [
-        TopicDefinition(name=t.name, description=t.description_short)
-        for t in topics
-    ]
-
-    result: ClassificationResult = classify_topics(
+    topic_defs = [TopicDefinition(name=t.name, description=t.description_short) for t in topics]
+    result = classify_topics(
         title=title,
         content=search_text,
         available_topics=topic_defs,
     )
-
     if not result.success or not result.topics:
-        # LLM failed or found no matches; keep any existing phrase matches
-        if phrase_scores:
-            selected = phrase_scores[: max(0, int(max_topics))]
-            updated = _apply_topic_assignments(
-                conn,
-                cluster_id=cluster_id,
-                assignments=selected,
-                assignment_source="auto",
-                now_utc=now,
-            )
-            return updated, "phrase"
-        return False, "none"
+        return []
 
-    # Map LLM results back to topic IDs
     name_to_id = {t.name: t.topic_id for t in topics}
-    llm_assignments: list[tuple[UUID, float]] = []
+    assignments: list[tuple[UUID, float]] = []
     for match in result.topics[:max_topics]:
         topic_id = name_to_id.get(match.topic_name)
         if topic_id:
-            llm_assignments.append((topic_id, match.score))
-
-    if not llm_assignments:
-        return False, "none"
-
-    updated = _apply_topic_assignments(
-        conn,
-        cluster_id=cluster_id,
-        assignments=llm_assignments,
-        assignment_source="auto",
-        now_utc=now,
-    )
-    return updated, "llm"
-
-
-def tag_recent_clusters_hybrid(
-    conn: psycopg.Connection[Any],
-    *,
-    now_utc: datetime | None = None,
-    lookback_days: int = 14,
-    limit_clusters: int = 500,
-    max_topics_per_cluster: int = 3,
-    phrase_match_threshold: float = 0.5,
-) -> HybridTaggingResult:
-    """
-    Tag recent clusters using hybrid approach.
-
-    Uses phrase matching first; falls back to LLM for low-confidence matches.
-
-    Args:
-        conn: Database connection
-        now_utc: Current timestamp
-        lookback_days: How far back to look for clusters
-        limit_clusters: Maximum clusters to process
-        max_topics_per_cluster: Maximum topics per cluster
-        phrase_match_threshold: Minimum phrase match score before LLM fallback
-
-    Returns:
-        HybridTaggingResult with counts
-    """
-    now = now_utc or datetime.now(timezone.utc)
-    if now.tzinfo is None:
-        raise ValueError("now_utc must be timezone-aware")
-    since = now - timedelta(days=int(lookback_days))
-
-    # Use subtopics if v1 format is present, otherwise use all topics
-    if has_subtopics(conn):
-        topics = _load_subtopics(conn)
-    else:
-        topics = _load_topics(conn)
-
-    if not topics:
-        return HybridTaggingResult(
-            clusters_scanned=0,
-            clusters_updated=0,
-            phrase_match_count=0,
-            llm_fallback_count=0,
-        )
-
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT id
-            FROM story_clusters
-            WHERE status = 'active'
-              AND updated_at >= %s
-            ORDER BY updated_at DESC, id DESC
-            LIMIT %s;
-            """,
-            (since, limit_clusters),
-        )
-        rows = cur.fetchall()
-
-    cluster_ids = [UUID(str(_row_get(r, "id", 0))) for r in rows]
-    scanned = 0
-    updated = 0
-    phrase_count = 0
-    llm_count = 0
-
-    for cid in cluster_ids:
-        scanned += 1
-        was_updated, method = tag_cluster_hybrid(
-            conn,
-            cluster_id=cid,
-            topics=topics,
-            now_utc=now,
-            max_topics=max_topics_per_cluster,
-            phrase_match_threshold=phrase_match_threshold,
-        )
-        if was_updated:
-            updated += 1
-            if method == "phrase":
-                phrase_count += 1
-            elif method == "llm":
-                llm_count += 1
-
-    return HybridTaggingResult(
-        clusters_scanned=scanned,
-        clusters_updated=updated,
-        phrase_match_count=phrase_count,
-        llm_fallback_count=llm_count,
-    )
+            assignments.append((topic_id, float(match.score)))
+    return assignments
 
 
 def tag_untagged_clusters_llm(
@@ -844,7 +606,7 @@ def tag_untagged_clusters_llm(
     """
     Tag clusters that have no topics using LLM only.
 
-    Useful for backfilling clusters that phrase matching missed.
+    Useful for backfilling clusters that were previously untagged.
 
     Args:
         conn: Database connection
@@ -1312,7 +1074,7 @@ def run_tagging_maintenance(
         rebuild_result.clusters_scanned,
     )
 
-    # Step 2: Re-tag untagged clusters (phrase matching)
+    # Step 2: Re-tag untagged clusters (LLM classification)
     topics = _load_subtopics(conn) if has_subtopics(conn) else _load_topics(conn)
 
     tagged = 0

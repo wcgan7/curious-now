@@ -6,10 +6,22 @@ import { env } from '@/lib/config/env';
 
 import styles from './TopicPage.module.css';
 
+function uniqueByClusterId(clusters: TopicDetail['latest_clusters']) {
+  const seen = new Set<string>();
+  return clusters.filter((cluster) => {
+    if (seen.has(cluster.cluster_id)) return false;
+    seen.add(cluster.cluster_id);
+    return true;
+  });
+}
+
 export function TopicPage({ detail }: { detail: TopicDetail }) {
   const topic = detail.topic;
   const topicType = topic.topic_type;
   const isCategory = topicType === 'category';
+  const focusCategory = isCategory ? { categoryId: topic.topic_id, name: topic.name } : undefined;
+  const latestClusters = uniqueByClusterId(detail.latest_clusters);
+  const trendingClusters = uniqueByClusterId(detail.trending_clusters ?? []);
 
   return (
     <main className={styles.main}>
@@ -41,20 +53,20 @@ export function TopicPage({ detail }: { detail: TopicDetail }) {
             Latest
           </h2>
           <div className={styles.list}>
-            {detail.latest_clusters.map((c) => (
-              <ClusterCard key={c.cluster_id} cluster={c} />
+            {latestClusters.map((c) => (
+              <ClusterCard key={c.cluster_id} cluster={c} focusCategory={focusCategory} />
             ))}
           </div>
         </section>
 
-        {detail.trending_clusters?.length ? (
+        {trendingClusters.length ? (
           <section className={styles.section} aria-labelledby="trending-heading">
             <h2 id="trending-heading" className={styles.h2}>
               {isCategory ? 'Trending in this category' : 'Trending in this topic'}
             </h2>
             <div className={styles.list}>
-              {detail.trending_clusters.map((c) => (
-                <ClusterCard key={c.cluster_id} cluster={c} />
+              {trendingClusters.map((c) => (
+                <ClusterCard key={c.cluster_id} cluster={c} focusCategory={focusCategory} />
               ))}
             </div>
           </section>
