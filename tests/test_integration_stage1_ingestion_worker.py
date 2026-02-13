@@ -11,7 +11,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from curious_now.ingestion import ingest_due_feeds, normalize_url
+from curious_now.ingestion import _guess_content_type, ingest_due_feeds, normalize_url
 
 
 @pytest.fixture()
@@ -112,3 +112,14 @@ def test_stage1_ingestion_worker_ingests_and_is_idempotent(
         assert row is not None
         count = row[0] if not isinstance(row, dict) else list(row.values())[0]
         assert int(count) == 2
+
+
+def test_guess_content_type_nature_journal_article_is_peer_reviewed() -> None:
+    assert (
+        _guess_content_type("journalism", "https://www.nature.com/articles/s41586-025-09951-7")
+        == "peer_reviewed"
+    )
+
+
+def test_guess_content_type_nature_news_article_stays_news() -> None:
+    assert _guess_content_type("journalism", "https://www.nature.com/articles/d41586-026-00367-5") == "news"

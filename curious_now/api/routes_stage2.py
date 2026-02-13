@@ -14,6 +14,7 @@ from curious_now.api.schemas import (
     ContentType,
     RedirectResponse,
     SearchResponse,
+    SourceType,
     TopicDetail,
     TopicsResponse,
 )
@@ -44,6 +45,8 @@ router = APIRouter()
 def get_clusters_feed(
     tab: Literal["latest", "trending"] = "latest",
     topic_id: UUID | None = None,
+    source_id: UUID | None = None,
+    source_type: SourceType | None = None,
     content_type: ContentType | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -51,7 +54,8 @@ def get_clusters_feed(
 ) -> ClustersFeedResponse:
     r = get_redis_client()
     cache_key = (
-        f"feed:{tab}:{topic_id or 'all'}:{content_type.value if content_type else 'all'}:"
+        f"feed:{tab}:{topic_id or 'all'}:{source_id or 'all'}:"
+        f"{source_type.value if source_type else 'all'}:{content_type.value if content_type else 'all'}:"
         f"{page}:{page_size}"
     )
     if r:
@@ -67,6 +71,8 @@ def get_clusters_feed(
         conn,
         tab=tab,
         topic_id=topic_id,
+        source_id=source_id,
+        source_type=source_type.value if source_type else None,
         content_type=content_type.value if content_type else None,
         page=page,
         page_size=page_size,

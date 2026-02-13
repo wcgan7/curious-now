@@ -32,6 +32,7 @@ _TRACKING_PARAMS = {
 _ARXIV_NEW_RE = re.compile(r"\b\d{4}\.\d{4,5}(v\d+)?\b", re.IGNORECASE)
 _ARXIV_OLD_RE = re.compile(r"\b[a-z-]+/\d{7}(v\d+)?\b", re.IGNORECASE)
 _DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+\b", re.IGNORECASE)
+_NATURE_HOSTS = {"nature.com", "www.nature.com"}
 
 
 @dataclass(frozen=True)
@@ -111,10 +112,30 @@ def normalize_url(url: str) -> str:
     return urlunsplit((scheme, netloc, path, query, fragment))
 
 
-def _guess_content_type(source_type: str) -> str:
+def _is_nature_peer_reviewed_article(url: str) -> bool:
+    """Return True when a Nature URL path looks like a journal article slug."""
+    parts = urlsplit(url.strip())
+    host = (parts.netloc or "").lower()
+    if host not in _NATURE_HOSTS:
+        return False
+    path = (parts.path or "").strip("/")
+    if not path.startswith("articles/"):
+        return False
+    slug = path[len("articles/") :].split("/", 1)[0].lower()
+    if not slug:
+        return False
+    # Nature news/editorial pages are usually d41586-... ; journal articles are s.... slugs.
+    if slug.startswith("d"):
+        return False
+    return slug.startswith("s")
+
+
+def _guess_content_type(source_type: str, url: str | None = None) -> str:
     # Stage 1 content_type mapping v0 (source-based defaults).
     # See design_docs/stage1.md §10.3 and design_docs/decisions.md.
     st = (source_type or "").strip().lower()
+    if url and _is_nature_peer_reviewed_article(url):
+        return "peer_reviewed"
     if st == "preprint_server":
         return "preprint"
     if st == "journal":
@@ -538,7 +559,7 @@ def ingest_due_feeds(
                 published_at = _parse_published_at(e)
                 author = e.get("author") if isinstance(e.get("author"), str) else None
                 snippet = _get_entry_snippet(e)
-                content_type = _guess_content_type(f.source_type)
+                content_type = _guess_content_type(f.source_type, url)
                 image_url = _extract_image_url(e)
 
                 arxiv_id, doi = _extract_ids(f"{title} {url}")

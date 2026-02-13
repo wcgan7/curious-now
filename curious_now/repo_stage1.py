@@ -93,6 +93,7 @@ def list_items_feed(
     page: int,
     page_size: int,
     source_id: UUID | None,
+    source_type: str | None,
     content_type: str | None,
 ) -> ItemsFeedResponse:
     offset = (page - 1) * page_size
@@ -101,6 +102,9 @@ def list_items_feed(
     if source_id:
         where.append("i.source_id = %s")
         params.append(source_id)
+    if source_type:
+        where.append("s.source_type = %s")
+        params.append(source_type)
     if content_type:
         where.append("i.content_type = %s")
         params.append(content_type)

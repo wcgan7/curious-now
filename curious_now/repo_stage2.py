@@ -239,6 +239,8 @@ def get_feed(
     *,
     tab: Literal["latest", "trending"],
     topic_id: UUID | None,
+    source_id: UUID | None,
+    source_type: str | None,
     content_type: str | None,
     page: int,
     page_size: int,
@@ -253,6 +255,21 @@ def get_feed(
             f"WHERE ct.cluster_id = c.id AND {_topic_match_clause_sql()})"
         )
         params.extend([topic_id, topic_id])
+    if source_id:
+        where.append(
+            "EXISTS (SELECT 1 FROM cluster_items ci "
+            "JOIN items i ON i.id = ci.item_id "
+            "WHERE ci.cluster_id = c.id AND i.source_id = %s)"
+        )
+        params.append(source_id)
+    if source_type:
+        where.append(
+            "EXISTS (SELECT 1 FROM cluster_items ci "
+            "JOIN items i ON i.id = ci.item_id "
+            "JOIN sources s ON s.id = i.source_id "
+            "WHERE ci.cluster_id = c.id AND s.source_type = %s)"
+        )
+        params.append(source_type)
     if content_type:
         where.append(
             "EXISTS (SELECT 1 FROM cluster_items ci "
