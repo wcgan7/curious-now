@@ -34,6 +34,45 @@ _ARXIV_OLD_RE = re.compile(r"\b[a-z-]+/\d{7}(v\d+)?\b", re.IGNORECASE)
 _DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+\b", re.IGNORECASE)
 _NATURE_HOSTS = {"nature.com", "www.nature.com"}
 
+_DOMAIN_CONTENT_TYPE: dict[str, str] = {
+    # Preprint servers
+    "arxiv.org": "preprint",
+    "biorxiv.org": "preprint",
+    "www.biorxiv.org": "preprint",
+    "medrxiv.org": "preprint",
+    "www.medrxiv.org": "preprint",
+    "ssrn.com": "preprint",
+    "chemrxiv.org": "preprint",
+    # Journals
+    "science.org": "peer_reviewed",
+    "www.science.org": "peer_reviewed",
+    "cell.com": "peer_reviewed",
+    "www.cell.com": "peer_reviewed",
+    "thelancet.com": "peer_reviewed",
+    "www.thelancet.com": "peer_reviewed",
+    "nejm.org": "peer_reviewed",
+    "www.nejm.org": "peer_reviewed",
+    "pnas.org": "peer_reviewed",
+    "www.pnas.org": "peer_reviewed",
+    "journals.plos.org": "peer_reviewed",
+    "frontiersin.org": "peer_reviewed",
+    "www.frontiersin.org": "peer_reviewed",
+    "link.springer.com": "peer_reviewed",
+    "www.sciencedirect.com": "peer_reviewed",
+    "academic.oup.com": "peer_reviewed",
+    "onlinelibrary.wiley.com": "peer_reviewed",
+    "www.mdpi.com": "peer_reviewed",
+    "iopscience.iop.org": "peer_reviewed",
+    "pubs.acs.org": "peer_reviewed",
+    "journals.aps.org": "peer_reviewed",
+    "bmj.com": "peer_reviewed",
+    "www.bmj.com": "peer_reviewed",
+    "jamanetwork.com": "peer_reviewed",
+    "jci.org": "peer_reviewed",
+    "www.jci.org": "peer_reviewed",
+    "elifesciences.org": "peer_reviewed",
+}
+
 
 @dataclass(frozen=True)
 class IngestResult:
@@ -130,12 +169,38 @@ def _is_nature_peer_reviewed_article(url: str) -> bool:
     return slug.startswith("s")
 
 
-def _guess_content_type(source_type: str, url: str | None = None) -> str:
-    # Stage 1 content_type mapping v0 (source-based defaults).
+def _guess_content_type(
+    source_type: str,
+    url: str | None = None,
+    arxiv_id: str | None = None,
+    doi: str | None = None,
+) -> str:
+    # Multi-signal cascade for content_type classification.
     # See design_docs/stage1.md §10.3 and design_docs/decisions.md.
+
+    # --- Signal 1: arXiv ID is definitive ---
+    if arxiv_id:
+        return "preprint"
+
+    # --- Signal 2+3: URL domain lookup ---
+    if url:
+        host = urlsplit(url.strip()).netloc.lower()
+        # Nature needs path-level logic (keep existing helper)
+        if host in _NATURE_HOSTS:
+            if _is_nature_peer_reviewed_article(url):
+                return "peer_reviewed"
+            # Fall through to source_type default (Nature news → journalism → news)
+        # Exact domain match
+        elif host in _DOMAIN_CONTENT_TYPE:
+            return _DOMAIN_CONTENT_TYPE[host]
+        # Suffix-based: .edu → press_release, .gov → report
+        elif host.endswith(".edu") or host.endswith(".ac.uk"):
+            return "press_release"
+        elif host.endswith(".gov") or host.endswith(".gov.uk"):
+            return "report"
+
+    # --- Signal 4: source_type fallback (current behavior) ---
     st = (source_type or "").strip().lower()
-    if url and _is_nature_peer_reviewed_article(url):
-        return "peer_reviewed"
     if st == "preprint_server":
         return "preprint"
     if st == "journal":
@@ -559,10 +624,9 @@ def ingest_due_feeds(
                 published_at = _parse_published_at(e)
                 author = e.get("author") if isinstance(e.get("author"), str) else None
                 snippet = _get_entry_snippet(e)
-                content_type = _guess_content_type(f.source_type, url)
-                image_url = _extract_image_url(e)
-
                 arxiv_id, doi = _extract_ids(f"{title} {url}")
+                content_type = _guess_content_type(f.source_type, url, arxiv_id, doi)
+                image_url = _extract_image_url(e)
 
                 ins, upd = _upsert_item(
                     conn,

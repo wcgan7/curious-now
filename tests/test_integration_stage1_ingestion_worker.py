@@ -123,3 +123,32 @@ def test_guess_content_type_nature_journal_article_is_peer_reviewed() -> None:
 
 def test_guess_content_type_nature_news_article_stays_news() -> None:
     assert _guess_content_type("journalism", "https://www.nature.com/articles/d41586-026-00367-5") == "news"
+
+
+def test_guess_content_type_arxiv_id_overrides_source_type() -> None:
+    assert (
+        _guess_content_type("journalism", "https://news.ycombinator.com/item?id=123", arxiv_id="2401.12345")
+        == "preprint"
+    )
+
+
+def test_guess_content_type_journal_domain_overrides_source_type() -> None:
+    assert (
+        _guess_content_type("blog", "https://www.science.org/doi/10.1126/science.abc1234")
+        == "peer_reviewed"
+    )
+
+
+def test_guess_content_type_edu_domain() -> None:
+    assert _guess_content_type("journalism", "https://news.mit.edu/2026/new-discovery") == "press_release"
+
+
+def test_guess_content_type_gov_domain() -> None:
+    assert _guess_content_type("journalism", "https://www.nih.gov/news-events/some-report") == "report"
+
+
+def test_guess_content_type_preprint_domain() -> None:
+    assert (
+        _guess_content_type("journalism", "https://www.biorxiv.org/content/10.1101/2024.01.01.123456v1")
+        == "preprint"
+    )
