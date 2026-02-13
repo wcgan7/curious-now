@@ -73,6 +73,13 @@
   color: var(--text-2);
 }
 
+.categoryChip {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+  color: color-mix(in srgb, var(--primary) 70%, black);
+  font-weight: 600;
+}
+
 .updatesLink {
   font-size: 12px;
   color: var(--primary);
@@ -162,9 +169,7 @@
 }
 
 .tabNav {
-  position: sticky;
-  top: calc(var(--story-sticky-top) + env(safe-area-inset-top, 0px));
-  z-index: 5;
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -172,8 +177,7 @@
   padding: 10px;
   border: var(--border-1);
   border-radius: 14px;
-  background: color-mix(in srgb, var(--surface-1) 96%, white);
-  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--surface-1) 94%, white);
 }
 
 .tabLink {
@@ -309,8 +313,9 @@
     align-items: start;
   }
 
-  .rail {
+  .sidebar {
     position: sticky;
-    top: 86px;
+    top: calc(var(--story-sticky-top) + 12px + env(safe-area-inset-top, 0px));
+    align-self: start;
   }
 }

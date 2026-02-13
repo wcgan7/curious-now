@@ -74,6 +74,8 @@ export function StoryPage({
     summary_intuition_eli20?: string | null;
     summary_intuition_eli5_supporting_item_ids?: string[] | null;
     summary_intuition_eli20_supporting_item_ids?: string[] | null;
+    categories?: { category_id: string; name: string; score: number }[];
+    top_categories?: { category_id: string; name: string; score: number }[];
   };
   const deepDivePayload = parseDeepDivePayload(cluster.summary_deep_dive);
   const eli5 =
@@ -96,6 +98,7 @@ export function StoryPage({
   const isSingleSource = cluster.distinct_source_count === 1;
   const canOpenSourceDirectly = cluster.distinct_source_count === 1 && !!primarySource;
   const directSourceLabel = sourceCtaLabel(primarySource?.contentType);
+  const categoryChips = (extended.categories ?? extended.top_categories ?? []).slice(0, 2);
   const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all');
   const relevantItemIds = useMemo(
     () => [
@@ -135,6 +138,11 @@ export function StoryPage({
             <p className={styles.eyebrow}>Story</p>
             <h1 className={styles.title}>{cluster.canonical_title}</h1>
             <div className={styles.heroMeta}>
+              {categoryChips.map((category) => (
+                <span key={category.category_id} className={`${styles.metaChip} ${styles.categoryChip}`}>
+                  {category.name}
+                </span>
+              ))}
               {cluster.distinct_source_count > 1 ? (
                 <span className={styles.metaChip}>
                   {cluster.distinct_source_count} sources

@@ -264,7 +264,7 @@ def get_feed(
     order_sql = (
         "c.updated_at DESC"
         if tab == "latest"
-        else "c.trending_score DESC, c.updated_at DESC"
+        else "c.high_impact_final_score DESC NULLS LAST, c.trending_score DESC, c.updated_at DESC"
     )
     where_sql = " AND ".join(where)
 

@@ -92,4 +92,23 @@ Read the protocol at [source](https://example.com/protocol).`}
       html.indexOf('improves causal forward prediction of naturalistic brain dynamics')
     );
   });
+
+  it('keeps ordered numbering across blank lines', () => {
+    const { getByText, container } = render(
+      <DeepDive
+        value={`## Results
+
+1. First finding
+
+2. Second finding
+
+3. Third finding`}
+      />
+    );
+
+    expect(getByText('First finding')).toBeInTheDocument();
+    expect(getByText('Second finding')).toBeInTheDocument();
+    expect(getByText('Third finding')).toBeInTheDocument();
+    expect(container.querySelectorAll('ol').length).toBe(1);
+  });
 });

@@ -17,10 +17,6 @@ def test_stage10_routes_registered() -> None:
     assert _has_route("GET", "/v1/entities")
     assert _has_route("GET", "/v1/entities/{id}")
 
-    assert _has_route("GET", "/v1/user/follows/entities")
-    assert _has_route("POST", "/v1/user/follows/entities/{entity_id}")
-    assert _has_route("DELETE", "/v1/user/follows/entities/{entity_id}")
-
     assert _has_route("POST", "/v1/admin/entities")
     assert _has_route("PATCH", "/v1/admin/entities/{id}")
     assert _has_route("POST", "/v1/admin/entities/{id}/merge")
@@ -29,4 +25,3 @@ def test_stage10_routes_registered() -> None:
     assert _has_route("POST", "/v1/admin/experiments")
     assert _has_route("PATCH", "/v1/admin/experiments/{id}")
     assert _has_route("PUT", "/v1/admin/feature_flags/{key}")
-

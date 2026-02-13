@@ -6,13 +6,33 @@ import { Badge } from '@/components/ui/Badge/Badge';
 
 import styles from './ClusterCard.module.css';
 
-export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
+type FocusCategory = {
+  categoryId: string;
+  name: string;
+};
+
+export function ClusterCard({
+  cluster,
+  focusCategory,
+}: {
+  cluster: ClusterCardType;
+  focusCategory?: FocusCategory;
+}) {
   const topCategories = cluster.top_categories || [];
-  const categoryNameSet = new Set(topCategories.map((c) => c.name.toLowerCase()));
+  const matchedFocusCategory = focusCategory
+    ? topCategories.find(
+        (category) =>
+          category.category_id === focusCategory.categoryId ||
+          category.name.toLowerCase() === focusCategory.name.toLowerCase()
+      )
+    : null;
+  const primaryCategory = matchedFocusCategory ?? topCategories[0];
+  const categoryNameSet = new Set([primaryCategory?.name.toLowerCase()].filter(Boolean));
   const topSubtopics = (cluster.top_topics || [])
     .filter((topic) => !categoryNameSet.has(topic.name.toLowerCase()))
     .slice(0, 2);
   const sourceTypeBadges = cluster.content_type_badges || [];
+  const showHighImpact = Boolean(cluster.high_impact_label);
 
   return (
     <Card as="article" href={`/story/${cluster.cluster_id}`}>
@@ -27,17 +47,14 @@ export function ClusterCard({ cluster }: { cluster: ClusterCardType }) {
         </div>
       ) : null}
       <Card.Content>
-        {topCategories.length || topSubtopics.length ? (
+        {topCategories.length || topSubtopics.length || showHighImpact ? (
           <div className={styles.metaRow}>
             <div className={styles.badges}>
-              {topCategories.slice(0, 1).map((category) => (
-                <Badge key={category.category_id} variant="info">
-                  {category.name}
-                </Badge>
-              ))}
+              {primaryCategory ? <Badge variant="info">{primaryCategory.name}</Badge> : null}
               {topSubtopics.map((topic) => (
                 <Badge key={topic.topic_id}>{topic.name}</Badge>
               ))}
+              {showHighImpact ? <Badge variant="warning">High Impact</Badge> : null}
             </div>
           </div>
         ) : null}

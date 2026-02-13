@@ -1,6 +1,6 @@
 import { getFeed } from '@/lib/api/feed';
 import type { ClustersFeedResponse } from '@/types/api';
-import { ClusterCard } from '@/components/feed/ClusterCard/ClusterCard';
+import { InfiniteFeedList } from '@/components/feed/FeedPage/InfiniteFeedList';
 
 import styles from './FeedPage.module.css';
 
@@ -23,12 +23,12 @@ export async function FeedPage({
         <header className={styles.pageHeader}>
           <p className={styles.kicker}>Curious Now</p>
           <h1 className={styles.title}>
-            {tab === 'latest' ? 'Latest' : 'Trending'}
+            {tab === 'latest' ? 'Latest' : 'High Impact'}
           </h1>
           <p className={styles.subtitle}>
             {tab === 'latest'
               ? 'Recent science stories, grouped and explained without noise.'
-              : 'What readers are exploring right now, with context before hype.'}
+              : 'Stories ranked by estimated impact, with momentum and recency as fallback.'}
           </p>
         </header>
         {hasFeedError ? (
@@ -39,11 +39,11 @@ export async function FeedPage({
         {!hasFeedError && feed && feed.results.length === 0 ? (
           <p className={styles.emptyNotice}>No stories available yet.</p>
         ) : null}
-        <div className={styles.list}>
-          {(feed?.results ?? []).map((c) => (
-            <ClusterCard key={c.cluster_id} cluster={c} />
-          ))}
-        </div>
+        <InfiniteFeedList
+          tab={tab}
+          initialItems={feed?.results ?? []}
+          hasInitialError={hasFeedError}
+        />
       </div>
     </main>
   );

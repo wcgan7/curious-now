@@ -1,26 +1,24 @@
-import { headers } from 'next/headers';
+'use client';
 
 import { env } from '@/lib/config/env';
 import type { ClustersFeedResponse, ContentType } from '@/types/api';
 
-export async function getFeed(options: {
+export async function getFeedClient(options: {
   tab: 'latest' | 'trending';
-  page?: number;
-  pageSize?: number;
+  page: number;
+  pageSize: number;
   topicId?: string;
   contentType?: ContentType;
 }): Promise<ClustersFeedResponse> {
   const url = new URL(`${env.apiUrl}/feed`);
   url.searchParams.set('tab', options.tab);
-  url.searchParams.set('page', String(options.page ?? 1));
-  url.searchParams.set('page_size', String(options.pageSize ?? 20));
+  url.searchParams.set('page', String(options.page));
+  url.searchParams.set('page_size', String(options.pageSize));
   if (options.topicId) url.searchParams.set('topic_id', options.topicId);
   if (options.contentType) url.searchParams.set('content_type', options.contentType);
 
-  const cookie = (await headers()).get('cookie');
   const res = await fetch(url, {
     headers: {
-      ...(cookie ? { cookie } : {}),
       Accept: 'application/json',
     },
     credentials: 'include',

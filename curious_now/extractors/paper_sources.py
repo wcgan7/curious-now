@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import re
-from io import BytesIO
 from collections.abc import Callable
+from io import BytesIO
 from logging import Logger
 from typing import Any
 from urllib.parse import quote
 
 import httpx
-
 
 _FRONTMATTER_AFFILIATION_RE = re.compile(
     r"(?i)\b(department|university|institute|fellow|observatory|center|centre|school|laboratory)\b"
@@ -360,7 +359,7 @@ def _page_text_from_blocks(blocks: list[Any], *, page_width: float) -> str:
     return "\n".join(left_lines + [""] + right_lines)
 
 
-def _serialize_pdf_table_rows(rows: list[list[str]]) -> str | None:
+def _serialize_pdf_table_rows(rows: list[list[str | None]]) -> str | None:
     def _normalize_cell(value: str | None) -> str:
         text = re.sub(r"\s+", " ", (value or "").strip())
         # Fix line-wrap hyphenation inside a table cell, e.g. "imple- mentation".
@@ -384,8 +383,8 @@ def _serialize_pdf_table_rows(rows: list[list[str]]) -> str | None:
 
     alpha_cells = 0
     split_like_cells = 0
-    for row in normalized_rows[1:] if len(normalized_rows) > 1 else normalized_rows:
-        for cell in row:
+    for normalized_row in normalized_rows[1:] if len(normalized_rows) > 1 else normalized_rows:
+        for cell in normalized_row:
             if not cell:
                 continue
             if re.fullmatch(r"[A-Za-z]{2,12}", cell):

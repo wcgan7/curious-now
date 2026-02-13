@@ -6,4 +6,6 @@ select = ["E", "F", "I", "UP", "B"]
 ignore = [
   # FastAPI/Depends patterns intentionally call Depends/Cookie/Header in defaults.
   "B008",
+  # Prompt strings and SQL fragments are intentionally long in several modules.
+  "E501",
 ]

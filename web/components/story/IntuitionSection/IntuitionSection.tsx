@@ -69,7 +69,6 @@ export function IntuitionSection({
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     window.localStorage.setItem(INTUITION_MODE_STORAGE_KEY, selected);
   }, [selected]);
 
@@ -80,6 +79,7 @@ export function IntuitionSection({
     modes.find((m) => m.id === 'eli20') ??
     modes[0];
   const showToggle = modes.length > 1;
+  const showSingleModePill = !showToggle && active.id !== 'eli5';
 
   return (
     <section className={styles.section} aria-labelledby="intuition-heading">
@@ -102,9 +102,9 @@ export function IntuitionSection({
               </button>
             ))}
           </div>
-        ) : (
+        ) : showSingleModePill ? (
           <span className={styles.modePill}>{active.label}</span>
-        )}
+        ) : null}
       </div>
 
       <p className={styles.prose}>{active.text}</p>

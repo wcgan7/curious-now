@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS feedback_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+  user_id UUID NULL,
   client_id UUID NULL,
 
   cluster_id UUID NULL REFERENCES story_clusters(id) ON DELETE SET NULL,
@@ -88,9 +88,9 @@ CREATE TABLE IF NOT EXISTS feedback_reports (
 
   status feedback_status NOT NULL DEFAULT 'new',
   triaged_at TIMESTAMPTZ NULL,
-  triaged_by_user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+  triaged_by_user_id UUID NULL,
   resolved_at TIMESTAMPTZ NULL,
-  resolved_by_user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+  resolved_by_user_id UUID NULL,
   resolution_notes TEXT NULL,
 
   meta JSONB NOT NULL DEFAULT '{}'::jsonb
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS editorial_actions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   actor_type editor_actor_type NOT NULL DEFAULT 'admin_token',
-  actor_user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+  actor_user_id UUID NULL,
 
   action_type editorial_action_type NOT NULL,
 
@@ -131,10 +131,52 @@ CREATE INDEX IF NOT EXISTS idx_editorial_actions_action_type_created_at ON edito
 CREATE INDEX IF NOT EXISTS idx_editorial_actions_cluster_created_at ON editorial_actions (target_cluster_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_editorial_actions_topic_created_at ON editorial_actions (target_topic_id, created_at DESC);
 
+-- Stage 5 accounts are optional in authless-first deployments.
+-- Add FK constraints to users only when the users table exists.
+DO $$
+BEGIN
+  IF to_regclass('public.users') IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'feedback_reports_user_id_fkey'
+    ) THEN
+      ALTER TABLE feedback_reports
+        ADD CONSTRAINT feedback_reports_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'feedback_reports_triaged_by_user_id_fkey'
+    ) THEN
+      ALTER TABLE feedback_reports
+        ADD CONSTRAINT feedback_reports_triaged_by_user_id_fkey
+        FOREIGN KEY (triaged_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'feedback_reports_resolved_by_user_id_fkey'
+    ) THEN
+      ALTER TABLE feedback_reports
+        ADD CONSTRAINT feedback_reports_resolved_by_user_id_fkey
+        FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'editorial_actions_actor_user_id_fkey'
+    ) THEN
+      ALTER TABLE editorial_actions
+        ADD CONSTRAINT editorial_actions_actor_user_id_fkey
+        FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+  END IF;
+END$$;
+
 -- --- cluster_topics: manual assignment source + lock ------------------------
 ALTER TABLE cluster_topics
   ADD COLUMN IF NOT EXISTS assignment_source topic_assignment_source NOT NULL DEFAULT 'auto',
   ADD COLUMN IF NOT EXISTS locked BOOLEAN NOT NULL DEFAULT false;
 
 COMMIT;
-

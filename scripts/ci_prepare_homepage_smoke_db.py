@@ -8,7 +8,6 @@ from uuid import uuid4
 
 import psycopg
 
-
 # Migrations required for /v1/feed and homepage rendering.
 # Intentionally excludes Stage 8/10 migrations, which depend on tables not yet
 # present in this repo's migration set.

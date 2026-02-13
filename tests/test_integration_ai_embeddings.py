@@ -14,7 +14,6 @@ from curious_now.ai.embeddings import (
     EmbeddingResult,
     MockEmbeddingProvider,
     OllamaEmbeddingProvider,
-    SentenceTransformersProvider,
     _build_embedding_text,
     _compute_text_hash,
     cosine_similarity,
@@ -216,7 +215,7 @@ class TestGenerateClusterEmbedding:
         result = generate_cluster_embedding(sample_cluster_input)
 
         assert result.success is True
-        assert result.provider in ["mock", "sentence-transformers", "ollama"]
+        assert result.provider in ["mock", "ollama"]
 
 
 class TestGenerateQueryEmbedding:
@@ -385,56 +384,6 @@ class TestOllamaEmbeddingProvider:
         if result.success:
             assert len(result.embedding) > 0
             assert result.provider == "ollama"
-
-
-class TestSentenceTransformersProvider:
-    """Test sentence-transformers embedding provider."""
-
-    @pytest.fixture
-    def st_provider(self) -> SentenceTransformersProvider:
-        return SentenceTransformersProvider()
-
-    def test_availability_check(self, st_provider: SentenceTransformersProvider) -> None:
-        available = st_provider.is_available()
-        assert isinstance(available, bool)
-
-    def test_name(self, st_provider: SentenceTransformersProvider) -> None:
-        assert st_provider.name == "sentence-transformers"
-
-    def test_generate_when_available(
-        self, st_provider: SentenceTransformersProvider
-    ) -> None:
-        if not st_provider.is_available():
-            pytest.skip("sentence-transformers not available")
-
-        result = st_provider.generate("Test text for embedding")
-
-        assert result.success is True
-        assert len(result.embedding) > 0
-        assert result.provider == "sentence-transformers"
-
-    def test_semantic_similarity_when_available(
-        self, st_provider: SentenceTransformersProvider
-    ) -> None:
-        """Test that sentence-transformers produces semantically meaningful embeddings."""
-        if not st_provider.is_available():
-            pytest.skip("sentence-transformers not available")
-
-        # Similar concepts
-        result1 = st_provider.generate("Machine learning and artificial intelligence")
-        result2 = st_provider.generate("AI and neural networks for computing")
-        result3 = st_provider.generate("Recipe for chocolate cake with frosting")
-
-        assert result1.success and result2.success and result3.success
-
-        sim_related = cosine_similarity(result1.embedding, result2.embedding)
-        sim_unrelated = cosine_similarity(result1.embedding, result3.embedding)
-
-        # Related concepts should have higher similarity
-        assert sim_related > sim_unrelated, (
-            f"Related similarity ({sim_related:.3f}) should be > "
-            f"unrelated similarity ({sim_unrelated:.3f})"
-        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

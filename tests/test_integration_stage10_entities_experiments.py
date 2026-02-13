@@ -6,7 +6,18 @@ from uuid import uuid4
 import psycopg
 import pytest
 
+from curious_now.api.app import app
 from curious_now.repo_stage5 import create_magic_link_token
+
+
+def _has_route(method: str, path: str) -> bool:
+    for route in app.router.routes:
+        if getattr(route, "path", None) != path:
+            continue
+        methods: set[str] = set(getattr(route, "methods", set()))
+        if method.upper() in methods:
+            return True
+    return False
 
 
 @pytest.mark.integration
@@ -37,16 +48,19 @@ def test_stage10_entities_and_experiments(client, db_conn: psycopg.Connection) -
     ids = [e["entity_id"] for e in resp.json()["results"]]
     assert e1 in ids and e2 in ids
 
-    # Login and follow e2
-    _user_id, token = create_magic_link_token(db_conn, email="entity@example.com")
-    resp = client.post("/v1/auth/magic_link/verify", json={"token": token})
-    assert resp.status_code == 200, resp.text
+    # User/entity follows are optional in authless-first deployments.
+    if _has_route("POST", "/v1/user/follows/entities/{entity_id}") and _has_route(
+        "POST", "/v1/auth/magic_link/verify"
+    ):
+        _user_id, token = create_magic_link_token(db_conn, email="entity@example.com")
+        resp = client.post("/v1/auth/magic_link/verify", json={"token": token})
+        assert resp.status_code == 200, resp.text
 
-    resp = client.post(f"/v1/user/follows/entities/{e2}")
-    assert resp.status_code == 200, resp.text
-    resp = client.get("/v1/user/follows/entities")
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["entities"][0]["entity_id"] == e2
+        resp = client.post(f"/v1/user/follows/entities/{e2}")
+        assert resp.status_code == 200, resp.text
+        resp = client.get("/v1/user/follows/entities")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["entities"][0]["entity_id"] == e2
 
     # Merge e1 -> e2; e1 should redirect.
     resp = client.post(

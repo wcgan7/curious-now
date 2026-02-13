@@ -372,6 +372,13 @@ class SavedCluster(BaseModel):
     cluster: ClusterCard
 
 
+class WatchedCluster(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    watched_at: datetime
+    cluster: ClusterCard
+
+
 class User(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -408,6 +415,12 @@ class UserSavesResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     saved: list[SavedCluster]
+
+
+class UserWatchesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    watched: list[WatchedCluster]
 
 
 class UserFollowedEntitiesResponse(BaseModel):

@@ -1,4 +1,4 @@
-.PHONY: venv install dev-up dev-down migrate api test lint typecheck check
+.PHONY: venv install dev-up dev-down migrate api test lint typecheck check sync-once sync-loop
 
 venv:
 	python -m venv .venv
@@ -28,3 +28,9 @@ typecheck:
 	.venv/bin/python -m mypy curious_now
 
 check: test lint typecheck
+
+sync-once:
+	.venv/bin/python scripts/run_resilient_sync.py
+
+sync-loop:
+	.venv/bin/python scripts/run_resilient_sync.py --loop

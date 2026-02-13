@@ -5,7 +5,24 @@ from uuid import uuid4
 import psycopg
 import pytest
 
+from curious_now.api.app import app
 from curious_now.repo_stage5 import create_magic_link_token
+
+
+def _has_route(method: str, path: str) -> bool:
+    for route in app.router.routes:
+        if getattr(route, "path", None) != path:
+            continue
+        methods: set[str] = set(getattr(route, "methods", set()))
+        if method.upper() in methods:
+            return True
+    return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _has_route("POST", "/v1/auth/magic_link/verify"),
+    reason="Stage 5 auth/user routes are deferred for authless launch.",
+)
 
 
 @pytest.mark.integration
