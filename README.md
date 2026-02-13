@@ -3,12 +3,12 @@
 Curious Now is a FastAPI backend for a “cluster-first” research/news product:
 
 - It ingests items from sources (feeds), groups them into story clusters, and serves feeds/search.
-- It supports users (magic-link auth, preferences, follows/saves/watches) and records engagement events.
+- It is currently scoped for an authless launch (no user accounts/sessions/personalization endpoints exposed).
 - It includes admin/governance tooling (feedback triage, topic/entity management, cluster merge/split, lineage).
 - It ships with Postgres migrations and a reference OpenAPI spec in `design_docs/`.
 
 This repo is intentionally “docs-first”: `design_docs/openapi.v0.yaml` and `design_docs/migrations/*.sql`
-are the source of truth, and the Python implementation follows them.
+define the full target v0 contract. The current authless launch exposes a subset of that API.
 
 For implementation history and verification notes, see `LOGBOOK.md`. For a tracked list of review issues,
 see `CODE_REVIEW.md`.
@@ -21,12 +21,11 @@ High-level, v0 functionality implemented in this codebase:
 - Stage 2: cluster feed (latest/trending/for_you), topics, cluster detail, search (Postgres FTS + optional trigram)
 - Stage 3: glossary lookup + glossary links on cluster detail
 - Stage 4: cluster update log + topic lineage graph
-- Stage 5: magic-link auth + session cookies + user prefs + follow/block/save/hide + events ingest
-- Stage 6: watches + notification job queue + dev “sender” (renders and marks jobs as sent)
+- Stage 5–6: deferred for initial authless launch (no user accounts/sessions/personalization yet)
 - Stage 7: best-effort Redis caching + weak ETags for some read endpoints
 - Stage 8: feedback + governance/editorial admin ops (merge/split/quarantine, topic ops, lineage ops)
 - Stage 9: rate limiting + identifier-first search for DOI/arXiv + retention tooling
-- Stage 10: entities + entity follows + experiments + feature flags
+- Stage 10: entities + experiments + feature flags (user entity follows deferred)
 
 Pipeline note: `POST /v1/admin/ingestion/run` triggers a best-effort background ingestion run inside the API
 process. Stage 2 clustering + topic tagging are implemented as CLI-driven worker jobs (run them from a
@@ -75,8 +74,27 @@ Prereqs:
    - `make api`
 
 Then:
-- Health check: `curl http://localhost:8000/healthz`
+- Liveness check: `curl http://localhost:8000/livez`
+- Readiness check: `curl http://localhost:8000/readyz`
+- Backward-compatible health check: `curl http://localhost:8000/healthz`
 - OpenAPI UI: `http://localhost:8000/docs`
+
+## Container Image (Backend)
+
+Build:
+
+- `docker build -t curious-now-api .`
+
+Run:
+
+- `docker run --rm -p 8000:8000 -e CN_DATABASE_URL=postgresql://... -e CN_REDIS_URL=redis://... -e CN_ADMIN_TOKEN=... curious-now-api`
+
+## Hosted Deployment (Render First)
+
+- Blueprint config: `render.yaml`
+- Runbook: `deploy/RENDER.md`
+
+This target is designed for a cheap first launch using one Render web service plus external Postgres/Redis.
 
 ## End-to-End Pipeline (Stage 1 → Stage 2)
 
@@ -97,6 +115,26 @@ Or do it step-by-step:
 - `python -m curious_now.cli cluster`
 - `python -m curious_now.cli tag-topics`
 - `python -m curious_now.cli recompute-trending`
+
+## Downtime-Tolerant Local Sync
+
+For an ops-friendly local runner that can recover from temporary failures and keep the
+remote DB updated, use:
+
+- One pass: `make sync-once`
+- Continuous loop: `make sync-loop`
+
+Runner script: `scripts/run_resilient_sync.py`
+
+Notes:
+- Uses retries with exponential backoff for each step.
+- Uses a Postgres advisory lock so overlapping resilient-sync processes skip instead of double-running.
+- Defaults to `untagged` topic mode to reduce wasted retag LLM calls.
+- Executes: ingest → hydrate-paper-text → cluster → tag → takeaways → deep-dives → trending.
+- Includes throughput profiles:
+  - `--throughput-profile low` for low daily volume / tighter LLM budget
+  - `--throughput-profile balanced` (default) for typical early launch
+  - `--throughput-profile high` for faster freshness at higher compute/LLM cost
 
 ## Configuration (Env Vars)
 

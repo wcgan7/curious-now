@@ -5,6 +5,7 @@ caching hints, and vector search.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID
 
@@ -83,6 +84,15 @@ class CacheStatsResponse(BaseModel):
     uptime_seconds: int | None = None
 
 
+class OfflineClustersResponse(BaseModel):
+    """Offline cluster payload for client-side caching."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    clusters: list[dict[str, Any]] = Field(default_factory=list)
+    generated_at: datetime
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
@@ -153,6 +163,26 @@ def get_manifest() -> ManifestResponse:
         ],
         categories=["news", "science", "education"],
     )
+
+
+@router.get("/offline/clusters", response_model=OfflineClustersResponse)
+def get_offline_clusters() -> OfflineClustersResponse:
+    """
+    Return an offline-safe cluster payload.
+
+    v0 returns an empty dataset because offline persistence is handled client-side.
+    """
+    return OfflineClustersResponse(clusters=[], generated_at=datetime.now(timezone.utc))
+
+
+@router.post("/offline/sync", response_model=SimpleOkResponse)
+def post_offline_sync() -> SimpleOkResponse:
+    """
+    Accept offline sync acknowledgements from clients.
+
+    v0 is a no-op to keep the sync contract stable.
+    """
+    return simple_ok()
 
 
 @router.post("/search/semantic", response_model=VectorSearchResponse)

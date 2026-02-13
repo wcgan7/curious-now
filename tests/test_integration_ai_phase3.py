@@ -913,7 +913,7 @@ class TestUpdateDetectionIntegration:
     """Integration tests for update detection with ClaudeCLIAdapter."""
 
     @pytest.fixture
-    def claude_adapter(self) -> "ClaudeCLIAdapter":
+    def claude_adapter(self) -> ClaudeCLIAdapter:
         """Get ClaudeCLIAdapter if available."""
         from curious_now.ai.llm_adapter import ClaudeCLIAdapter
         adapter = ClaudeCLIAdapter()
@@ -921,7 +921,7 @@ class TestUpdateDetectionIntegration:
             pytest.skip("Claude CLI not available")
         return adapter
 
-    def test_detect_meaningful_update_integration(self, claude_adapter: "ClaudeCLIAdapter") -> None:
+    def test_detect_meaningful_update_integration(self, claude_adapter: ClaudeCLIAdapter) -> None:
         """Integration test for detecting meaningful update."""
         input_data = UpdateDetectionInput(
             existing_takeaway="Initial mRNA vaccine trials show 90% efficacy "
@@ -947,7 +947,7 @@ class TestUpdateDetectionIntegration:
                 UpdateType.FOLLOW_UP,
             ]
 
-    def test_detect_not_meaningful_update_integration(self, claude_adapter: "ClaudeCLIAdapter") -> None:
+    def test_detect_not_meaningful_update_integration(self, claude_adapter: ClaudeCLIAdapter) -> None:
         """Integration test for detecting non-meaningful update."""
         input_data = UpdateDetectionInput(
             existing_takeaway="Scientists discover high concentrations of "
@@ -970,7 +970,7 @@ class TestLineageAnalysisIntegration:
     """Integration tests for lineage analysis with ClaudeCLIAdapter."""
 
     @pytest.fixture
-    def claude_adapter(self) -> "ClaudeCLIAdapter":
+    def claude_adapter(self) -> ClaudeCLIAdapter:
         """Get ClaudeCLIAdapter if available."""
         from curious_now.ai.llm_adapter import ClaudeCLIAdapter
         adapter = ClaudeCLIAdapter()
@@ -978,7 +978,7 @@ class TestLineageAnalysisIntegration:
             pytest.skip("Claude CLI not available")
         return adapter
 
-    def test_connected_stories_integration(self, claude_adapter: "ClaudeCLIAdapter") -> None:
+    def test_connected_stories_integration(self, claude_adapter: ClaudeCLIAdapter) -> None:
         """Integration test for connected stories."""
         story_a = StoryNode(
             cluster_id="crispr-discovery",
@@ -1009,7 +1009,7 @@ class TestLineageAnalysisIntegration:
                 EdgeType.BUILDS_ON,
             ]
 
-    def test_unrelated_stories_integration(self, claude_adapter: "ClaudeCLIAdapter") -> None:
+    def test_unrelated_stories_integration(self, claude_adapter: ClaudeCLIAdapter) -> None:
         """Integration test for unrelated stories."""
         story_a = StoryNode(
             cluster_id="solar-panel",

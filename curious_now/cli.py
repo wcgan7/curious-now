@@ -355,22 +355,23 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
         raw = Path(args.source_pack).read_text(encoding="utf-8")
         pack = SourcePack.model_validate_json(raw)
         with db.connect(autocommit=True) as conn:
-            result = import_source_pack(conn, pack)
+            source_pack_result = import_source_pack(conn, pack)
         print(
             "Imported source pack: "
-            f"{result.sources_upserted} sources; {result.feeds_upserted} feeds."
+            f"{source_pack_result.sources_upserted} sources; "
+            f"{source_pack_result.feeds_upserted} feeds."
         )
 
     if args.seed_topics:
         seed = load_topic_seed_v1(Path(args.topics_seed) if args.topics_seed else None)
         with db.connect(autocommit=True) as conn:
-            result = seed_topics_v1(conn, seed=seed, now_utc=now)
+            seed_result = seed_topics_v1(conn, seed=seed, now_utc=now)
         print(
             "Seeded topics: "
-            f"{result.categories_inserted} categories inserted, "
-            f"{result.categories_updated} updated; "
-            f"{result.subtopics_inserted} subtopics inserted, "
-            f"{result.subtopics_updated} updated."
+            f"{seed_result.categories_inserted} categories inserted, "
+            f"{seed_result.categories_updated} updated; "
+            f"{seed_result.subtopics_inserted} subtopics inserted, "
+            f"{seed_result.subtopics_updated} updated."
         )
 
     with db.connect(autocommit=True) as conn:

@@ -4,7 +4,6 @@ import hashlib
 import html
 import io
 import logging
-from pathlib import Path
 import re
 import tarfile
 import time
@@ -12,6 +11,7 @@ import unicodedata
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 from uuid import UUID
@@ -724,7 +724,7 @@ def _dump_rejected_pdf_text_for_debug(url: str, text: str) -> None:
         return
     try:
         score = _score_fulltext_quality(text)
-        digest = hashlib.sha1(f"{url}|{len(text)}|{score:.4f}".encode("utf-8")).hexdigest()[:12]
+        digest = hashlib.sha1(f"{url}|{len(text)}|{score:.4f}".encode()).hexdigest()[:12]
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         out_dir = Path(dump_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -758,7 +758,8 @@ def _latex_to_text(tex: str) -> str | None:
         from pylatexenc.latex2text import LatexNodes2Text
 
         converter = LatexNodes2Text(math_mode="with-delimiters")
-        return converter.latex_to_text(tex)
+        converted = converter.latex_to_text(tex)
+        return str(converted)
     except Exception:
         cleaned = re.sub(r"(?m)(?<!\\)%.*$", "", tex)
         cleaned = re.sub(

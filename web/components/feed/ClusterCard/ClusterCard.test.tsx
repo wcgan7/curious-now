@@ -90,4 +90,46 @@ describe('ClusterCard', () => {
     expect(screen.getByText('Artificial Intelligence')).toBeInTheDocument();
     expect(screen.queryByText('Materials & Engineering')).toBeNull();
   });
+
+  it('shows High Impact chip when cluster is high impact', () => {
+    render(
+      <ClusterCard
+        cluster={{
+          cluster_id: '00000000-0000-0000-0000-000000000005',
+          canonical_title: 'High impact card',
+          updated_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          distinct_source_count: 1,
+          top_topics: [],
+          content_type_badges: [],
+          takeaway: null,
+          anti_hype_flags: [],
+          high_impact_label: true,
+          high_impact_reasons: [],
+        }}
+      />
+    );
+
+    expect(screen.getByText('High Impact')).toBeInTheDocument();
+  });
+
+  it('does not show High Impact chip when cluster is not high impact', () => {
+    render(
+      <ClusterCard
+        cluster={{
+          cluster_id: '00000000-0000-0000-0000-000000000006',
+          canonical_title: 'Normal impact card',
+          updated_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          distinct_source_count: 1,
+          top_topics: [],
+          content_type_badges: [],
+          takeaway: null,
+          anti_hype_flags: [],
+          high_impact_label: false,
+          high_impact_reasons: [],
+        }}
+      />
+    );
+
+    expect(screen.queryByText('High Impact')).toBeNull();
+  });
 });

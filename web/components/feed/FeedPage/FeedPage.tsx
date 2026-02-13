@@ -23,12 +23,12 @@ export async function FeedPage({
         <header className={styles.pageHeader}>
           <p className={styles.kicker}>Curious Now</p>
           <h1 className={styles.title}>
-            {tab === 'latest' ? 'Latest' : 'Trending'}
+            {tab === 'latest' ? 'Latest' : 'High Impact'}
           </h1>
           <p className={styles.subtitle}>
             {tab === 'latest'
               ? 'Recent science stories, grouped and explained without noise.'
-              : 'What readers are exploring right now, with context before hype.'}
+              : 'Stories ranked by estimated impact, with momentum and recency as fallback.'}
           </p>
         </header>
         {hasFeedError ? (

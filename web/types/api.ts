@@ -54,6 +54,8 @@ export type SearchResponse = {
 export type ClusterCard = components['schemas']['ClusterCard'] & {
   featured_image_url?: string | null;
   top_categories?: CategoryChip[];
+  high_impact_label?: boolean;
+  high_impact_reasons?: string[];
 };
 
 export type ClusterDetail = components['schemas']['ClusterDetail'] & {

@@ -4,7 +4,7 @@ import { env } from '@/lib/config/env';
 import type { ClustersFeedResponse, ContentType } from '@/types/api';
 
 export async function getFeedClient(options: {
-  tab: 'latest' | 'trending' | 'for_you';
+  tab: 'latest' | 'trending';
   page: number;
   pageSize: number;
   topicId?: string;
@@ -31,4 +31,3 @@ export async function getFeedClient(options: {
 
   return (await res.json()) as ClustersFeedResponse;
 }
-

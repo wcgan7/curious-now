@@ -5,16 +5,27 @@ from collections.abc import Generator
 from typing import Any
 
 import psycopg
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 
 from curious_now.db import DB
 from curious_now.settings import get_settings
 
 
-def get_db() -> Generator[psycopg.Connection[Any], None, None]:
+def _build_runtime_db() -> DB:
     settings = get_settings()
-    db = DB(settings.database_url)
-    with db.connect() as conn:
+    return DB(
+        settings.database_url,
+        pool_enabled=False,
+        pool_min_size=settings.db_pool_min_size,
+        pool_max_size=settings.db_pool_max_size,
+        pool_timeout_seconds=settings.db_pool_timeout_seconds,
+    )
+
+
+def get_db(request: Request) -> Generator[psycopg.Connection[Any], None, None]:
+    runtime_db = getattr(request.app.state, "db", None)
+    db = runtime_db if isinstance(runtime_db, DB) else _build_runtime_db()
+    with db.connection() as conn:
         yield conn
 
 

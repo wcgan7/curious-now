@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     log_magic_link_tokens: bool = False
     trust_proxy_headers: bool = False
+    security_headers_enabled: bool = True
+
+    # Postgres connection pooling (API runtime)
+    db_pool_enabled: bool = True
+    db_pool_min_size: int = 1
+    db_pool_max_size: int = 10
+    db_pool_timeout_seconds: float = 10.0
 
     # Stage 6 defaults (used when user_prefs.notification_settings missing)
     default_timezone: str = "UTC"

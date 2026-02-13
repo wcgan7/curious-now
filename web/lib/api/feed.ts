@@ -4,7 +4,7 @@ import { env } from '@/lib/config/env';
 import type { ClustersFeedResponse, ContentType } from '@/types/api';
 
 export async function getFeed(options: {
-  tab: 'latest' | 'trending' | 'for_you';
+  tab: 'latest' | 'trending';
   page?: number;
   pageSize?: number;
   topicId?: string;
@@ -28,12 +28,6 @@ export async function getFeed(options: {
   });
 
   if (!res.ok) {
-    // Feed returns 401 when tab=for_you and unauthenticated
-    if (res.status === 401) {
-      const err = new Error('unauthorized');
-      (err as any).status = 401;
-      throw err;
-    }
     throw new Error(`Feed request failed: ${res.status}`);
   }
 

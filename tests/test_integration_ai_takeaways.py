@@ -296,7 +296,15 @@ class TestGenerateTakeawayMock:
         adapter = MockAdapter(responses={"test": '"Quoted response"'})
         input_data = TakeawayInput(
             cluster_title="Test Cluster",
-            items=[ItemSummary(title="test article")],
+            items=[
+                ItemSummary(
+                    title="test article",
+                    snippet=(
+                        "This contains enough detail to pass the minimum content gate "
+                        "for takeaway generation in tests."
+                    ),
+                )
+            ],
         )
         result = generate_takeaway(input_data, adapter=adapter)
 

@@ -110,8 +110,17 @@ def _clamp(v: float) -> float:
 
 
 def _to_float(value: object, default: float = 0.0) -> float:
-    try:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    try:
+        return float(str(value))
     except (TypeError, ValueError):
         return default
 

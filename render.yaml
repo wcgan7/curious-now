@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: curious-now-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /readyz
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    preDeployCommand: python -m curious_now.cli migrate
+    envVars:
+      - key: CN_DATABASE_URL
+        sync: false
+      - key: CN_REDIS_URL
+        sync: false
+      - key: CN_ADMIN_TOKEN
+        sync: false
+      - key: CN_PUBLIC_APP_BASE_URL
+        sync: false
+      - key: CN_COOKIE_SECURE
+        value: "true"
+      - key: CN_TRUST_PROXY_HEADERS
+        value: "true"
+      - key: CN_SECURITY_HEADERS_ENABLED
+        value: "true"
+      - key: CN_DB_POOL_ENABLED
+        value: "true"
+      - key: CN_DB_POOL_MIN_SIZE
+        value: "1"
+      - key: CN_DB_POOL_MAX_SIZE
+        value: "10"
+      - key: CN_DB_POOL_TIMEOUT_SECONDS
+        value: "10"

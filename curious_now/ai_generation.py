@@ -1250,6 +1250,7 @@ def enrich_stage3_for_clusters(
                             _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
                         )
 
+            summary_intuition: str | None = None
             if abstract_fallback_intuition and not deep_dive_markdown:
                 summary_intuition = abstract_fallback_intuition
                 _update_cluster_stage3(
@@ -1264,7 +1265,6 @@ def enrich_stage3_for_clusters(
             # ─────────────────────────────────────────────────────────────
             # Generate layered intuition: Deep Dive -> ELI20 -> ELI5
             # ─────────────────────────────────────────────────────────────
-            summary_intuition = None
             intuition_result: IntuitionResult | None = None
             if deep_dive_markdown:
                 intuition_input = IntuitionInput(
@@ -1816,11 +1816,10 @@ def generate_high_impact_for_clusters(
         try:
             items = _get_cluster_items_for_takeaway(conn, cluster_id)
             content_types = _get_cluster_content_types(conn, cluster_id)
-            anti_hype_flags = [str(x) for x in (cluster.get("anti_hype_flags") or [])]
-            if isinstance(cluster.get("anti_hype_flags"), str):
-                anti_hype_flags = [
-                    str(x) for x in (json.loads(cluster.get("anti_hype_flags")) or [])
-                ]
+            raw_anti_hype = cluster.get("anti_hype_flags")
+            anti_hype_flags = [str(x) for x in (raw_anti_hype or [])]
+            if isinstance(raw_anti_hype, str):
+                anti_hype_flags = [str(x) for x in (json.loads(raw_anti_hype) or [])]
             has_full_text_paper = any(
                 i.get("source_type") in _PAPER_CONTENT_TYPES
                 and _paper_text_kind(i) == "fulltext"

@@ -15,6 +15,8 @@ def _has_route(method: str, path: str) -> bool:
 
 def test_stage1_routes_registered() -> None:
     assert _has_route("GET", "/healthz")
+    assert _has_route("GET", "/livez")
+    assert _has_route("GET", "/readyz")
     assert _has_route("GET", "/v1/items/feed")
     assert _has_route("GET", "/v1/sources")
     assert _has_route("POST", "/v1/admin/source_pack/import")
