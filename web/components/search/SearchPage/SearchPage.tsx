@@ -61,7 +61,7 @@ export function SearchPage() {
         </header>
 
         {!enabled ? (
-          <p className={styles.hint}>Type a query to find stories and topics.</p>
+          <p className={styles.hint}>Look up stories or topics.</p>
         ) : query.isLoading ? (
           <p className={styles.hint}>Searching…</p>
         ) : query.isError ? (

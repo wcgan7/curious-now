@@ -1,9 +1,27 @@
+import Link from 'next/link';
+
+import styles from './fallback.module.css';
+import { Button } from '@/components/ui/Button/Button';
+
 export default function NotFound() {
   return (
-    <main style={{ padding: '48px 16px', maxWidth: 900, margin: '0 auto' }}>
-      <h1>Not found</h1>
-      <p>This page doesn’t exist.</p>
+    <main className={styles.main}>
+      <div className={styles.container}>
+        <section className={styles.card} aria-labelledby="not-found-heading">
+          <p className={styles.kicker}>Curious Now</p>
+          <h1 id="not-found-heading" className={styles.title}>
+            Not found
+          </h1>
+          <p className={styles.message}>
+            This page doesn&apos;t exist or may have moved.
+          </p>
+          <div className={styles.actions}>
+            <Link href="/">
+              <Button type="button">Go to home</Button>
+            </Link>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
-

@@ -12,23 +12,24 @@ import { IntuitionSection } from '@/components/story/IntuitionSection/IntuitionS
 
 function parseDeepDivePayload(
   summaryDeepDive: string | null | undefined
-): { markdown?: string; eli5?: string; eli20?: string } {
-  if (!summaryDeepDive) return {};
+): { isPayload: boolean; markdown?: string; eli5?: string; eli20?: string } {
+  if (!summaryDeepDive) return { isPayload: false };
   const text = summaryDeepDive.trim();
-  if (!(text.startsWith('{') && text.endsWith('}'))) return {};
+  if (!(text.startsWith('{') && text.endsWith('}'))) return { isPayload: false };
 
   try {
     const parsed = JSON.parse(text) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { isPayload: false };
     const obj = parsed as Record<string, unknown>;
 
     return {
+      isPayload: true,
       markdown: typeof obj.markdown === 'string' ? obj.markdown : undefined,
       eli5: typeof obj.eli5 === 'string' ? obj.eli5 : undefined,
       eli20: typeof obj.eli20 === 'string' ? obj.eli20 : undefined,
     };
   } catch {
-    return {};
+    return { isPayload: false };
   }
 }
 
@@ -78,6 +79,12 @@ export function StoryPage({
     top_categories?: { category_id: string; name: string; score: number }[];
   };
   const deepDivePayload = parseDeepDivePayload(cluster.summary_deep_dive);
+  const deepDiveMarkdown =
+    deepDivePayload.isPayload
+      ? hasText(deepDivePayload.markdown)
+        ? deepDivePayload.markdown
+        : null
+      : cluster.summary_deep_dive;
   const eli5 =
     extended.summary_intuition_eli5 ?? cluster.summary_intuition ?? deepDivePayload.eli5 ?? null;
   const eli20 = extended.summary_intuition_eli20 ?? deepDivePayload.eli20 ?? null;
@@ -89,7 +96,7 @@ export function StoryPage({
     cluster.summary_intuition_supporting_item_ids;
   const hasTakeaway = hasText(cluster.takeaway);
   const hasIntuition = hasText(eli5) || hasText(eli20);
-  const hasDeepDive = hasText(cluster.summary_deep_dive);
+  const hasDeepDive = hasText(deepDiveMarkdown);
   const hasContextLists =
     !!cluster.assumptions?.length ||
     !!cluster.limitations?.length ||
@@ -241,7 +248,7 @@ export function StoryPage({
               <section id="deep-dive" className={styles.panel}>
                 <div className={styles.section}>
                   <h2 className={styles.h2}>Deep Dive</h2>
-                  <DeepDive value={deepDivePayload.markdown ?? cluster.summary_deep_dive!} />
+                  <DeepDive value={deepDiveMarkdown!} />
                 </div>
               </section>
             ) : null}

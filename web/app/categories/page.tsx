@@ -55,7 +55,7 @@ export default async function CategoriesPage() {
         <header className={styles.header}>
           <p className={styles.kicker}>Browse</p>
           <h1 className={styles.title}>Top categories</h1>
-          <p className={styles.subtitle}>Choose a category to read only stories in that area.</p>
+          <p className={styles.subtitle}>Browse stories by category.</p>
         </header>
 
         {categories.length ? (

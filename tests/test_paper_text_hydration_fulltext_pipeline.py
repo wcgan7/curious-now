@@ -189,6 +189,71 @@ def test_fetch_arxiv_html_full_text_parses_sections(monkeypatch: pytest.MonkeyPa
     assert "ignore me" not in lower
 
 
+def test_fetch_arxiv_html_image_url_uses_og_image_and_resolves_relative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = """
+    <html>
+      <head>
+        <meta property="og:image" content="/html/1234.56789v1/figures/hero.png" />
+      </head>
+      <body><main><p>Content</p></main></body>
+    </html>
+    """
+
+    def _mock_get(_url: str, *, timeout_s: float = 20.0) -> httpx.Response:
+        return httpx.Response(200, text=body, headers={"content-type": "text/html; charset=utf-8"})
+
+    monkeypatch.setattr(pth, "_http_get", _mock_get)
+    image_url = pth._fetch_arxiv_html_image_url("1234.56789")
+    assert image_url == "https://arxiv.org/html/1234.56789v1/figures/hero.png"
+
+
+def test_fetch_arxiv_html_image_url_resolves_plain_relative_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = """
+    <html>
+      <body>
+        <main>
+          <figure><img src="x1.png" /></figure>
+        </main>
+      </body>
+    </html>
+    """
+
+    def _mock_get(_url: str, *, timeout_s: float = 20.0) -> httpx.Response:
+        return httpx.Response(200, text=body, headers={"content-type": "text/html; charset=utf-8"})
+
+    monkeypatch.setattr(pth, "_http_get", _mock_get)
+    image_url = pth._fetch_arxiv_html_image_url("2602.12259v1")
+    assert image_url == "https://arxiv.org/html/2602.12259v1/x1.png"
+
+
+def test_fetch_arxiv_html_image_url_prefers_base_href_for_relative_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = """
+    <html>
+      <head>
+        <base href="/html/2602.12259v1/" />
+      </head>
+      <body>
+        <main>
+          <figure><img src="x1.png" /></figure>
+        </main>
+      </body>
+    </html>
+    """
+
+    def _mock_get(_url: str, *, timeout_s: float = 20.0) -> httpx.Response:
+        return httpx.Response(200, text=body, headers={"content-type": "text/html; charset=utf-8"})
+
+    monkeypatch.setattr(pth, "_http_get", _mock_get)
+    image_url = pth._fetch_arxiv_html_image_url("2602.12259")
+    assert image_url == "https://arxiv.org/html/2602.12259v1/x1.png"
+
+
 def test_clean_full_text_preserves_angle_bracket_math_in_plain_text() -> None:
     text = "We impose a redshift 2 < z < 3 and signal-to-noise > 5 per pixel."
     out = pth._clean_full_text(text)

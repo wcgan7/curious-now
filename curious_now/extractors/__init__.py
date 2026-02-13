@@ -2,6 +2,7 @@
 
 from curious_now.extractors.paper_sources import (
     extract_arxiv_html_body_text,
+    extract_arxiv_html_image_url,
     extract_html_body_text,
     extract_pdf_text,
     fetch_arxiv_html_full_text,
@@ -11,6 +12,7 @@ from curious_now.extractors.paper_sources import (
 
 __all__ = [
     "extract_arxiv_html_body_text",
+    "extract_arxiv_html_image_url",
     "extract_html_body_text",
     "extract_pdf_text",
     "fetch_arxiv_html_full_text",

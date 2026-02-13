@@ -58,4 +58,40 @@ describe('StoryPage intuition fallback from deep-dive payload', () => {
     await user.click(screen.getByRole('tab', { name: 'ELI5' }));
     expect(screen.getByText('ELI5 explanation')).toBeInTheDocument();
   });
+
+  it('does not render Deep Dive when payload has no markdown content', () => {
+    renderWithProviders(
+      <StoryPage
+        cluster={{
+          cluster_id: '12222222-1111-1111-1111-111111111111',
+          canonical_title: 'Payload-only intuition story',
+          created_at: new Date('2026-02-06T00:00:00Z').toISOString(),
+          updated_at: new Date('2026-02-06T00:00:00Z').toISOString(),
+          distinct_source_count: 1,
+          evidence: { preprint: [] },
+          topics: [],
+          content_type_breakdown: { preprint: 1 },
+          takeaway: null,
+          summary_intuition: null,
+          summary_deep_dive: JSON.stringify({
+            eli20: 'Payload ELI20 only',
+          }),
+          assumptions: [],
+          limitations: [],
+          what_could_change_this: [],
+          method_badges: [],
+          anti_hype_flags: [],
+          takeaway_supporting_item_ids: [],
+          summary_intuition_supporting_item_ids: [],
+          summary_deep_dive_supporting_item_ids: [],
+          glossary_entries: [],
+          is_saved: null,
+          is_watched: null,
+        }}
+      />
+    );
+
+    expect(screen.getByText('Payload ELI20 only')).toBeInTheDocument();
+    expect(screen.queryByText('Deep Dive')).toBeNull();
+  });
 });

@@ -829,6 +829,17 @@ def _fetch_arxiv_html_full_text(arxiv_id: str) -> str | None:
     )
 
 
+def _fetch_arxiv_html_image_url(arxiv_id: str) -> str | None:
+    html_url = f"https://arxiv.org/html/{quote(arxiv_id)}"
+    resp = _http_get(html_url, timeout_s=20.0)
+    if resp.status_code != 200:
+        return None
+    content_type = (resp.headers.get("content-type") or "").lower()
+    if "html" not in content_type:
+        return None
+    return extractors.extract_arxiv_html_image_url(resp.text, base_url=html_url)
+
+
 def _fetch_arxiv_eprint_full_text(arxiv_id: str) -> str | None:
     url = f"https://arxiv.org/e-print/{quote(arxiv_id)}"
     resp = _http_get(url, timeout_s=20.0)
@@ -1222,6 +1233,17 @@ def _extract_item_text(
     return None, "not_found", None, None, None
 
 
+def _extract_item_text_and_image(
+    item: dict[str, Any],
+) -> tuple[str | None, str, str | None, str | None, str | None, str | None]:
+    text, status, source, kind, license_name = _extract_item_text(item)
+    image_url: str | None = None
+    arxiv_id = item.get("arxiv_id")
+    if isinstance(arxiv_id, str) and arxiv_id.strip():
+        image_url = _fetch_arxiv_html_image_url(arxiv_id.strip())
+    return text, status, source, kind, license_name, image_url
+
+
 def _get_items_needing_hydration(
     conn: psycopg.Connection[Any],
     *,
@@ -1248,7 +1270,8 @@ def _get_items_needing_hydration(
               i.full_text,
               i.full_text_status,
               i.full_text_kind,
-              i.full_text_license
+              i.full_text_license,
+              i.image_url
             FROM items i
             WHERE i.content_type IN ('preprint', 'peer_reviewed')
               AND (i.full_text IS NULL OR btrim(i.full_text) = '')
@@ -1270,6 +1293,7 @@ def _update_item_hydration(
     source: str | None,
     kind: str | None,
     license_name: str | None,
+    image_url: str | None,
     error_message: str | None,
     now_utc: datetime,
 ) -> None:
@@ -1282,12 +1306,13 @@ def _update_item_hydration(
                 full_text_source = %s,
                 full_text_kind = %s,
                 full_text_license = %s,
+                image_url = COALESCE(items.image_url, %s),
                 full_text_error = %s,
                 full_text_fetched_at = %s,
                 updated_at = now()
             WHERE id = %s;
             """,
-            (full_text, status, source, kind, license_name, error_message, now_utc, item_id),
+            (full_text, status, source, kind, license_name, image_url, error_message, now_utc, item_id),
         )
 
 
@@ -1313,7 +1338,12 @@ def hydrate_paper_text(
             skipped += 1
             continue
         try:
-            text, status, source, kind, license_name = _extract_item_text(item)
+            text, status, source, kind, license_name, extracted_image_url = _extract_item_text_and_image(item)
+            existing_image = item.get("image_url")
+            should_backfill_image = not (
+                isinstance(existing_image, str) and existing_image.strip()
+            )
+            image_url = extracted_image_url if should_backfill_image else None
             if text:
                 hydrated += 1
                 _update_item_hydration(
@@ -1324,6 +1354,7 @@ def hydrate_paper_text(
                     source=source,
                     kind=kind,
                     license_name=license_name,
+                    image_url=image_url,
                     error_message=None,
                     now_utc=now_utc,
                 )
@@ -1337,6 +1368,7 @@ def hydrate_paper_text(
                     source=source,
                     kind=kind,
                     license_name=license_name,
+                    image_url=image_url,
                     error_message=None,
                     now_utc=now_utc,
                 )
@@ -1351,6 +1383,7 @@ def hydrate_paper_text(
                 source=None,
                 kind=None,
                 license_name=None,
+                image_url=None,
                 error_message=str(exc)[:4000],
                 now_utc=now_utc,
             )

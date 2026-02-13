@@ -90,7 +90,7 @@
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, #d0312d 28%, var(--border));
-  background: color-mix(in srgb, #d0312d 8%, var(--surface));
+  background: color-mix(in srgb, #d0312d 8%, var(--surface-1));
   color: color-mix(in srgb, #d0312d 72%, var(--text-1));
 }
 
@@ -99,7 +99,7 @@
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-1);
   color: var(--text-2);
 }
 
