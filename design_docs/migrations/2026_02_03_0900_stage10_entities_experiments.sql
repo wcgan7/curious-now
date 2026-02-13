@@ -118,13 +118,28 @@ ALTER TABLE entity_edges
 
 -- --- user_entity_follows ----------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_entity_follows (
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL,
   entity_id UUID NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, entity_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_entity_follows_entity_user ON user_entity_follows (entity_id, user_id);
+
+-- Stage 5 accounts are optional in authless-first deployments.
+-- Add FK to users only when the users table exists.
+DO $$
+BEGIN
+  IF to_regclass('public.users') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM pg_constraint
+       WHERE conname = 'user_entity_follows_user_id_fkey'
+     ) THEN
+    ALTER TABLE user_entity_follows
+      ADD CONSTRAINT user_entity_follows_user_id_fkey
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+  END IF;
+END$$;
 
 -- --- experiments + assignments ---------------------------------------------
 CREATE TABLE IF NOT EXISTS experiments (
@@ -185,4 +200,3 @@ BEFORE UPDATE ON feature_flags
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 COMMIT;
-
