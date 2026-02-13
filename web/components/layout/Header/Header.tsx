@@ -26,7 +26,7 @@ export function Header() {
             href="/trending"
             className={clsx(styles.navLink, isActive('/trending') && styles.active)}
           >
-            High Impact
+            In Focus
           </Link>
           <Link href="/categories" className={clsx(styles.navLink, categoriesActive && styles.active)}>
             Categories
@@ -48,7 +48,7 @@ export function Header() {
           href="/trending"
           className={clsx(styles.mobileLink, isActive('/trending') && styles.activeMobile)}
         >
-          High Impact
+          In Focus
         </Link>
         <Link
           href="/categories"

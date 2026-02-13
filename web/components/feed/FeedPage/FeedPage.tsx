@@ -23,7 +23,7 @@ export async function FeedPage({
         <header className={styles.pageHeader}>
           <p className={styles.kicker}>Curious Now</p>
           <h1 className={styles.title}>
-            {tab === 'latest' ? 'Latest' : 'High Impact'}
+            {tab === 'latest' ? 'Latest' : 'In Focus'}
           </h1>
           <p className={styles.subtitle}>
             {tab === 'latest'

@@ -91,12 +91,12 @@ describe('ClusterCard', () => {
     expect(screen.queryByText('Materials & Engineering')).toBeNull();
   });
 
-  it('shows High Impact chip when cluster is high impact', () => {
+  it('shows In Focus chip when cluster is marked in focus', () => {
     render(
       <ClusterCard
         cluster={{
           cluster_id: '00000000-0000-0000-0000-000000000005',
-          canonical_title: 'High impact card',
+          canonical_title: 'In focus card',
           updated_at: new Date('2026-02-05T00:00:00Z').toISOString(),
           distinct_source_count: 1,
           top_topics: [],
@@ -109,15 +109,15 @@ describe('ClusterCard', () => {
       />
     );
 
-    expect(screen.getByText('High Impact')).toBeInTheDocument();
+    expect(screen.getByText('In Focus')).toBeInTheDocument();
   });
 
-  it('does not show High Impact chip when cluster is not high impact', () => {
+  it('does not show In Focus chip when cluster is not marked in focus', () => {
     render(
       <ClusterCard
         cluster={{
           cluster_id: '00000000-0000-0000-0000-000000000006',
-          canonical_title: 'Normal impact card',
+          canonical_title: 'Standard card',
           updated_at: new Date('2026-02-05T00:00:00Z').toISOString(),
           distinct_source_count: 1,
           top_topics: [],
@@ -130,6 +130,6 @@ describe('ClusterCard', () => {
       />
     );
 
-    expect(screen.queryByText('High Impact')).toBeNull();
+    expect(screen.queryByText('In Focus')).toBeNull();
   });
 });
