@@ -775,8 +775,12 @@ def fetch_arxiv_html_full_text(
     return text
 
 
-def extract_arxiv_html_image_url(raw_html: str, *, base_url: str) -> str | None:
-    """Extract a representative image URL from arXiv HTML."""
+def extract_html_image_url(raw_html: str, *, base_url: str) -> str | None:
+    """Extract a representative image URL from an HTML page.
+
+    Checks og:image, twitter:image, link[rel=image_src], and the first
+    <img> inside main/article/figure.  Works for any publisher site.
+    """
     try:
         from bs4 import BeautifulSoup
 
@@ -827,3 +831,7 @@ def extract_arxiv_html_image_url(raw_html: str, *, base_url: str) -> str | None:
         if image_url:
             return image_url
     return None
+
+
+# Backward-compat alias
+extract_arxiv_html_image_url = extract_html_image_url

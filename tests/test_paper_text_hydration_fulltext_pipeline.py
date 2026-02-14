@@ -624,11 +624,11 @@ def test_backfill_images_updates_item(monkeypatch: pytest.MonkeyPatch) -> None:
     from uuid import uuid4
 
     item_id = uuid4()
-    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00001", "image_url": None}]
+    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00001", "url": None, "canonical_url": None, "image_url": None}]
 
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
-    mock_cursor.fetchall.return_value = rows
+    mock_cursor.fetchall.side_effect = [rows, []]  # arxiv pass, then empty landing pass
     mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
     mock_cursor.__exit__ = MagicMock(return_value=False)
     mock_conn.cursor.return_value = mock_cursor
@@ -662,11 +662,11 @@ def test_backfill_images_skips_when_no_image_found(monkeypatch: pytest.MonkeyPat
     from uuid import uuid4
 
     item_id = uuid4()
-    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00002", "image_url": None}]
+    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00002", "url": None, "canonical_url": None, "image_url": None}]
 
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
-    mock_cursor.fetchall.return_value = rows
+    mock_cursor.fetchall.side_effect = [rows, []]  # arxiv pass, then empty landing pass
     mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
     mock_cursor.__exit__ = MagicMock(return_value=False)
     mock_conn.cursor.return_value = mock_cursor
@@ -686,11 +686,11 @@ def test_backfill_images_handles_fetch_exception(monkeypatch: pytest.MonkeyPatch
     from uuid import uuid4
 
     item_id = uuid4()
-    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00003", "image_url": None}]
+    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00003", "url": None, "canonical_url": None, "image_url": None}]
 
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
-    mock_cursor.fetchall.return_value = rows
+    mock_cursor.fetchall.side_effect = [rows, []]  # arxiv pass, then empty landing pass
     mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
     mock_cursor.__exit__ = MagicMock(return_value=False)
     mock_conn.cursor.return_value = mock_cursor
@@ -717,3 +717,115 @@ def test_drop_early_duplicate_lines_keeps_single_word_and_parenthetical_tokens()
     ]
     deduped = pth._drop_early_duplicate_lines(lines)
     assert deduped == lines
+
+
+def test_fetch_landing_page_image_url_extracts_og_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_fetch_landing_page_image_url extracts og:image from HTML responses."""
+    html_body = """
+    <html>
+      <head>
+        <meta property="og:image" content="https://example.com/hero.jpg" />
+      </head>
+      <body><main><p>Content</p></main></body>
+    </html>
+    """
+
+    def _mock_get(_url: str, *, timeout_s: float = 12.0) -> httpx.Response:
+        return httpx.Response(200, text=html_body, headers={"content-type": "text/html"})
+
+    monkeypatch.setattr(pth, "_http_get", _mock_get)
+    monkeypatch.setattr(pth, "_DOMAIN_LAST_FETCH", {})
+    image_url = pth._fetch_landing_page_image_url("https://example.com/article/1")
+    assert image_url == "https://example.com/hero.jpg"
+
+
+def test_fetch_landing_page_image_url_returns_none_for_non_html(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_fetch_landing_page_image_url returns None when content is not HTML."""
+
+    def _mock_get(_url: str, *, timeout_s: float = 12.0) -> httpx.Response:
+        return httpx.Response(200, content=b"%PDF-1.4", headers={"content-type": "application/pdf"})
+
+    monkeypatch.setattr(pth, "_http_get", _mock_get)
+    monkeypatch.setattr(pth, "_DOMAIN_LAST_FETCH", {})
+    assert pth._fetch_landing_page_image_url("https://example.com/paper.pdf") is None
+
+
+def test_domain_throttle_sleeps_between_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_throttle_domain sleeps when the same domain is hit within min_interval_s."""
+    import time as _time
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(_time, "sleep", lambda s: sleep_calls.append(s))
+
+    # Simulate that the domain was fetched very recently (0.1s ago)
+    pth._DOMAIN_LAST_FETCH.clear()
+    now = _time.monotonic()
+    pth._DOMAIN_LAST_FETCH["example.com"] = now
+
+    pth._throttle_domain("https://example.com/page2", min_interval_s=2.0)
+
+    assert len(sleep_calls) == 1
+    assert sleep_calls[0] > 0
+
+
+def test_domain_throttle_does_not_sleep_for_new_domain(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_throttle_domain does not sleep for a never-seen domain."""
+    import time as _time
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(_time, "sleep", lambda s: sleep_calls.append(s))
+
+    pth._DOMAIN_LAST_FETCH.clear()
+    pth._throttle_domain("https://brand-new-domain.org/page", min_interval_s=2.0)
+
+    assert len(sleep_calls) == 0
+
+
+def test_backfill_images_fetches_landing_page_for_non_arxiv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """backfill_images calls _fetch_landing_page_image_url for non-arXiv items."""
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    arxiv_item_id = uuid4()
+    landing_item_id = uuid4()
+
+    arxiv_rows = [{"item_id": str(arxiv_item_id), "arxiv_id": "2401.00001", "url": None, "canonical_url": None, "image_url": None}]
+    landing_rows = [{"item_id": str(landing_item_id), "arxiv_id": None, "url": "https://news.example.com/article", "canonical_url": "https://news.example.com/article", "image_url": None}]
+
+    call_count = {"arxiv": 0, "landing_page": 0}
+
+    def _mock_get_items(conn, *, limit, source="arxiv"):
+        call_count[source] += 1
+        if source == "arxiv":
+            return arxiv_rows
+        return landing_rows
+
+    monkeypatch.setattr(pth, "_get_items_needing_image_backfill", _mock_get_items)
+    monkeypatch.setattr(
+        pth,
+        "_fetch_arxiv_html_image_url",
+        lambda aid: "https://arxiv.org/html/2401.00001v1/fig1.png",
+    )
+    monkeypatch.setattr(
+        pth,
+        "_fetch_landing_page_image_url",
+        lambda url: "https://news.example.com/og-image.jpg",
+    )
+
+    update_calls: list[tuple] = []
+    monkeypatch.setattr(
+        pth,
+        "_update_item_image",
+        lambda conn, *, item_id, image_url: update_calls.append((item_id, image_url)),
+    )
+
+    mock_conn = MagicMock()
+    result = pth.backfill_images(mock_conn, limit=10)
+
+    assert call_count["arxiv"] == 1
+    assert call_count["landing_page"] == 1
+    assert result.items_scanned == 2
+    assert result.images_found == 2
+    assert len(update_calls) == 2
+    assert update_calls[0] == (arxiv_item_id, "https://arxiv.org/html/2401.00001v1/fig1.png")
+    assert update_calls[1] == (landing_item_id, "https://news.example.com/og-image.jpg")

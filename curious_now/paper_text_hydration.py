@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from uuid import UUID
 
 import httpx
@@ -845,7 +845,41 @@ def _fetch_arxiv_html_image_url(arxiv_id: str) -> str | None:
     content_type = (resp.headers.get("content-type") or "").lower()
     if "html" not in content_type:
         return None
-    return extractors.extract_arxiv_html_image_url(resp.text, base_url=html_url)
+    return extractors.extract_html_image_url(resp.text, base_url=html_url)
+
+
+# ---------------------------------------------------------------------------
+# Generic landing-page image extraction (non-arXiv)
+# ---------------------------------------------------------------------------
+
+_DOMAIN_LAST_FETCH: dict[str, float] = {}
+
+
+def _throttle_domain(url: str, min_interval_s: float = 1.0) -> None:
+    """Sleep if we fetched from the same domain too recently."""
+    domain = urlparse(url).netloc.lower()
+    now = time.monotonic()
+    last = _DOMAIN_LAST_FETCH.get(domain)
+    if last is not None:
+        wait = min_interval_s - (now - last)
+        if wait > 0:
+            time.sleep(wait)
+    _DOMAIN_LAST_FETCH[domain] = time.monotonic()
+
+
+def _fetch_landing_page_image_url(url: str) -> str | None:
+    """Fetch a landing page and extract og:image / twitter:image / first img."""
+    _throttle_domain(url)
+    try:
+        resp = _http_get(url, timeout_s=12.0)
+    except Exception:
+        return None
+    if resp.status_code != 200:
+        return None
+    content_type = (resp.headers.get("content-type") or "").lower()
+    if "html" not in content_type:
+        return None
+    return extractors.extract_html_image_url(resp.text, base_url=url)
 
 
 def _fetch_arxiv_eprint_full_text(arxiv_id: str) -> str | None:
@@ -1249,6 +1283,10 @@ def _extract_item_text_and_image(
     arxiv_id = item.get("arxiv_id")
     if isinstance(arxiv_id, str) and arxiv_id.strip():
         image_url = _fetch_arxiv_html_image_url(arxiv_id.strip())
+    if not image_url and not (isinstance(arxiv_id, str) and arxiv_id.strip()):
+        landing = item.get("canonical_url") or item.get("url")
+        if isinstance(landing, str) and landing.strip():
+            image_url = _fetch_landing_page_image_url(landing.strip())
     return text, status, source, kind, license_name, image_url
 
 
@@ -1408,19 +1446,29 @@ def _get_items_needing_image_backfill(
     conn: psycopg.Connection[Any],
     *,
     limit: int,
+    source: str = "arxiv",
 ) -> list[dict[str, Any]]:
-    with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(
-            """
-            SELECT i.id AS item_id, i.arxiv_id, i.image_url
+    if source == "arxiv":
+        query = """
+            SELECT i.id AS item_id, i.arxiv_id, i.url, i.canonical_url, i.image_url
             FROM items i
             WHERE i.arxiv_id IS NOT NULL
               AND (i.image_url IS NULL OR btrim(i.image_url) = '')
             ORDER BY i.published_at DESC NULLS LAST, i.fetched_at DESC
             LIMIT %s;
-            """,
-            (limit,),
-        )
+        """
+    else:
+        query = """
+            SELECT i.id AS item_id, i.arxiv_id, i.url, i.canonical_url, i.image_url
+            FROM items i
+            WHERE i.arxiv_id IS NULL
+              AND (i.url IS NOT NULL OR i.canonical_url IS NOT NULL)
+              AND (i.image_url IS NULL OR btrim(i.image_url) = '')
+            ORDER BY i.published_at DESC NULLS LAST, i.fetched_at DESC
+            LIMIT %s;
+        """
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(query, (limit,))
         return cur.fetchall()
 
 
@@ -1446,12 +1494,13 @@ def backfill_images(
     *,
     limit: int = 500,
 ) -> BackfillImagesResult:
-    items = _get_items_needing_image_backfill(conn, limit=limit)
+    # --- Pass 1: arXiv items ---
+    arxiv_items = _get_items_needing_image_backfill(conn, limit=limit, source="arxiv")
     found = 0
     failed = 0
     skipped = 0
 
-    for item in items:
+    for item in arxiv_items:
         item_id = UUID(str(item["item_id"]))
         arxiv_id = item.get("arxiv_id")
         if not isinstance(arxiv_id, str) or not arxiv_id.strip():
@@ -1468,8 +1517,29 @@ def backfill_images(
             failed += 1
             logger.warning("Image backfill failed for item %s: %s", item_id, exc)
 
+    # --- Pass 2: non-arXiv items (landing page og:image) ---
+    landing_items = _get_items_needing_image_backfill(conn, limit=limit, source="landing_page")
+
+    for item in landing_items:
+        item_id = UUID(str(item["item_id"]))
+        landing = item.get("canonical_url") or item.get("url")
+        if not isinstance(landing, str) or not landing.strip():
+            skipped += 1
+            continue
+        try:
+            image_url = _fetch_landing_page_image_url(landing.strip())
+            if image_url:
+                _update_item_image(conn, item_id=item_id, image_url=image_url)
+                found += 1
+            else:
+                skipped += 1
+        except Exception as exc:
+            failed += 1
+            logger.warning("Image backfill (landing page) failed for item %s: %s", item_id, exc)
+
+    total_scanned = len(arxiv_items) + len(landing_items)
     return BackfillImagesResult(
-        items_scanned=len(items),
+        items_scanned=total_scanned,
         images_found=found,
         images_failed=failed,
         items_skipped=skipped,
