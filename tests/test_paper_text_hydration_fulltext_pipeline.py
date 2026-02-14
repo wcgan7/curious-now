@@ -618,6 +618,95 @@ def test_reflow_inline_fragments_does_not_merge_title_like_line() -> None:
     assert reflowed == lines
 
 
+def test_backfill_images_updates_item(monkeypatch: pytest.MonkeyPatch) -> None:
+    """backfill_images queries items, fetches images, and updates rows."""
+    from unittest.mock import MagicMock, call
+    from uuid import uuid4
+
+    item_id = uuid4()
+    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00001", "image_url": None}]
+
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = rows
+    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_cursor.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value = mock_cursor
+
+    monkeypatch.setattr(
+        pth,
+        "_fetch_arxiv_html_image_url",
+        lambda aid: "https://arxiv.org/html/2401.00001v1/fig1.png",
+    )
+
+    result = pth.backfill_images(mock_conn, limit=10)
+
+    assert result.items_scanned == 1
+    assert result.images_found == 1
+    assert result.images_failed == 0
+    assert result.items_skipped == 0
+
+    # Verify the update was called with correct image URL and item_id
+    update_calls = [
+        c for c in mock_cursor.execute.call_args_list
+        if "UPDATE items" in str(c)
+    ]
+    assert len(update_calls) == 1
+    args = update_calls[0][0]
+    assert "https://arxiv.org/html/2401.00001v1/fig1.png" in args[1]
+
+
+def test_backfill_images_skips_when_no_image_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    """backfill_images increments skipped when extractor returns None."""
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    item_id = uuid4()
+    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00002", "image_url": None}]
+
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = rows
+    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_cursor.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value = mock_cursor
+
+    monkeypatch.setattr(pth, "_fetch_arxiv_html_image_url", lambda aid: None)
+
+    result = pth.backfill_images(mock_conn, limit=10)
+
+    assert result.items_scanned == 1
+    assert result.images_found == 0
+    assert result.items_skipped == 1
+
+
+def test_backfill_images_handles_fetch_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """backfill_images increments failed on exception and continues."""
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    item_id = uuid4()
+    rows = [{"item_id": str(item_id), "arxiv_id": "2401.00003", "image_url": None}]
+
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = rows
+    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_cursor.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value = mock_cursor
+
+    def _fail(aid: str) -> str:
+        raise ConnectionError("network down")
+
+    monkeypatch.setattr(pth, "_fetch_arxiv_html_image_url", _fail)
+
+    result = pth.backfill_images(mock_conn, limit=10)
+
+    assert result.items_scanned == 1
+    assert result.images_found == 0
+    assert result.images_failed == 1
+
+
 def test_drop_early_duplicate_lines_keeps_single_word_and_parenthetical_tokens() -> None:
     lines = [
         "DyTopo",

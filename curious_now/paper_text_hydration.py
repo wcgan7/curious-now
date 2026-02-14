@@ -53,6 +53,14 @@ class HydratePaperTextResult:
 
 
 @dataclass(frozen=True)
+class BackfillImagesResult:
+    items_scanned: int
+    images_found: int
+    images_failed: int
+    items_skipped: int
+
+
+@dataclass(frozen=True)
 class OACandidate:
     url: str
     source: str
@@ -1392,5 +1400,77 @@ def hydrate_paper_text(
         items_scanned=len(items),
         items_hydrated=hydrated,
         items_failed=failed,
+        items_skipped=skipped,
+    )
+
+
+def _get_items_needing_image_backfill(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT i.id AS item_id, i.arxiv_id, i.image_url
+            FROM items i
+            WHERE i.arxiv_id IS NOT NULL
+              AND (i.image_url IS NULL OR btrim(i.image_url) = '')
+            ORDER BY i.published_at DESC NULLS LAST, i.fetched_at DESC
+            LIMIT %s;
+            """,
+            (limit,),
+        )
+        return cur.fetchall()
+
+
+def _update_item_image(
+    conn: psycopg.Connection[Any],
+    *,
+    item_id: UUID,
+    image_url: str,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE items
+            SET image_url = %s, updated_at = now()
+            WHERE id = %s AND (image_url IS NULL OR btrim(image_url) = '');
+            """,
+            (image_url, item_id),
+        )
+
+
+def backfill_images(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 500,
+) -> BackfillImagesResult:
+    items = _get_items_needing_image_backfill(conn, limit=limit)
+    found = 0
+    failed = 0
+    skipped = 0
+
+    for item in items:
+        item_id = UUID(str(item["item_id"]))
+        arxiv_id = item.get("arxiv_id")
+        if not isinstance(arxiv_id, str) or not arxiv_id.strip():
+            skipped += 1
+            continue
+        try:
+            image_url = _fetch_arxiv_html_image_url(arxiv_id.strip())
+            if image_url:
+                _update_item_image(conn, item_id=item_id, image_url=image_url)
+                found += 1
+            else:
+                skipped += 1
+        except Exception as exc:
+            failed += 1
+            logger.warning("Image backfill failed for item %s: %s", item_id, exc)
+
+    return BackfillImagesResult(
+        items_scanned=len(items),
+        images_found=found,
+        images_failed=failed,
         items_skipped=skipped,
     )

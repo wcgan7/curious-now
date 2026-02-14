@@ -31,7 +31,7 @@ from curious_now.notifications import (
     enqueue_topic_digest_jobs,
     send_due_notification_jobs,
 )
-from curious_now.paper_text_hydration import hydrate_paper_text
+from curious_now.paper_text_hydration import backfill_images, hydrate_paper_text
 from curious_now.repo_stage1 import import_source_pack
 from curious_now.retention import purge_logs
 from curious_now.settings import get_settings
@@ -142,6 +142,19 @@ def cmd_hydrate_paper_text(args: argparse.Namespace) -> int:
         "Paper text hydration complete: "
         f"{result.items_hydrated}/{result.items_scanned} hydrated; "
         f"{result.items_failed} failed; {result.items_skipped} skipped."
+    )
+    return 0
+
+
+def cmd_backfill_images(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = DB(settings.database_url)
+    with db.connect(autocommit=True) as conn:
+        result = backfill_images(conn, limit=int(args.limit))
+    print(
+        "Image backfill complete: "
+        f"{result.images_found}/{result.items_scanned} images found; "
+        f"{result.images_failed} failed; {result.items_skipped} skipped."
     )
     return 0
 
@@ -729,6 +742,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_hydrate.add_argument("--now", type=str, default=None, help="Override current time (ISO-8601)")
     p_hydrate.set_defaults(func=cmd_hydrate_paper_text)
+
+    p_backfill_images = sub.add_parser(
+        "backfill-images",
+        help="Backfill images for arXiv items missing image_url",
+    )
+    p_backfill_images.add_argument(
+        "--limit", type=int, default=500, help="Max items to process"
+    )
+    p_backfill_images.set_defaults(func=cmd_backfill_images)
 
     p_source_pack = sub.add_parser(
         "import-source-pack", help="Import a source pack JSON (idempotent upsert)"
