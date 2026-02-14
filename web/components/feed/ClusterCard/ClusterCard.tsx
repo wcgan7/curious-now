@@ -32,7 +32,7 @@ export function ClusterCard({
     .filter((topic) => !categoryNameSet.has(topic.name.toLowerCase()))
     .slice(0, 2);
   const sourceTypeBadges = cluster.content_type_badges || [];
-  const showHighImpact = Boolean(cluster.high_impact_label);
+  const showInFocus = Boolean(cluster.high_impact_label);
 
   return (
     <Card as="article" href={`/story/${cluster.cluster_id}`}>
@@ -47,14 +47,14 @@ export function ClusterCard({
         </div>
       ) : null}
       <Card.Content>
-        {topCategories.length || topSubtopics.length || showHighImpact ? (
+        {topCategories.length || topSubtopics.length || showInFocus ? (
           <div className={styles.metaRow}>
             <div className={styles.badges}>
               {primaryCategory ? <Badge variant="info">{primaryCategory.name}</Badge> : null}
               {topSubtopics.map((topic) => (
                 <Badge key={topic.topic_id}>{topic.name}</Badge>
               ))}
-              {showHighImpact ? <Badge variant="warning">High Impact</Badge> : null}
+              {showInFocus ? <Badge variant="warning">In Focus</Badge> : null}
             </div>
           </div>
         ) : null}
