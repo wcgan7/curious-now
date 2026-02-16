@@ -1373,36 +1373,62 @@ def enrich_stage3_for_clusters(
                                 _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
                             )
                 else:
-                    source_summaries = [
-                        SourceSummary(
-                            title=item["title"],
-                            snippet=item.get("snippet"),
-                            source_name=item.get("source_name"),
-                            source_type=item.get("source_type"),
-                            full_text=item.get("full_text"),
+                    # Non-paper sources (news, journalism, etc.): generate
+                    # a news summary for intuition instead of a deep dive.
+                    if not items:
+                        skipped += 1
+                        logger.info(
+                            "Cluster %s skipped: no items for news summary",
+                            cluster_id,
                         )
-                        for item in items
-                    ]
-                    deep_dive_input = DeepDiveInput(
-                        cluster_title=canonical_title,
-                        source_summaries=source_summaries,
+                        continue
+
+                    items = _ensure_article_text_hydrated(conn, cluster_id, items)
+                    item_ids = [item["item_id"] for item in items]
+                    combined_full_text = _build_combined_article_text(items)
+                    first_item = items[0]
+                    news_result = generate_news_summary(
+                        title=first_item.get("title", canonical_title),
+                        snippet=first_item.get("snippet"),
+                        full_text=combined_full_text or first_item.get("full_text"),
+                        adapter=adapter,
                     )
-                    deep_dive_result = generate_deep_dive(deep_dive_input, adapter=adapter)
-                    if deep_dive_result.success and deep_dive_result.content:
-                        deep_dive_markdown = deep_dive_result.content.markdown
-                        summary_deep_dive = deep_dive_to_json(deep_dive_result.content)
-                        _set_deep_dive_skip_reason(conn, cluster_id, None)
-                    else:
+
+                    if news_result.insufficient_context:
+                        skipped += 1
+                        logger.info(
+                            "Cluster %s skipped: insufficient context for news summary",
+                            cluster_id,
+                        )
+                        continue
+
+                    if not news_result.success:
+                        failed += 1
                         logger.warning(
-                            "Deep-dive generation failed for cluster %s: %s",
+                            "News summary generation failed for cluster %s: %s",
                             cluster_id,
-                            deep_dive_result.error,
+                            news_result.error,
                         )
-                        _set_deep_dive_skip_reason(
-                            conn,
-                            cluster_id,
-                            _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
-                        )
+                        continue
+
+                    anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
+                    method_badges = _compute_method_badges(content_types)
+                    _update_cluster_stage3(
+                        conn,
+                        cluster_id,
+                        summary_intuition=news_result.summary,
+                        summary_intuition_item_ids=item_ids,
+                        anti_hype_flags=anti_hype_flags,
+                        method_badges=method_badges,
+                    )
+                    succeeded += 1
+                    logger.info(
+                        "News summary generated for cluster %s (words=%s confidence=%.2f)",
+                        cluster_id,
+                        news_result.word_count,
+                        news_result.confidence,
+                    )
+                    continue
 
             summary_intuition: str | None = None
             if abstract_fallback_intuition and not deep_dive_markdown:
