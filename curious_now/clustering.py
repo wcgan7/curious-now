@@ -335,6 +335,29 @@ def _cluster_has_source(
         return cur.fetchone() is not None
 
 
+def _batch_cluster_has_source(
+    conn: psycopg.Connection[Any],
+    *,
+    cluster_ids: list[UUID],
+    source_id: UUID,
+) -> set[UUID]:
+    """Return set of cluster_ids that already contain source_id."""
+    if not cluster_ids:
+        return set()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ci.cluster_id
+            FROM cluster_items ci
+            JOIN items i ON i.id = ci.item_id
+            WHERE ci.cluster_id = ANY(%s::uuid[])
+              AND i.source_id = %s;
+            """,
+            ([str(c) for c in cluster_ids], source_id),
+        )
+        return {UUID(str(_row_get(r, "cluster_id", 0))) for r in cur.fetchall()}
+
+
 def _score_candidate(
     conn: psycopg.Connection[Any],
     *,
@@ -343,6 +366,7 @@ def _score_candidate(
     source_id: UUID,
     candidate: ClusterCandidate,
     cfg: ClusteringConfig,
+    has_source: bool | None = None,
 ) -> ScoreBreakdown | None:
     cluster_tokens = title_tokens(candidate.canonical_title, cfg=cfg)
     overlap = len(item_tokens & cluster_tokens)
@@ -361,7 +385,8 @@ def _score_candidate(
         + cfg.scoring_weights.token_overlap * min(float(overlap) / 6.0, 1.0)
     )
 
-    has_source = _cluster_has_source(conn, cluster_id=candidate.cluster_id, source_id=source_id)
+    if has_source is None:
+        has_source = _cluster_has_source(conn, cluster_id=candidate.cluster_id, source_id=source_id)
     bonus = 0.0 if has_source else cfg.bonuses.new_source_bonus
     total = base_score + bonus
     return ScoreBreakdown(
@@ -461,6 +486,57 @@ def _recompute_cluster_metrics(
             WHERE id = %s;
             """,
             (now_utc, now_utc, cluster_id),
+        )
+
+
+def _batch_recompute_cluster_metrics(
+    conn: psycopg.Connection[Any],
+    *,
+    cluster_ids: list[UUID],
+    now_utc: datetime,
+) -> None:
+    """Batch recompute metrics for multiple clusters in a single CTE UPDATE."""
+    if not cluster_ids:
+        return
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH cluster_metrics AS (
+              SELECT
+                ci.cluster_id,
+                count(*) AS item_count,
+                count(DISTINCT i.source_id) AS distinct_source_count,
+                count(DISTINCT s.source_type) AS distinct_source_type_count,
+                count(*) FILTER (WHERE ci.added_at >= %s - interval '6 hours') AS velocity_6h,
+                count(*) FILTER (WHERE ci.added_at >= %s - interval '24 hours') AS velocity_24h
+              FROM cluster_items ci
+              JOIN items i ON i.id = ci.item_id
+              JOIN sources s ON s.id = i.source_id
+              WHERE ci.cluster_id = ANY(%s::uuid[])
+              GROUP BY ci.cluster_id
+            )
+            UPDATE story_clusters c
+            SET
+              item_count = cm.item_count,
+              distinct_source_count = cm.distinct_source_count,
+              distinct_source_type_count = cm.distinct_source_type_count,
+              velocity_6h = cm.velocity_6h,
+              velocity_24h = cm.velocity_24h,
+              updated_at = %s,
+              recency_score = exp(-EXTRACT(EPOCH FROM (%s - %s::timestamptz)) / 86400.0),
+              trending_score = (
+                (cm.velocity_6h + 0.5 * cm.velocity_24h + LEAST(cm.distinct_source_count, 10) * 0.3)
+                * exp(-EXTRACT(EPOCH FROM (%s - %s::timestamptz)) / 86400.0)
+              )
+            FROM cluster_metrics cm
+            WHERE c.id = cm.cluster_id;
+            """,
+            (
+                now_utc, now_utc,
+                [str(c) for c in cluster_ids],
+                now_utc, now_utc, now_utc,
+                now_utc, now_utc,
+            ),
         )
 
 
@@ -583,6 +659,19 @@ def _build_search_text(
     return "\n".join(parts).strip()
 
 
+def _batch_upsert_search_docs(
+    conn: psycopg.Connection[Any],
+    *,
+    cluster_ids: list[UUID],
+    cfg: ClusteringConfig,
+    now_utc: datetime,
+) -> None:
+    """Rebuild search docs for multiple clusters."""
+    for cid in cluster_ids:
+        text = _build_search_text(conn, cluster_id=cid, max_titles=cfg.search_doc_titles_limit)
+        _upsert_search_doc(conn, cluster_id=cid, search_text=text, now_utc=now_utc)
+
+
 def _upsert_search_doc(
     conn: psycopg.Connection[Any], *, cluster_id: UUID, search_text: str, now_utc: datetime
 ) -> None:
@@ -639,6 +728,7 @@ def assign_item_to_cluster(
     item_id: UUID,
     cfg: ClusteringConfig,
     now_utc: datetime | None = None,
+    defer_metrics: bool = False,
 ) -> ClusterAssignmentResult | None:
     now = now_utc or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -692,13 +782,14 @@ def assign_item_to_cluster(
         with conn.transaction():
             _attach_item(conn, cluster_id=decided_cluster, item_id=item_id, role="supporting")
             _update_cluster_representative(conn, cluster_id=decided_cluster)
-            _recompute_cluster_metrics(conn, cluster_id=decided_cluster, now_utc=now)
-            search_text = _build_search_text(
-                conn, cluster_id=decided_cluster, max_titles=cfg.search_doc_titles_limit
-            )
-            _upsert_search_doc(
-                conn, cluster_id=decided_cluster, search_text=search_text, now_utc=now
-            )
+            if not defer_metrics:
+                _recompute_cluster_metrics(conn, cluster_id=decided_cluster, now_utc=now)
+                search_text = _build_search_text(
+                    conn, cluster_id=decided_cluster, max_titles=cfg.search_doc_titles_limit
+                )
+                _upsert_search_doc(
+                    conn, cluster_id=decided_cluster, search_text=search_text, now_utc=now
+                )
             _emit_update_log_if_meaningful(
                 conn,
                 cluster_id=decided_cluster,
@@ -742,6 +833,12 @@ def assign_item_to_cluster(
     qtext = " ".join(sorted(item_tokens))
     candidates = _find_clusters_by_title_search(conn, query_text=qtext, now_utc=now, cfg=cfg)
 
+    # Batch source-check: 1 query instead of N per candidate
+    candidate_ids = [c.cluster_id for c in candidates]
+    clusters_with_source = _batch_cluster_has_source(
+        conn, cluster_ids=candidate_ids, source_id=source_id
+    )
+
     best_cluster: UUID | None = None
     best_score: ScoreBreakdown | None = None
     scored_ids: list[UUID] = []
@@ -754,6 +851,7 @@ def assign_item_to_cluster(
             source_id=source_id,
             candidate=c,
             cfg=cfg,
+            has_source=(c.cluster_id in clusters_with_source),
         )
         if sb is None:
             continue
@@ -770,11 +868,12 @@ def assign_item_to_cluster(
         with conn.transaction():
             _attach_item(conn, cluster_id=best_cluster, item_id=item_id, role="supporting")
             _update_cluster_representative(conn, cluster_id=best_cluster)
-            _recompute_cluster_metrics(conn, cluster_id=best_cluster, now_utc=now)
-            search_text = _build_search_text(
-                conn, cluster_id=best_cluster, max_titles=cfg.search_doc_titles_limit
-            )
-            _upsert_search_doc(conn, cluster_id=best_cluster, search_text=search_text, now_utc=now)
+            if not defer_metrics:
+                _recompute_cluster_metrics(conn, cluster_id=best_cluster, now_utc=now)
+                search_text = _build_search_text(
+                    conn, cluster_id=best_cluster, max_titles=cfg.search_doc_titles_limit
+                )
+                _upsert_search_doc(conn, cluster_id=best_cluster, search_text=search_text, now_utc=now)
             _emit_update_log_if_meaningful(
                 conn,
                 cluster_id=best_cluster,
@@ -818,11 +917,12 @@ def assign_item_to_cluster(
         new_cluster = _create_cluster(conn, title=title, item_id=item_id)
         _attach_item(conn, cluster_id=new_cluster, item_id=item_id, role="primary")
         _update_cluster_representative(conn, cluster_id=new_cluster)
-        _recompute_cluster_metrics(conn, cluster_id=new_cluster, now_utc=now)
-        search_text = _build_search_text(
-            conn, cluster_id=new_cluster, max_titles=cfg.search_doc_titles_limit
-        )
-        _upsert_search_doc(conn, cluster_id=new_cluster, search_text=search_text, now_utc=now)
+        if not defer_metrics:
+            _recompute_cluster_metrics(conn, cluster_id=new_cluster, now_utc=now)
+            search_text = _build_search_text(
+                conn, cluster_id=new_cluster, max_titles=cfg.search_doc_titles_limit
+            )
+            _upsert_search_doc(conn, cluster_id=new_cluster, search_text=search_text, now_utc=now)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -884,15 +984,25 @@ def cluster_unassigned_items(
     processed = 0
     attached = 0
     created = 0
+    dirty_cluster_ids: set[UUID] = set()
     for iid in item_ids:
-        res = assign_item_to_cluster(conn, item_id=iid, cfg=config, now_utc=now)
+        res = assign_item_to_cluster(conn, item_id=iid, cfg=config, now_utc=now, defer_metrics=True)
         if res is None:
             continue
         processed += 1
+        dirty_cluster_ids.add(res.decided_cluster_id)
         if res.decision == "created_new":
             created += 1
         else:
             attached += 1
+
+    # Batch recompute metrics for all dirty clusters
+    if dirty_cluster_ids:
+        _batch_recompute_cluster_metrics(
+            conn, cluster_ids=list(dirty_cluster_ids), now_utc=now
+        )
+        # Batch rebuild search docs
+        _batch_upsert_search_docs(conn, cluster_ids=list(dirty_cluster_ids), cfg=config, now_utc=now)
 
     return ClusterRunResult(
         items_processed=processed, items_attached=attached, clusters_created=created
@@ -912,37 +1022,32 @@ def recompute_trending(
     with conn.cursor() as cur:
         cur.execute(
             """
+            WITH metrics AS (
+              SELECT
+                c.id,
+                (SELECT count(*) FROM cluster_items ci
+                 WHERE ci.cluster_id = c.id AND ci.added_at >= %s - interval '6 hours') AS v6h,
+                (SELECT count(*) FROM cluster_items ci
+                 WHERE ci.cluster_id = c.id AND ci.added_at >= %s - interval '24 hours') AS v24h,
+                (SELECT count(DISTINCT i.source_id)
+                 FROM cluster_items ci JOIN items i ON i.id = ci.item_id
+                 WHERE ci.cluster_id = c.id) AS src_count,
+                exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / 86400.0) AS decay
+              FROM story_clusters c
+              WHERE c.status = 'active' AND c.updated_at >= %s
+            )
             UPDATE story_clusters c
             SET
-              velocity_6h = (
-                SELECT count(*)
-                FROM cluster_items ci
-                WHERE ci.cluster_id = c.id
-                  AND ci.added_at >= %s - interval '6 hours'
-              ),
-              velocity_24h = (
-                SELECT count(*)
-                FROM cluster_items ci
-                WHERE ci.cluster_id = c.id
-                  AND ci.added_at >= %s - interval '24 hours'
-              ),
-              distinct_source_count = (
-                SELECT count(DISTINCT i.source_id)
-                FROM cluster_items ci
-                JOIN items i ON i.id = ci.item_id
-                WHERE ci.cluster_id = c.id
-              ),
-              recency_score = exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / 3600.0 / 24.0),
+              velocity_6h = m.v6h,
+              velocity_24h = m.v24h,
+              distinct_source_count = m.src_count,
+              recency_score = m.decay,
               trending_score = (
-                (
-                  (velocity_6h + 0.5 * velocity_24h) * 1.0
-                  + LEAST(distinct_source_count, 10) * 0.3
-                )
-                * exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / 3600.0 / 24.0)
+                (m.v6h + 0.5 * m.v24h + LEAST(m.src_count, 10) * 0.3) * m.decay
               )
-            WHERE c.status = 'active'
-              AND c.updated_at >= %s;
+            FROM metrics m
+            WHERE c.id = m.id;
             """,
-            (now, now, now, now, window_start),
+            (now, now, now, window_start),
         )
         return int(cur.rowcount)

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import html
+import logging
 import re
 import time
 from calendar import timegm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -15,6 +17,8 @@ import feedparser
 import httpx
 import psycopg
 from dateutil import parser as dt_parser
+
+logger = logging.getLogger(__name__)
 
 _TRACKING_PARAM_PREFIXES = ("utm_",)
 _TRACKING_PARAMS = {
@@ -475,7 +479,7 @@ def _upsert_item(
 ) -> tuple[bool, bool]:
     canonical_hash = _sha256_hex(canonical_url)
     title_hash = _sha256_hex(normalize_title_for_hash(title))
-    full_text_status = "pending" if content_type in {"preprint", "peer_reviewed"} else None
+    full_text_status = "pending"
 
     with conn.cursor() as cur:
         cur.execute(
@@ -514,9 +518,7 @@ def _upsert_item(
               doi = COALESCE(items.doi, EXCLUDED.doi),
               full_text_status = CASE
                 WHEN items.full_text IS NOT NULL AND btrim(items.full_text) <> '' THEN 'ok'
-                WHEN EXCLUDED.content_type IN ('preprint', 'peer_reviewed')
-                  THEN COALESCE(items.full_text_status, EXCLUDED.full_text_status, 'pending')
-                ELSE items.full_text_status
+                ELSE COALESCE(items.full_text_status, EXCLUDED.full_text_status, 'pending')
               END,
               image_url = COALESCE(items.image_url, EXCLUDED.image_url)
             RETURNING (xmax = 0) AS inserted;
@@ -543,6 +545,88 @@ def _upsert_item(
 
     inserted = bool(_row_get(row, "inserted", 0)) if row else False
     return inserted, not inserted
+
+
+def _upsert_items_batch(
+    conn: psycopg.Connection[Any],
+    items: list[dict[str, Any]],
+) -> tuple[int, int]:
+    """Batch upsert items. Returns (inserted_count, updated_count)."""
+    if not items:
+        return 0, 0
+
+    # Deduplicate by canonical_hash within the batch — PostgreSQL's
+    # ON CONFLICT DO UPDATE cannot affect the same row twice in one statement.
+    # Keep the last occurrence (matches sequential upsert semantics).
+    seen_hashes: dict[str, int] = {}
+    for idx, item in enumerate(items):
+        seen_hashes[item["canonical_hash"]] = idx
+    deduped = [items[idx] for idx in sorted(seen_hashes.values())]
+
+    with conn.cursor() as cur:
+        values = []
+        params: list[Any] = []
+        for item in deduped:
+            values.append("(%s,%s,%s,%s,%s,%s,%s,%s,%s,'en',%s,%s,%s,%s,%s,%s)")
+            params.extend([
+                item["source_id"], item["url"], item["canonical_url"],
+                item["title"], item["published_at"], item["fetched_at"],
+                item["author"], item["snippet"], item["content_type"],
+                item["title_hash"], item["canonical_hash"],
+                item["arxiv_id"], item["doi"], item["full_text_status"],
+                item["image_url"],
+            ])
+
+        sql = f"""
+            INSERT INTO items(
+              source_id, url, canonical_url, title, published_at, fetched_at,
+              author, snippet, content_type, language, title_hash, canonical_hash,
+              arxiv_id, doi, full_text_status, image_url
+            )
+            VALUES {','.join(values)}
+            ON CONFLICT (canonical_hash)
+            DO UPDATE SET
+              url = EXCLUDED.url,
+              canonical_url = EXCLUDED.canonical_url,
+              title = EXCLUDED.title,
+              published_at = COALESCE(items.published_at, EXCLUDED.published_at),
+              fetched_at = EXCLUDED.fetched_at,
+              author = COALESCE(items.author, EXCLUDED.author),
+              snippet = COALESCE(items.snippet, EXCLUDED.snippet),
+              content_type = EXCLUDED.content_type,
+              title_hash = EXCLUDED.title_hash,
+              arxiv_id = COALESCE(items.arxiv_id, EXCLUDED.arxiv_id),
+              doi = COALESCE(items.doi, EXCLUDED.doi),
+              full_text_status = CASE
+                WHEN items.full_text IS NOT NULL AND btrim(items.full_text) <> '' THEN 'ok'
+                ELSE COALESCE(items.full_text_status, EXCLUDED.full_text_status, 'pending')
+              END,
+              image_url = COALESCE(items.image_url, EXCLUDED.image_url)
+            RETURNING (xmax = 0) AS inserted;
+        """
+        cur.execute(sql, tuple(params))
+        results = cur.fetchall()
+
+    inserted = sum(1 for r in results if _row_get(r, "inserted", 0))
+    updated = len(results) - inserted
+    return inserted, updated
+
+
+def _fetch_feed_safe(feed: FeedToFetch) -> tuple[FeedToFetch, httpx.Response | None, str | None]:
+    """Fetch a single feed, returning (feed, response, error_message).
+
+    On HTTP errors (4xx/5xx), the response is still returned so the caller
+    can log the status code.
+    """
+    try:
+        resp = _fetch_feed(feed.feed_url)
+        resp.raise_for_status()
+        return feed, resp, None
+    except httpx.HTTPStatusError as exc:
+        # Return the response so the caller can log http_status
+        return feed, exc.response, str(exc)
+    except Exception as exc:
+        return feed, None, str(exc)
 
 
 def _fetch_feed(url: str) -> httpx.Response:
@@ -582,32 +666,61 @@ def ingest_due_feeds(
 
     feeds = _list_feeds_to_fetch(conn, now_utc=now, feed_id=feed_id, limit=limit_feeds, force=force)
 
-    feeds_attempted = 0
+    feeds_attempted = len(feeds)
     feeds_succeeded = 0
     total_seen = 0
     total_inserted = 0
     total_updated = 0
 
-    for f in feeds:
-        feeds_attempted += 1
+    # Phase 4b: Fetch feeds concurrently, then process results sequentially for DB writes
+    max_workers = min(len(feeds), 8) if feeds else 1
+    fetched_results: list[tuple[FeedToFetch, httpx.Response | None, str | None]] = []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_fetch_feed_safe, f): f for f in feeds}
+        for future in as_completed(futures):
+            fetched_results.append(future.result())
+
+    for f, resp, fetch_error in fetched_results:
         started_at = datetime.now(timezone.utc)
         http_status: int | None = None
-        error_message: str | None = None
+
+        if fetch_error:
+            finished_at = datetime.now(timezone.utc)
+            duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+            error_http_status = int(resp.status_code) if resp is not None else None
+            _mark_feed_result(
+                conn,
+                feed_id=f.feed_id,
+                now_utc=now,
+                ok=False,
+                http_status=error_http_status,
+                error_message=fetch_error,
+            )
+            _insert_fetch_log(
+                conn,
+                feed_id=f.feed_id,
+                started_at=started_at,
+                finished_at=finished_at,
+                status="error",
+                http_status=error_http_status,
+                duration_ms=duration_ms,
+                error_message=fetch_error,
+                items_seen=0,
+                items_upserted=0,
+            )
+            continue
 
         try:
-            resp = _fetch_feed(f.feed_url)
             http_status = int(resp.status_code)
-            resp.raise_for_status()
 
             parsed = feedparser.parse(resp.content)
             entries = parsed.get("entries") or []
             if not isinstance(entries, list):
                 entries = []
 
-            seen = 0
-            inserted = 0
-            updated = 0
-
+            # Phase 4a: Collect items for batch upsert
+            batch: list[dict[str, Any]] = []
             for e in entries[: max_items_per_feed]:
                 if not isinstance(e, dict):
                     continue
@@ -627,25 +740,30 @@ def ingest_due_feeds(
                 arxiv_id, doi = _extract_ids(f"{title} {url}")
                 content_type = _guess_content_type(f.source_type, url, arxiv_id, doi)
                 image_url = _extract_image_url(e)
+                canonical_hash = _sha256_hex(canonical_url)
+                title_hash = _sha256_hex(normalize_title_for_hash(title))
 
-                ins, upd = _upsert_item(
-                    conn,
-                    source_id=f.source_id,
-                    url=url,
-                    canonical_url=canonical_url,
-                    title=title,
-                    published_at=published_at,
-                    author=author,
-                    snippet=snippet,
-                    content_type=content_type,
-                    arxiv_id=arxiv_id,
-                    doi=doi,
-                    image_url=image_url,
-                    now_utc=now,
-                )
-                seen += 1
-                inserted += 1 if ins else 0
-                updated += 1 if upd else 0
+                batch.append({
+                    "source_id": f.source_id,
+                    "url": url,
+                    "canonical_url": canonical_url,
+                    "title": title,
+                    "published_at": published_at,
+                    "fetched_at": now,
+                    "author": author,
+                    "snippet": snippet,
+                    "content_type": content_type,
+                    "title_hash": title_hash,
+                    "canonical_hash": canonical_hash,
+                    "arxiv_id": arxiv_id,
+                    "doi": doi,
+                    "full_text_status": "pending",
+                    "image_url": image_url,
+                })
+
+            # Batch upsert all items for this feed
+            inserted, updated = _upsert_items_batch(conn, batch)
+            seen = len(batch)
 
             finished_at = datetime.now(timezone.utc)
             duration_ms = int((finished_at - started_at).total_seconds() * 1000)

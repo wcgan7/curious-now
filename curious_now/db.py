@@ -20,11 +20,14 @@ class DB:
     pool_min_size: int = 1
     pool_max_size: int = 10
     pool_timeout_seconds: float = 10.0
+    statement_timeout_ms: int = 0  # 0 = no timeout
     _pool: Any | None = field(default=None, init=False, repr=False)
 
     def connect(self, *, autocommit: bool = False) -> psycopg.Connection[Any]:
         conn = psycopg.connect(self.dsn, row_factory=dict_row)
         conn.autocommit = autocommit
+        if self.statement_timeout_ms > 0:
+            conn.execute(f"SET statement_timeout = {self.statement_timeout_ms}")
         return conn
 
     def open_pool(self) -> None:

@@ -398,6 +398,34 @@ def _get_cluster_text(
     return title, search_text
 
 
+def _get_cluster_text_batch(
+    conn: psycopg.Connection[Any],
+    cluster_ids: list[UUID],
+) -> dict[UUID, tuple[str, str]]:
+    """Fetch (title, search_text) for multiple clusters in one query."""
+    if not cluster_ids:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT c.id, c.canonical_title, d.search_text
+            FROM story_clusters c
+            LEFT JOIN cluster_search_docs d ON d.cluster_id = c.id
+            WHERE c.id = ANY(%s::uuid[]) AND c.status = 'active';
+            """,
+            ([str(c) for c in cluster_ids],),
+        )
+        rows = cur.fetchall()
+
+    result: dict[UUID, tuple[str, str]] = {}
+    for r in rows:
+        cid = UUID(str(_row_get(r, "id", 0)))
+        title = str(_row_get(r, "canonical_title", 1) or "")
+        search_text = str(_row_get(r, "search_text", 2) or title)
+        result[cid] = (title, search_text)
+    return result
+
+
 def tag_cluster_topics(
     conn: psycopg.Connection[Any],
     *,
@@ -472,11 +500,15 @@ def tag_recent_clusters(
         rows = cur.fetchall()
 
     cluster_ids = [UUID(str(_row_get(r, "id", 0))) for r in rows]
+
+    # Batch-fetch cluster text for all clusters
+    text_map = _get_cluster_text_batch(conn, cluster_ids)
+
     scanned = 0
     updated = 0
     for cid in cluster_ids:
         scanned += 1
-        cluster_text = _get_cluster_text(conn, cluster_id=cid)
+        cluster_text = text_map.get(cid)
         if cluster_text is None:
             continue
         title, search_text = cluster_text
@@ -641,9 +673,12 @@ def tag_untagged_clusters_llm(
             """
             SELECT c.id
             FROM story_clusters c
-            LEFT JOIN cluster_topics ct ON ct.cluster_id = c.id
             WHERE c.status = 'active'
-              AND ct.cluster_id IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM cluster_topics ct
+                WHERE ct.cluster_id = c.id
+                LIMIT 1
+              )
             ORDER BY c.updated_at DESC
             LIMIT %s;
             """,
@@ -661,10 +696,13 @@ def tag_untagged_clusters_llm(
     ]
     name_to_id = {t.name: t.topic_id for t in topics}
 
+    # Batch-fetch cluster text for all clusters
+    text_map = _get_cluster_text_batch(conn, cluster_ids)
+
     for cid in cluster_ids:
         scanned += 1
 
-        cluster_text = _get_cluster_text(conn, cluster_id=cid)
+        cluster_text = text_map.get(cid)
         if cluster_text is None:
             continue
 

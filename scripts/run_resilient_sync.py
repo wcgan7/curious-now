@@ -13,6 +13,7 @@ import psycopg
 
 from curious_now.ai.llm_adapter import get_llm_adapter
 from curious_now.ai_generation import (
+    enrich_stage3_for_clusters,
     generate_deep_dives_for_clusters,
     generate_takeaways_for_clusters,
 )
@@ -24,6 +25,7 @@ from curious_now.clustering import (
 from curious_now.db import DB
 from curious_now.ingestion import ingest_due_feeds
 from curious_now.migrations import migrate
+from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.paper_text_hydration import hydrate_paper_text
 from curious_now.settings import get_settings
 from curious_now.topic_tagging import tag_recent_clusters, tag_untagged_clusters_llm
@@ -40,10 +42,12 @@ class ThroughputProfile:
     limit_feeds: int
     max_items_per_feed: int
     hydrate_limit: int
+    hydrate_article_limit: int
     cluster_limit_items: int
     tag_limit_clusters: int
     takeaways_limit: int
     deep_dives_limit: int
+    enrich_stage3_limit: int
 
 
 THROUGHPUT_PROFILES: dict[str, ThroughputProfile] = {
@@ -53,10 +57,12 @@ THROUGHPUT_PROFILES: dict[str, ThroughputProfile] = {
         limit_feeds=10,
         max_items_per_feed=100,
         hydrate_limit=200,
+        hydrate_article_limit=200,
         cluster_limit_items=400,
         tag_limit_clusters=80,
         takeaways_limit=60,
         deep_dives_limit=20,
+        enrich_stage3_limit=40,
     ),
     # Balanced default for first production rollout
     "balanced": ThroughputProfile(
@@ -64,10 +70,12 @@ THROUGHPUT_PROFILES: dict[str, ThroughputProfile] = {
         limit_feeds=25,
         max_items_per_feed=200,
         hydrate_limit=500,
+        hydrate_article_limit=500,
         cluster_limit_items=1200,
         tag_limit_clusters=200,
         takeaways_limit=120,
         deep_dives_limit=40,
+        enrich_stage3_limit=80,
     ),
     # Higher throughput for larger feeds and faster freshness
     "high": ThroughputProfile(
@@ -75,10 +83,12 @@ THROUGHPUT_PROFILES: dict[str, ThroughputProfile] = {
         limit_feeds=50,
         max_items_per_feed=250,
         hydrate_limit=1000,
+        hydrate_article_limit=1000,
         cluster_limit_items=2500,
         tag_limit_clusters=500,
         takeaways_limit=250,
         deep_dives_limit=80,
+        enrich_stage3_limit=150,
     ),
 }
 
@@ -111,7 +121,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--tag-limit-clusters", type=int, default=None)
     parser.add_argument("--max-topics-per-cluster", type=int, default=3)
     parser.add_argument("--takeaways-limit", type=int, default=None)
+    parser.add_argument("--hydrate-article-limit", type=int, default=None)
     parser.add_argument("--deep-dives-limit", type=int, default=None)
+    parser.add_argument("--enrich-stage3-limit", type=int, default=None)
     parser.add_argument("--trending-lookback-days", type=int, default=14)
 
     parser.add_argument("--step-retries", type=int, default=3, help="Retries per step")
@@ -136,6 +148,8 @@ def _apply_profile_defaults(args: argparse.Namespace) -> None:
         args.max_items_per_feed = profile.max_items_per_feed
     if args.hydrate_limit is None:
         args.hydrate_limit = profile.hydrate_limit
+    if args.hydrate_article_limit is None:
+        args.hydrate_article_limit = profile.hydrate_article_limit
     if args.cluster_limit_items is None:
         args.cluster_limit_items = profile.cluster_limit_items
     if args.tag_limit_clusters is None:
@@ -144,6 +158,8 @@ def _apply_profile_defaults(args: argparse.Namespace) -> None:
         args.takeaways_limit = profile.takeaways_limit
     if args.deep_dives_limit is None:
         args.deep_dives_limit = profile.deep_dives_limit
+    if args.enrich_stage3_limit is None:
+        args.enrich_stage3_limit = profile.enrich_stage3_limit
 
 
 def _row_get(row: Any, key: str, idx: int) -> Any:
@@ -288,6 +304,18 @@ def _run_cycle(
             if not ok and args.stop_on_error:
                 return False
 
+            ok, _ = _run_with_retry(
+                name="hydrate_article_text",
+                step_fn=lambda: hydrate_article_text(
+                    conn,
+                    limit=args.hydrate_article_limit,
+                ),
+                retries=args.step_retries,
+                backoff_seconds=args.retry_backoff_seconds,
+            )
+            if not ok and args.stop_on_error:
+                return False
+
             cfg = load_clustering_config(clustering_config_path)
             ok, _ = _run_with_retry(
                 name="cluster",
@@ -361,6 +389,18 @@ def _run_cycle(
                 if not ok and args.stop_on_error:
                     return False
 
+                ok, _ = _run_with_retry(
+                    name="enrich_stage3",
+                    step_fn=lambda: enrich_stage3_for_clusters(
+                        conn,
+                        limit=args.enrich_stage3_limit,
+                    ),
+                    retries=args.step_retries,
+                    backoff_seconds=args.retry_backoff_seconds,
+                )
+                if not ok and args.stop_on_error:
+                    return False
+
             ok, _ = _run_with_retry(
                 name="recompute_trending",
                 step_fn=lambda: recompute_trending(
@@ -392,21 +432,24 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     logger.info(
-        "Throughput profile=%s interval=%ss feeds=%s items_per_feed=%s hydrate=%s "
-        "cluster_items=%s tag_clusters=%s takeaways=%s deep_dives=%s",
+        "Throughput profile=%s interval=%ss feeds=%s items_per_feed=%s "
+        "hydrate_paper=%s hydrate_article=%s cluster_items=%s tag_clusters=%s "
+        "takeaways=%s deep_dives=%s enrich_stage3=%s",
         args.throughput_profile,
         args.interval_seconds,
         args.limit_feeds,
         args.max_items_per_feed,
         args.hydrate_limit,
+        args.hydrate_article_limit,
         args.cluster_limit_items,
         args.tag_limit_clusters,
         args.takeaways_limit,
         args.deep_dives_limit,
+        args.enrich_stage3_limit,
     )
 
     settings = get_settings()
-    db = DB(settings.database_url)
+    db = DB(settings.database_url, statement_timeout_ms=settings.statement_timeout_ms)
     config_path = Path(args.clustering_config) if args.clustering_config else None
 
     cycle = 0

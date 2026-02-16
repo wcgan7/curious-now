@@ -1185,15 +1185,28 @@ def _fetch_landing_page_text(
     *,
     open_access_ok: bool,
 ) -> tuple[str | None, str]:
-    if not open_access_ok:
+    _throttle_domain(url)
+    try:
+        resp = _http_get(url, timeout_s=20.0)
+    except Exception:
         return None, "not_found"
-
-    resp = _http_get(url, timeout_s=20.0)
     if resp.status_code in (401, 402, 403):
         return None, "paywalled"
     if resp.status_code != 200:
         return None, "not_found"
 
+    content_type = (resp.headers.get("content-type") or "").lower()
+    if "html" not in content_type:
+        return None, "not_found"
+
+    # Primary: trafilatura for clean article body extraction
+    from curious_now.extractors.article_sources import extract_article_text
+
+    trafilatura_text = extract_article_text(resp.text, url=url)
+    if trafilatura_text and _is_fulltext_quality_sufficient(trafilatura_text):
+        return trafilatura_text, "ok"
+
+    # Fallback: BeautifulSoup with paper-specific cleaning
     text = _clean_full_text(resp.text)
     if not text:
         return None, "not_found"
@@ -1362,6 +1375,32 @@ def _update_item_hydration(
         )
 
 
+def _batch_update_item_hydration(
+    conn: psycopg.Connection[Any],
+    updates: list[dict[str, Any]],
+) -> None:
+    """Batch update hydration results using executemany."""
+    if not updates:
+        return
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            UPDATE items
+            SET full_text = %(full_text)s,
+                full_text_status = %(status)s,
+                full_text_source = %(source)s,
+                full_text_kind = %(kind)s,
+                full_text_license = %(license_name)s,
+                image_url = COALESCE(items.image_url, %(image_url)s),
+                full_text_error = %(error_message)s,
+                full_text_fetched_at = %(now_utc)s,
+                updated_at = now()
+            WHERE id = %(item_id)s;
+            """,
+            updates,
+        )
+
+
 def hydrate_paper_text(
     conn: psycopg.Connection[Any],
     *,
@@ -1376,6 +1415,7 @@ def hydrate_paper_text(
     hydrated = 0
     failed = 0
     skipped = 0
+    pending_updates: list[dict[str, Any]] = []
 
     for item in items:
         item_id = UUID(str(item["item_id"]))
@@ -1392,47 +1432,36 @@ def hydrate_paper_text(
             image_url = extracted_image_url if should_backfill_image else None
             if text:
                 hydrated += 1
-                _update_item_hydration(
-                    conn,
-                    item_id=item_id,
-                    full_text=text,
-                    status="ok",
-                    source=source,
-                    kind=kind,
-                    license_name=license_name,
-                    image_url=image_url,
-                    error_message=None,
-                    now_utc=now_utc,
-                )
             else:
                 failed += 1
-                _update_item_hydration(
-                    conn,
-                    item_id=item_id,
-                    full_text=None,
-                    status=status,
-                    source=source,
-                    kind=kind,
-                    license_name=license_name,
-                    image_url=image_url,
-                    error_message=None,
-                    now_utc=now_utc,
-                )
+            pending_updates.append({
+                "item_id": item_id,
+                "full_text": text,
+                "status": "ok" if text else status,
+                "source": source,
+                "kind": kind,
+                "license_name": license_name,
+                "image_url": image_url,
+                "error_message": None,
+                "now_utc": now_utc,
+            })
         except Exception as exc:
             failed += 1
             logger.warning("Paper text hydration failed for item %s: %s", item_id, exc)
-            _update_item_hydration(
-                conn,
-                item_id=item_id,
-                full_text=None,
-                status="error",
-                source=None,
-                kind=None,
-                license_name=None,
-                image_url=None,
-                error_message=str(exc)[:4000],
-                now_utc=now_utc,
-            )
+            pending_updates.append({
+                "item_id": item_id,
+                "full_text": None,
+                "status": "error",
+                "source": None,
+                "kind": None,
+                "license_name": None,
+                "image_url": None,
+                "error_message": str(exc)[:4000],
+                "now_utc": now_utc,
+            })
+
+    # Batch update all hydration results
+    _batch_update_item_hydration(conn, pending_updates)
 
     return HydratePaperTextResult(
         items_scanned=len(items),

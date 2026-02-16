@@ -51,14 +51,30 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Curious Now API", version="0.1", lifespan=lifespan)
 
-# CORS configuration
-cors_origins = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-    "https://curious.now",
-    "https://www.curious.now",
-    "https://staging.curious.now",
-]
+
+def _build_cors_origins() -> list[str]:
+    defaults = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://localhost:8000",
+        "https://curious.now",
+        "https://www.curious.now",
+        "https://staging.curious.now",
+    ]
+
+    dynamic = [settings.public_app_base_url] if settings.public_app_base_url else []
+    extras = [
+        origin.strip()
+        for origin in (settings.cors_allowed_origins or "").split(",")
+        if origin.strip()
+    ]
+    # Preserve order while deduplicating.
+    return list(dict.fromkeys(defaults + dynamic + extras))
+
+
+cors_origins = _build_cors_origins()
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { ClusterDetail } from '@/types/api';
 
@@ -107,6 +107,7 @@ export function StoryPage({
   const directSourceLabel = sourceCtaLabel(primarySource?.contentType);
   const categoryChips = (extended.categories ?? extended.top_categories ?? []).slice(0, 2);
   const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all');
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const relevantItemIds = useMemo(
     () => [
       ...(cluster.takeaway_supporting_item_ids || []),
@@ -127,19 +128,35 @@ export function StoryPage({
     { id: 'evidence', label: isSingleSource ? 'Source' : 'Sources' },
   ];
 
+  useEffect(() => {
+    if (!isImageModalOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsImageModalOpen(false);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isImageModalOpen]);
+
   return (
     <main className={styles.main}>
       <article className={styles.container}>
         <header className={styles.hero}>
           {cluster.featured_image_url ? (
-            <div className={styles.heroImage}>
+            <button
+              type="button"
+              className={`${styles.heroImage} ${styles.heroImageButton}`}
+              onClick={() => setIsImageModalOpen(true)}
+              aria-label="Open story image"
+            >
               <img
                 src={cluster.featured_image_url}
-                alt=""
+                alt={cluster.canonical_title}
                 className={styles.heroImg}
                 loading="eager"
               />
-            </div>
+            </button>
           ) : null}
           <div className={styles.heroTop}>
             <p className={styles.eyebrow}>Story</p>
@@ -287,6 +304,31 @@ export function StoryPage({
           </aside>
         </div>
       </article>
+      {isImageModalOpen && cluster.featured_image_url ? (
+        <div
+          className={styles.imageModalOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Story image"
+          onClick={() => setIsImageModalOpen(false)}
+        >
+          <div className={styles.imageModalDialog} onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className={styles.imageModalClose}
+              onClick={() => setIsImageModalOpen(false)}
+              aria-label="Close image modal"
+            >
+              Close
+            </button>
+            <img
+              src={cluster.featured_image_url}
+              alt={cluster.canonical_title}
+              className={styles.imageModalImg}
+            />
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

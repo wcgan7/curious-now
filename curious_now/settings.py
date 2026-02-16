@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     admin_token: str | None = None
     public_app_base_url: str = "http://localhost:8000"
+    cors_allowed_origins: str | None = None  # Comma-separated extra origins
 
     # HTTP/security
     cookie_secure: bool = False
@@ -30,6 +31,10 @@ class Settings(BaseSettings):
     db_pool_min_size: int = 1
     db_pool_max_size: int = 10
     db_pool_timeout_seconds: float = 10.0
+
+    # Pipeline pool (CLI pipeline uses more connections than API)
+    pipeline_pool_max_size: int = 20
+    statement_timeout_ms: int = 30000  # 30s query timeout
 
     # Stage 6 defaults (used when user_prefs.notification_settings missing)
     default_timezone: str = "UTC"
