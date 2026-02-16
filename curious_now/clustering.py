@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from uuid import UUID
 
 import psycopg
 from psycopg.types.json import Jsonb
+
+logger = logging.getLogger(__name__)
 
 _ARXIV_NEW_RE = re.compile(r"\b\d{4}\.\d{4,5}(v\d+)?\b", re.IGNORECASE)
 _ARXIV_OLD_RE = re.compile(r"\b[a-z-]+/\d{7}(v\d+)?\b", re.IGNORECASE)
@@ -249,7 +252,7 @@ def _find_clusters_by_external_id(
             FROM cluster_items ci
             JOIN items i ON i.id = ci.item_id
             JOIN story_clusters c ON c.id = ci.cluster_id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND ({where_sql})
             ORDER BY c.updated_at DESC
             LIMIT 10;
@@ -296,7 +299,7 @@ def _find_clusters_by_title_search(
             FROM q
             JOIN cluster_search_docs d ON TRUE
             JOIN story_clusters c ON c.id = d.cluster_id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.updated_at >= %s
               AND d.search_tsv @@ q.tsq
             ORDER BY rank DESC, c.updated_at DESC, c.id DESC
@@ -404,7 +407,7 @@ def _create_cluster(conn: psycopg.Connection[Any], *, title: str, item_id: UUID)
         cur.execute(
             """
             INSERT INTO story_clusters(status, canonical_title, representative_item_id)
-            VALUES ('active', %s, %s)
+            VALUES ('pending', %s, %s)
             RETURNING id;
             """,
             (title, item_id),
@@ -1034,7 +1037,7 @@ def recompute_trending(
                  WHERE ci.cluster_id = c.id) AS src_count,
                 exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / 86400.0) AS decay
               FROM story_clusters c
-              WHERE c.status = 'active' AND c.updated_at >= %s
+              WHERE c.status IN ('active', 'pending') AND c.updated_at >= %s
             )
             UPDATE story_clusters c
             SET
@@ -1051,3 +1054,34 @@ def recompute_trending(
             (now, now, now, window_start),
         )
         return int(cur.rowcount)
+
+
+def promote_pending_clusters(
+    conn: psycopg.Connection[Any],
+) -> int:
+    """Promote pending clusters to active once they meet readiness criteria.
+
+    A cluster is promoted when ALL of:
+    1. takeaway IS NOT NULL
+    2. summary_intuition IS NOT NULL
+    3. Has at least one topic tag
+
+    Returns the number of clusters promoted.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE story_clusters
+            SET status = 'active', updated_at = now()
+            WHERE status = 'pending'
+              AND takeaway IS NOT NULL
+              AND summary_intuition IS NOT NULL
+              AND EXISTS (SELECT 1 FROM cluster_topics ct WHERE ct.cluster_id = id)
+            RETURNING id;
+            """
+        )
+        promoted = cur.fetchall()
+    promoted_ids = [UUID(str(_row_get(r, "id", 0))) for r in promoted]
+    if promoted_ids:
+        logger.info("Promoted %d pending clusters to active: %s", len(promoted_ids), promoted_ids)
+    return len(promoted_ids)

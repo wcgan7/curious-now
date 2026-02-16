@@ -30,6 +30,11 @@ while true; do
     echo "Enriching clusters (deep dives + news summaries)..."
     CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli enrich-stage3 --limit 100
 
+    # 4. Promote pending clusters that now meet readiness criteria
+    echo ""
+    echo "Promoting ready clusters..."
+    python -m curious_now.cli promote-clusters
+
     # 5. Generate embeddings for semantic search (optional)
     # echo ""
     # echo "Generating embeddings..."

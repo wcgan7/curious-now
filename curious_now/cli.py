@@ -20,6 +20,7 @@ from curious_now.api.schemas import SourcePack
 from curious_now.clustering import (
     cluster_unassigned_items,
     load_clustering_config,
+    promote_pending_clusters,
     recompute_trending,
 )
 from curious_now.db import DB
@@ -227,6 +228,16 @@ def cmd_recompute_trending(args: argparse.Namespace) -> int:
     with db.connect(autocommit=True) as conn:
         n = recompute_trending(conn, now_utc=now, lookback_days=int(args.lookback_days))
     print(f"Recomputed trending for {n} clusters.")
+    return 0
+
+
+def cmd_promote_clusters(args: argparse.Namespace) -> int:
+    """Promote pending clusters to active once they meet readiness criteria."""
+    settings = get_settings()
+    db = _pipeline_db()
+    with db.connect(autocommit=True) as conn:
+        n = promote_pending_clusters(conn)
+    print(f"Promoted {n} pending clusters to active.")
     return 0
 
 
@@ -476,6 +487,13 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             max_topics_per_cluster=int(args.tag_max_topics_per_cluster),
         )
     print(f"Tagged: {tagged.clusters_updated}/{tagged.clusters_scanned} clusters.")
+
+    # Promote pending clusters whose enrichment completed in a prior run
+    # (takeaway + intuition + topic tag). This is a no-op when enrichment
+    # commands haven't run yet; see run_continuous.sh or run_resilient_sync.py.
+    with db.connect(autocommit=True) as conn:
+        promoted = promote_pending_clusters(conn)
+    print(f"Promoted {promoted} pending clusters to active.")
 
     with db.connect(autocommit=True) as conn:
         n = recompute_trending(conn, now_utc=now, lookback_days=int(args.trending_lookback_days))
@@ -819,6 +837,12 @@ def main(argv: list[str] | None = None) -> int:
         "--now", type=str, default=None, help="Override current time (ISO-8601)"
     )
     p_trending.set_defaults(func=cmd_recompute_trending)
+
+    p_promote = sub.add_parser(
+        "promote-clusters",
+        help="Promote pending clusters to active once fully enriched",
+    )
+    p_promote.set_defaults(func=cmd_promote_clusters)
 
     p_seed_topics = sub.add_parser(
         "seed-topics",

@@ -20,6 +20,7 @@ from curious_now.ai_generation import (
 from curious_now.clustering import (
     cluster_unassigned_items,
     load_clustering_config,
+    promote_pending_clusters,
     recompute_trending,
 )
 from curious_now.db import DB
@@ -207,6 +208,26 @@ def _run_with_retry(
     return False, None
 
 
+def _check_llm_health(adapter: Any) -> tuple[bool, str]:
+    """Send a tiny probe prompt to verify the LLM adapter can complete requests.
+
+    Returns (ok, detail) where detail is the adapter name on success or an
+    error description on failure.
+    """
+    try:
+        response = adapter.complete(
+            "Reply with exactly: OK",
+            system_prompt="You are a health-check probe. Reply with the single word OK.",
+            max_tokens=8,
+            temperature=0.0,
+        )
+        if response.success and response.text.strip():
+            return True, f"{adapter.name}/{response.model}"
+        return False, f"LLM returned success={response.success} error={response.error}"
+    except Exception as exc:
+        return False, f"LLM health check exception: {exc}"
+
+
 def _try_acquire_lock(conn: psycopg.Connection[Any], *, namespace: int, lock_id: int) -> bool:
     with conn.cursor() as cur:
         cur.execute(
@@ -275,6 +296,18 @@ def _run_cycle(
                 else:
                     logger.error(msg)
                     return False
+            else:
+                health_ok, health_detail = _check_llm_health(adapter)
+                if not health_ok:
+                    msg = f"LLM health check failed: {health_detail}"
+                    if args.allow_mock_llm:
+                        logger.warning("%s LLM-dependent steps will be skipped.", msg)
+                        llm_ready = False
+                    else:
+                        logger.error(msg)
+                        return False
+                else:
+                    logger.info("LLM health check passed: %s", health_detail)
 
             ok, _ = _run_with_retry(
                 name="ingest",
@@ -400,6 +433,15 @@ def _run_cycle(
                 )
                 if not ok and args.stop_on_error:
                     return False
+
+            ok, _ = _run_with_retry(
+                name="promote_pending_clusters",
+                step_fn=lambda: promote_pending_clusters(conn),
+                retries=args.step_retries,
+                backoff_seconds=args.retry_backoff_seconds,
+            )
+            if not ok and args.stop_on_error:
+                return False
 
             ok, _ = _run_with_retry(
                 name="recompute_trending",

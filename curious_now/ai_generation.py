@@ -163,7 +163,7 @@ def _get_clusters_needing_takeaways(
                 c.canonical_title,
                 c.distinct_source_count
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NULL
               AND c.distinct_source_count >= 1
             ORDER BY c.updated_at DESC
@@ -568,14 +568,14 @@ def _get_clusters_needing_embeddings(
 ) -> list[dict[str, Any]]:
     """Get clusters that need embedding generation."""
     if force:
-        # Get all active clusters
+        # Get all active/pending clusters
         query = """
             SELECT
                 c.id AS cluster_id,
                 c.canonical_title,
                 c.takeaway
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
             ORDER BY c.updated_at DESC
             LIMIT %s;
         """
@@ -588,7 +588,7 @@ def _get_clusters_needing_embeddings(
                 c.takeaway
             FROM story_clusters c
             LEFT JOIN cluster_embeddings ce ON ce.cluster_id = c.id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND ce.cluster_id IS NULL
             ORDER BY c.updated_at DESC
             LIMIT %s;
@@ -830,7 +830,7 @@ def _get_clusters_needing_stage3(
                 c.distinct_source_count,
                 c.summary_deep_dive
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NOT NULL
               AND (c.summary_intuition IS NULL OR c.summary_deep_dive IS NULL)
             ORDER BY c.updated_at DESC
@@ -857,7 +857,7 @@ def _get_clusters_needing_intuition(
                 c.distinct_source_count,
                 c.summary_deep_dive
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NOT NULL
               AND c.summary_intuition IS NULL
             ORDER BY c.updated_at DESC
@@ -885,7 +885,7 @@ def _get_clusters_needing_deep_dive(
             SELECT c.id AS cluster_id, c.canonical_title, c.takeaway,
                    c.distinct_source_count, c.updated_at
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NOT NULL
               AND c.summary_deep_dive IS NULL
               AND EXISTS (
@@ -1112,7 +1112,7 @@ def backfill_trust_signals_for_clusters(
             FROM story_clusters c
             LEFT JOIN cluster_items ci ON ci.cluster_id = c.id
             LEFT JOIN items i ON i.id = ci.item_id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
             GROUP BY c.id, c.distinct_source_count, c.anti_hype_flags, c.method_badges
             ORDER BY c.updated_at DESC
             LIMIT %s;

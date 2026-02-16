@@ -386,7 +386,7 @@ def _get_cluster_text(
             SELECT c.canonical_title, d.search_text
             FROM story_clusters c
             LEFT JOIN cluster_search_docs d ON d.cluster_id = c.id
-            WHERE c.id = %s AND c.status = 'active';
+            WHERE c.id = %s AND c.status IN ('active', 'pending');
             """,
             (cluster_id,),
         )
@@ -411,7 +411,7 @@ def _get_cluster_text_batch(
             SELECT c.id, c.canonical_title, d.search_text
             FROM story_clusters c
             LEFT JOIN cluster_search_docs d ON d.cluster_id = c.id
-            WHERE c.id = ANY(%s::uuid[]) AND c.status = 'active';
+            WHERE c.id = ANY(%s::uuid[]) AND c.status IN ('active', 'pending');
             """,
             ([str(c) for c in cluster_ids],),
         )
@@ -490,7 +490,7 @@ def tag_recent_clusters(
             """
             SELECT id
             FROM story_clusters
-            WHERE status = 'active'
+            WHERE status IN ('active', 'pending')
               AND updated_at >= %s
             ORDER BY updated_at DESC, id DESC
             LIMIT %s;
@@ -673,7 +673,7 @@ def tag_untagged_clusters_llm(
             """
             SELECT c.id
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND NOT EXISTS (
                 SELECT 1 FROM cluster_topics ct
                 WHERE ct.cluster_id = c.id
@@ -929,7 +929,7 @@ def rebuild_empty_search_texts(
             SELECT c.id
             FROM story_clusters c
             LEFT JOIN cluster_search_docs d ON d.cluster_id = c.id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND (d.search_text IS NULL OR LENGTH(d.search_text) < %s)
             ORDER BY c.updated_at DESC
             LIMIT %s;
@@ -1003,7 +1003,7 @@ def quarantine_untaggable_clusters(
             FROM story_clusters c
             LEFT JOIN cluster_search_docs d ON d.cluster_id = c.id
             LEFT JOIN cluster_topics ct ON ct.cluster_id = c.id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND ct.cluster_id IS NULL  -- No topics assigned
             ORDER BY c.updated_at DESC
             LIMIT %s;
@@ -1124,7 +1124,7 @@ def run_tagging_maintenance(
                 FROM story_clusters c
                 LEFT JOIN cluster_topics ct ON ct.cluster_id = c.id
                 LEFT JOIN cluster_search_docs d ON d.cluster_id = c.id
-                WHERE c.status = 'active'
+                WHERE c.status IN ('active', 'pending')
                   AND ct.cluster_id IS NULL
                   AND d.search_text IS NOT NULL
                   AND LENGTH(d.search_text) >= %s
