@@ -174,13 +174,12 @@ def _get_maintenance_state() -> tuple[bool, str | None, datetime | None]:
         if not enabled or enabled == b"0":
             return False, None, None
         msg_raw = r.get(_MAINT_MSG_KEY)
-        msg = msg_raw.decode() if isinstance(msg_raw, bytes) else (msg_raw if msg_raw else None)
+        msg: str | None = msg_raw.decode() if isinstance(msg_raw, bytes) else (str(msg_raw) if msg_raw else None)
         started_raw = r.get(_MAINT_STARTED_KEY)
         started: datetime | None = None
         if started_raw:
-            started = datetime.fromisoformat(
-                started_raw.decode() if isinstance(started_raw, bytes) else started_raw
-            )
+            ts = started_raw.decode() if isinstance(started_raw, bytes) else str(started_raw)
+            started = datetime.fromisoformat(ts)
         return True, msg, started
     except Exception:
         return False, None, None

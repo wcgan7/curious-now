@@ -17,6 +17,7 @@ from curious_now.ai_generation import (
     generate_takeaways_for_clusters,
 )
 from curious_now.api.schemas import SourcePack
+from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.clustering import (
     cluster_unassigned_items,
     load_clustering_config,
@@ -32,7 +33,6 @@ from curious_now.notifications import (
     enqueue_topic_digest_jobs,
     send_due_notification_jobs,
 )
-from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.paper_text_hydration import backfill_images, hydrate_paper_text
 from curious_now.repo_stage1 import import_source_pack
 from curious_now.retention import purge_logs
@@ -118,7 +118,7 @@ def cmd_purge_logs(args: argparse.Namespace) -> int:
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
@@ -140,7 +140,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 
 
 def cmd_hydrate_paper_text(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
@@ -158,7 +158,7 @@ def cmd_hydrate_paper_text(args: argparse.Namespace) -> int:
 
 
 def cmd_hydrate_article_text(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = hydrate_article_text(
@@ -174,7 +174,7 @@ def cmd_hydrate_article_text(args: argparse.Namespace) -> int:
 
 
 def cmd_backfill_images(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = backfill_images(conn, limit=int(args.limit))
@@ -202,7 +202,7 @@ def cmd_import_source_pack(args: argparse.Namespace) -> int:
 
 
 def cmd_cluster(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     now = _parse_now(args.now)
     cfg = load_clustering_config(Path(args.config) if args.config else None)
@@ -222,7 +222,7 @@ def cmd_cluster(args: argparse.Namespace) -> int:
 
 
 def cmd_recompute_trending(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
@@ -233,7 +233,7 @@ def cmd_recompute_trending(args: argparse.Namespace) -> int:
 
 def cmd_promote_clusters(args: argparse.Namespace) -> int:
     """Promote pending clusters to active once they meet readiness criteria."""
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         n = promote_pending_clusters(conn)
@@ -365,7 +365,7 @@ def cmd_tagging_maintenance(args: argparse.Namespace) -> int:
 
 def cmd_tag_topics(args: argparse.Namespace) -> int:
     """Tag recent clusters using LLM-only classification (default)."""
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
@@ -382,7 +382,7 @@ def cmd_tag_topics(args: argparse.Namespace) -> int:
 
 def cmd_tag_untagged_llm(args: argparse.Namespace) -> int:
     """Tag untagged clusters using LLM only."""
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
@@ -397,7 +397,7 @@ def cmd_tag_untagged_llm(args: argparse.Namespace) -> int:
 
 
 def cmd_pipeline(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     now = _parse_now(args.now)
 
@@ -502,7 +502,7 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
 
 
 def cmd_generate_takeaways(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_takeaways_for_clusters(
@@ -518,7 +518,7 @@ def cmd_generate_takeaways(args: argparse.Namespace) -> int:
 
 
 def cmd_generate_embeddings(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_embeddings_for_clusters(
@@ -537,7 +537,7 @@ def cmd_generate_embeddings(args: argparse.Namespace) -> int:
 
 def cmd_enrich_stage3(args: argparse.Namespace) -> int:
     """Generate Stage 3 enrichment (intuition, deep-dive, anti-hype flags)."""
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = enrich_stage3_for_clusters(
@@ -556,7 +556,7 @@ def cmd_enrich_stage3(args: argparse.Namespace) -> int:
 
 def cmd_generate_intuition(args: argparse.Namespace) -> int:
     """Generate layered intuition (ELI20 -> ELI5) for clusters."""
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_intuition_for_clusters(
@@ -573,7 +573,7 @@ def cmd_generate_intuition(args: argparse.Namespace) -> int:
 
 def cmd_generate_deep_dives(args: argparse.Namespace) -> int:
     """Generate deep dives for paper-based clusters only."""
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_deep_dives_for_clusters(
@@ -592,7 +592,7 @@ def cmd_generate_deep_dives(args: argparse.Namespace) -> int:
 
 def cmd_generate_high_impact(args: argparse.Namespace) -> int:
     """Generate provisional/final high-impact paper scores."""
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_high_impact_for_clusters(
@@ -630,7 +630,7 @@ def cmd_generate_high_impact(args: argparse.Namespace) -> int:
 
 def cmd_backfill_trust_signals(args: argparse.Namespace) -> int:
     """Backfill anti-hype flags and method badges for active clusters."""
-    settings = get_settings()
+    get_settings()
     db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = backfill_trust_signals_for_clusters(

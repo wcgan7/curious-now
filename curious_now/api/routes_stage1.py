@@ -17,8 +17,8 @@ from curious_now.api.schemas import (
     Source,
     SourceFeedHealth,
     SourcePack,
-    SourceType,
     SourcesResponse,
+    SourceType,
 )
 from curious_now.db import DB
 from curious_now.ingestion import ingest_due_feeds

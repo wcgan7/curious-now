@@ -17,6 +17,7 @@ from curious_now.ai_generation import (
     generate_deep_dives_for_clusters,
     generate_takeaways_for_clusters,
 )
+from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.clustering import (
     cluster_unassigned_items,
     load_clustering_config,
@@ -26,7 +27,6 @@ from curious_now.clustering import (
 from curious_now.db import DB
 from curious_now.ingestion import ingest_due_feeds
 from curious_now.migrations import migrate
-from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.paper_text_hydration import hydrate_paper_text
 from curious_now.settings import get_settings
 from curious_now.topic_tagging import tag_recent_clusters, tag_untagged_clusters_llm

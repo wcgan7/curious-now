@@ -48,6 +48,7 @@ from curious_now.ai.takeaways import (
     TakeawayResult,
     generate_takeaway,
 )
+from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.impact_scoring import (
     HighImpactInput,
     compute_components,
@@ -57,7 +58,6 @@ from curious_now.impact_scoring import (
     is_absolute_high_qualifier,
     resolve_threshold_for_cluster,
 )
-from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.paper_text_hydration import hydrate_paper_text
 
 logger = logging.getLogger(__name__)

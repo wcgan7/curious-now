@@ -712,6 +712,7 @@ def ingest_due_feeds(
             continue
 
         try:
+            assert resp is not None  # guaranteed: fetch_error is falsy
             http_status = int(resp.status_code)
 
             parsed = feedparser.parse(resp.content)

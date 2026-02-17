@@ -186,10 +186,10 @@ describe('StoryPage (evidence-only)', () => {
       />
     );
 
-    expect(screen.queryByRole('dialog', { name: /story image/i })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: /story with image/i })).toBeNull();
     await user.click(screen.getByRole('button', { name: /open story image/i }));
-    expect(screen.getByRole('dialog', { name: /story image/i })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /close image modal/i }));
-    expect(screen.queryByRole('dialog', { name: /story image/i })).toBeNull();
+    expect(screen.getByRole('dialog', { name: /story with image/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /close/i }));
+    expect(screen.queryByRole('dialog', { name: /story with image/i })).toBeNull();
   });
 });
