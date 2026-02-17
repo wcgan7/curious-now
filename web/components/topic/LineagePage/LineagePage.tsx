@@ -28,7 +28,7 @@ export function LineagePage({ lineage }: { lineage: TopicLineageResponse }) {
               <li key={n.node_id} className={styles.item}>
                 <div className={styles.nodeTitle}>
                   {n.external_url ? (
-                    <a className={styles.nodeLink} href={n.external_url} target="_blank" rel="noreferrer">
+                    <a className={styles.nodeLink} href={n.external_url} target="_blank" rel="noopener noreferrer">
                       {n.title}
                     </a>
                   ) : (

@@ -53,6 +53,7 @@ export function SearchPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search stories, topics…"
+              aria-label="Search stories and topics"
             />
             <Button type="submit" variant="secondary">
               Search

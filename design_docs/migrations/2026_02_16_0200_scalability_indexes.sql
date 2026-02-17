@@ -11,16 +11,17 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_clusters_needs_takeaway
   ON story_clusters (updated_at DESC)
   WHERE status IN ('active', 'pending') AND takeaway IS NULL AND distinct_source_count >= 1;
 
--- 3. Stage 3 enrichment: find clusters needing intuition or deep dive
+-- 3. Stage 3 enrichment: find clusters needing intuition
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_clusters_needs_stage3
   ON story_clusters (updated_at DESC)
   WHERE status IN ('active', 'pending') AND takeaway IS NOT NULL
-    AND (summary_intuition IS NULL OR summary_deep_dive IS NULL);
+    AND summary_intuition IS NULL AND deep_dive_skip_reason IS NULL;
 
 -- 4. Deep dive: find clusters needing deep dive (used with EXISTS rewrite)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_clusters_needs_deep_dive
   ON story_clusters (updated_at DESC)
-  WHERE status IN ('active', 'pending') AND takeaway IS NOT NULL AND summary_deep_dive IS NULL;
+  WHERE status IN ('active', 'pending') AND takeaway IS NOT NULL
+    AND summary_deep_dive IS NULL AND deep_dive_skip_reason IS NULL;
 
 -- 5. Topic tagging: reverse lookup on cluster_topics
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cluster_topics_cluster_id
@@ -61,4 +62,16 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cluster_items_added_at
 -- 12. Intuition only (no deep dive filter)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_clusters_needs_intuition
   ON story_clusters (updated_at DESC)
-  WHERE status IN ('active', 'pending') AND takeaway IS NOT NULL AND summary_intuition IS NULL;
+  WHERE status IN ('active', 'pending') AND takeaway IS NOT NULL
+    AND summary_intuition IS NULL AND deep_dive_skip_reason IS NULL;
+
+-- 13. Promote pending clusters: find pending clusters ready for promotion
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_clusters_pending_promotable
+  ON story_clusters (updated_at DESC)
+  WHERE status = 'pending'
+    AND takeaway IS NOT NULL
+    AND summary_intuition IS NOT NULL;
+
+-- 14. Glossary: case-insensitive term lookup
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_glossary_lower_term
+  ON glossary_entries (lower(term));

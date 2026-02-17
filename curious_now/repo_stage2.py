@@ -336,7 +336,10 @@ def cluster_redirect_to(conn: psycopg.Connection[Any], *, cluster_id: UUID) -> U
 
 def get_cluster_updated_at(conn: psycopg.Connection[Any], *, cluster_id: UUID) -> datetime | None:
     with conn.cursor() as cur:
-        cur.execute("SELECT updated_at FROM story_clusters WHERE id = %s;", (cluster_id,))
+        cur.execute(
+            "SELECT updated_at FROM story_clusters WHERE id = %s AND status = 'active';",
+            (cluster_id,),
+        )
         row = cur.fetchone()
     if not row:
         return None
@@ -353,7 +356,7 @@ def get_topic_updated_at(conn: psycopg.Connection[Any], *, topic_id: UUID) -> da
 
 
 def get_cluster_detail_or_redirect(
-    conn: psycopg.Connection[Any], *, cluster_id: UUID
+    conn: psycopg.Connection[Any], *, cluster_id: UUID, require_status: str | None = "active"
 ) -> ClusterDetail | RedirectResponse:
     to_id = _cluster_redirect(conn, cluster_id)
     if to_id:
@@ -385,9 +388,9 @@ def get_cluster_detail_or_redirect(
               summary_deep_dive_supporting_item_ids,
               deep_dive_skip_reason
             FROM story_clusters
-            WHERE id = %s;
+            WHERE id = %s{" AND status = %s" if require_status else ""};
             """,
-            (cluster_id,),
+            (cluster_id, require_status) if require_status else (cluster_id,),
         )
         cluster = cur.fetchone()
     if not cluster:

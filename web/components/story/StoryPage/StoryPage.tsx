@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ClusterDetail } from '@/types/api';
 
@@ -62,6 +62,62 @@ function sourceCtaLabel(contentType: string | undefined): string {
 }
 
 type EvidenceFilter = 'all' | 'news' | 'press_release' | 'preprint' | 'peer_reviewed' | 'report';
+
+function ImageModal({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    closeRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab') {
+        // Trap focus within modal — only the close button is focusable
+        e.preventDefault();
+        closeRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={overlayRef}
+      className={styles.imageModalOverlay}
+      onClick={(e) => {
+        if (e.target === overlayRef.current) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={alt}
+    >
+      <div className={styles.imageModalDialog}>
+        <button
+          ref={closeRef}
+          type="button"
+          className={styles.imageModalClose}
+          onClick={onClose}
+        >
+          Close
+        </button>
+        <img src={src} alt={alt} className={styles.imageModalImg} />
+      </div>
+    </div>
+  );
+}
 
 export function StoryPage({
   cluster,
@@ -127,17 +183,6 @@ export function StoryPage({
     ...(hasDeepDive ? [{ id: 'deep-dive', label: 'Deep Dive' }] : []),
     { id: 'evidence', label: isSingleSource ? 'Source' : 'Sources' },
   ];
-
-  useEffect(() => {
-    if (!isImageModalOpen) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsImageModalOpen(false);
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isImageModalOpen]);
 
   return (
     <main className={styles.main}>
@@ -305,29 +350,11 @@ export function StoryPage({
         </div>
       </article>
       {isImageModalOpen && cluster.featured_image_url ? (
-        <div
-          className={styles.imageModalOverlay}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Story image"
-          onClick={() => setIsImageModalOpen(false)}
-        >
-          <div className={styles.imageModalDialog} onClick={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              className={styles.imageModalClose}
-              onClick={() => setIsImageModalOpen(false)}
-              aria-label="Close image modal"
-            >
-              Close
-            </button>
-            <img
-              src={cluster.featured_image_url}
-              alt={cluster.canonical_title}
-              className={styles.imageModalImg}
-            />
-          </div>
-        </div>
+        <ImageModal
+          src={cluster.featured_image_url}
+          alt={cluster.canonical_title}
+          onClose={() => setIsImageModalOpen(false)}
+        />
       ) : null}
     </main>
   );

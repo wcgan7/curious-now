@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
 import styles from './fallback.module.css';
-import { Button } from '@/components/ui/Button/Button';
 
 export default function NotFound() {
   return (
@@ -16,8 +15,8 @@ export default function NotFound() {
             This page doesn&apos;t exist or may have moved.
           </p>
           <div className={styles.actions}>
-            <Link href="/">
-              <Button type="button">Go to home</Button>
+            <Link href="/" className={styles.homeLink}>
+              Go to home
             </Link>
           </div>
         </section>

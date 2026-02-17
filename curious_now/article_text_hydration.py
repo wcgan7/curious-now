@@ -50,9 +50,8 @@ def _get_articles_needing_hydration(
     params: list[Any] = []
     where_item_ids = ""
     if item_ids:
-        placeholders = ",".join(["%s"] * len(item_ids))
-        where_item_ids = f"AND i.id IN ({placeholders})"
-        params.extend(item_ids)
+        where_item_ids = "AND i.id = ANY(%s::uuid[])"
+        params.append([str(x) for x in item_ids])
     params.append(limit)
 
     with conn.cursor(row_factory=dict_row) as cur:

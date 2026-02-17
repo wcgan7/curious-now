@@ -62,11 +62,14 @@ export function IntuitionSection({
     return out;
   }, [eli5, eli20, supportingItemIdsEli5, supportingItemIdsEli20]);
 
-  const [selected, setSelected] = useState<ModeId>(() => {
-    if (typeof window === 'undefined') return 'eli20';
+  const [selected, setSelected] = useState<ModeId>('eli20');
+
+  useEffect(() => {
     const stored = window.localStorage.getItem(INTUITION_MODE_STORAGE_KEY);
-    return stored === 'eli5' || stored === 'eli20' ? stored : 'eli20';
-  });
+    if (stored === 'eli5' || stored === 'eli20') {
+      setSelected(stored);
+    }
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(INTUITION_MODE_STORAGE_KEY, selected);

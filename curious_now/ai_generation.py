@@ -80,6 +80,9 @@ _FULLTEXT_TEXT_SOURCES = {
 _DEEP_DIVE_SKIP_REASON_NO_FULLTEXT = "no_fulltext"
 _DEEP_DIVE_SKIP_REASON_ABSTRACT_ONLY = "abstract_only"
 _DEEP_DIVE_SKIP_REASON_GEN_FAILED = "generation_failed"
+_DEEP_DIVE_SKIP_REASON_NEWS_NO_ITEMS = "news_no_items"
+_DEEP_DIVE_SKIP_REASON_NEWS_INSUFFICIENT = "news_insufficient_context"
+_DEEP_DIVE_SKIP_REASON_NEWS_GEN_FAILED = "news_gen_failed"
 
 
 @dataclass
@@ -819,34 +822,11 @@ def _get_clusters_needing_stage3(
     *,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    """Get clusters that need Stage 3 enrichment (missing intuition or deep-dive)."""
-    with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(
-            """
-            SELECT
-                c.id AS cluster_id,
-                c.canonical_title,
-                c.takeaway,
-                c.distinct_source_count,
-                c.summary_deep_dive
-            FROM story_clusters c
-            WHERE c.status IN ('active', 'pending')
-              AND c.takeaway IS NOT NULL
-              AND (c.summary_intuition IS NULL OR c.summary_deep_dive IS NULL)
-            ORDER BY c.updated_at DESC
-            LIMIT %s;
-            """,
-            (limit,),
-        )
-        return cur.fetchall()
+    """Get clusters that need Stage 3 enrichment (missing intuition).
 
-
-def _get_clusters_needing_intuition(
-    conn: psycopg.Connection[Any],
-    *,
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    """Get clusters that need intuition (have takeaway but no intuition)."""
+    Excludes clusters with a deep_dive_skip_reason, since those have already
+    been attempted and cannot produce further enrichment.
+    """
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
@@ -860,6 +840,39 @@ def _get_clusters_needing_intuition(
             WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NOT NULL
               AND c.summary_intuition IS NULL
+              AND c.deep_dive_skip_reason IS NULL
+            ORDER BY c.updated_at DESC
+            LIMIT %s;
+            """,
+            (limit,),
+        )
+        return cur.fetchall()
+
+
+def _get_clusters_needing_intuition(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Get clusters that need intuition (have takeaway but no intuition).
+
+    Excludes clusters with a deep_dive_skip_reason, since those have already
+    been attempted and cannot produce further enrichment.
+    """
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT
+                c.id AS cluster_id,
+                c.canonical_title,
+                c.takeaway,
+                c.distinct_source_count,
+                c.summary_deep_dive
+            FROM story_clusters c
+            WHERE c.status IN ('active', 'pending')
+              AND c.takeaway IS NOT NULL
+              AND c.summary_intuition IS NULL
+              AND c.deep_dive_skip_reason IS NULL
             ORDER BY c.updated_at DESC
             LIMIT %s;
             """,
@@ -888,6 +901,7 @@ def _get_clusters_needing_deep_dive(
             WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NOT NULL
               AND c.summary_deep_dive IS NULL
+              AND c.deep_dive_skip_reason IS NULL
               AND EXISTS (
                 SELECT 1 FROM cluster_items ci
                 JOIN items i ON i.id = ci.item_id
@@ -1339,6 +1353,10 @@ def enrich_stage3_for_clusters(
                                 cluster_id,
                                 _DEEP_DIVE_SKIP_REASON_NO_FULLTEXT,
                             )
+                        # If no abstract fallback was produced, nothing more we can do
+                        if not abstract_fallback_intuition:
+                            skipped += 1
+                            continue
                     else:
                         source_summaries = [
                             SourceSummary(
@@ -1372,10 +1390,15 @@ def enrich_stage3_for_clusters(
                                 cluster_id,
                                 _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
                             )
+                            failed += 1
+                            continue
                 else:
                     # Non-paper sources (news, journalism, etc.): generate
                     # a news summary for intuition instead of a deep dive.
                     if not items:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_NO_ITEMS,
+                        )
                         skipped += 1
                         logger.info(
                             "Cluster %s skipped: no items for news summary",
@@ -1395,6 +1418,9 @@ def enrich_stage3_for_clusters(
                     )
 
                     if news_result.insufficient_context:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_INSUFFICIENT,
+                        )
                         skipped += 1
                         logger.info(
                             "Cluster %s skipped: insufficient context for news summary",
@@ -1403,6 +1429,9 @@ def enrich_stage3_for_clusters(
                         continue
 
                     if not news_result.success:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_GEN_FAILED,
+                        )
                         failed += 1
                         logger.warning(
                             "News summary generation failed for cluster %s: %s",
@@ -1671,6 +1700,9 @@ def generate_intuition_for_clusters(
                     # Non-paper sources (news, journalism, etc.): use simple news summary
                     # No deep dive for these - the article itself is the explanation
                     if not items:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_NO_ITEMS,
+                        )
                         skipped += 1
                         logger.info(
                             "Cluster %s skipped: no items for news summary",
@@ -1693,6 +1725,9 @@ def generate_intuition_for_clusters(
                     )
 
                     if news_result.insufficient_context:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_INSUFFICIENT,
+                        )
                         skipped += 1
                         logger.info(
                             "Cluster %s skipped: insufficient context for news summary",
@@ -1701,6 +1736,9 @@ def generate_intuition_for_clusters(
                         continue
 
                     if not news_result.success:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_GEN_FAILED,
+                        )
                         failed += 1
                         logger.warning(
                             "News summary generation failed for cluster %s: %s",

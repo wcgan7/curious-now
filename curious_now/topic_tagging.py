@@ -817,13 +817,13 @@ def backfill_topics_v1(
             clusters_scanned=0,
         )
 
-    # Get all active clusters
+    # Get all active and pending clusters
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT id
             FROM story_clusters
-            WHERE status = 'active'
+            WHERE status IN ('active', 'pending')
             ORDER BY updated_at DESC
             LIMIT %s;
             """,

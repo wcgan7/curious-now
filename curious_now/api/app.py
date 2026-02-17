@@ -39,6 +39,7 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
         pool_min_size=runtime_settings.db_pool_min_size,
         pool_max_size=runtime_settings.db_pool_max_size,
         pool_timeout_seconds=runtime_settings.db_pool_timeout_seconds,
+        statement_timeout_ms=runtime_settings.statement_timeout_ms,
     )
     if runtime_settings.db_pool_enabled:
         db.open_pool()

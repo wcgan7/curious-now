@@ -478,13 +478,13 @@ def _recompute_cluster_metrics(
             """
             UPDATE story_clusters
             SET
-              recency_score = exp(-EXTRACT(EPOCH FROM (%s - updated_at)) / 3600.0 / 24.0),
+              recency_score = exp(-EXTRACT(EPOCH FROM (%s - updated_at)) / 86400.0),
               trending_score = (
                 (
                   (velocity_6h + 0.5 * velocity_24h) * 1.0
                   + LEAST(distinct_source_count, 10) * 0.3
                 )
-                * exp(-EXTRACT(EPOCH FROM (%s - updated_at)) / 3600.0 / 24.0)
+                * exp(-EXTRACT(EPOCH FROM (%s - updated_at)) / 86400.0)
               )
             WHERE id = %s;
             """,
@@ -526,10 +526,10 @@ def _batch_recompute_cluster_metrics(
               velocity_6h = cm.velocity_6h,
               velocity_24h = cm.velocity_24h,
               updated_at = %s,
-              recency_score = exp(-EXTRACT(EPOCH FROM (%s - %s::timestamptz)) / 86400.0),
+              recency_score = exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / 86400.0),
               trending_score = (
                 (cm.velocity_6h + 0.5 * cm.velocity_24h + LEAST(cm.distinct_source_count, 10) * 0.3)
-                * exp(-EXTRACT(EPOCH FROM (%s - %s::timestamptz)) / 86400.0)
+                * exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / 86400.0)
               )
             FROM cluster_metrics cm
             WHERE c.id = cm.cluster_id;
@@ -537,8 +537,8 @@ def _batch_recompute_cluster_metrics(
             (
                 now_utc, now_utc,
                 [str(c) for c in cluster_ids],
-                now_utc, now_utc, now_utc,
                 now_utc, now_utc,
+                now_utc,
             ),
         )
 
@@ -597,7 +597,9 @@ def _update_cluster_representative(conn: psycopg.Connection[Any], *, cluster_id:
         if title.isupper():
             score -= 1.0
 
-        if best_title is None or score > best_score or (score == best_score and ts > best_ts):
+        if best_title is None or score > best_score or (
+            score == best_score and ts is not None and (best_ts is None or ts > best_ts)
+        ):
             best_score = score
             best_title = title
             best_id = item_id

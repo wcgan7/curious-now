@@ -49,7 +49,7 @@ export function SupportingEvidence({
       <ul className={styles.list}>
         {filtered.map(({ item }) => (
           <li key={item.item_id} className={styles.item}>
-            <a href={item.url} target="_blank" rel="noreferrer" className={styles.link}>
+            <a href={item.url} target="_blank" rel="noopener noreferrer" className={styles.link}>
               {item.title}
             </a>
             <div className={styles.meta}>

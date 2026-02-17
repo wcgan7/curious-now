@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ClusterCard } from '@/components/feed/ClusterCard/ClusterCard';
 import { getFeedClient } from '@/lib/api/feedClient';
@@ -33,8 +33,6 @@ export function InfiniteFeedList({
   const loadErrorRef = useRef<string | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set(initialItems.map((item) => item.cluster_id)));
 
-  const seenIds = useMemo(() => new Set(items.map((item) => item.cluster_id)), [items]);
-
   useEffect(() => {
     pageRef.current = page;
   }, [page]);
@@ -56,8 +54,8 @@ export function InfiniteFeedList({
   }, [loadError]);
 
   useEffect(() => {
-    seenIdsRef.current = seenIds;
-  }, [seenIds]);
+    for (const item of items) seenIdsRef.current.add(item.cluster_id);
+  }, [items]);
 
   const loadNextPage = useCallback(async () => {
     if (isLoadingRef.current || !hasMoreRef.current || hasInitialErrorRef.current) return;

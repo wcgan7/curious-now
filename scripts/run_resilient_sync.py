@@ -427,6 +427,7 @@ def _run_cycle(
                     step_fn=lambda: enrich_stage3_for_clusters(
                         conn,
                         limit=args.enrich_stage3_limit,
+                        adapter=adapter,
                     ),
                     retries=args.step_retries,
                     backoff_seconds=args.retry_backoff_seconds,

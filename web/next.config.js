@@ -16,8 +16,6 @@ const withPWA = require('next-pwa')({
   },
   additionalManifestEntries: [
     { url: '/offline', revision: null },
-    { url: '/saved', revision: null },
-    { url: '/reader', revision: null },
   ],
 });
 

@@ -75,3 +75,8 @@
   gap: var(--s-3);
 }
 
+.emptyState {
+  color: var(--text-secondary);
+  padding: var(--s-4) 0;
+}
+

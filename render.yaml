@@ -30,3 +30,9 @@ services:
         value: "10"
       - key: CN_DB_POOL_TIMEOUT_SECONDS
         value: "10"
+      - key: CN_STATEMENT_TIMEOUT_MS
+        value: "30000"
+      - key: CN_LLM_ADAPTER
+        sync: false
+      - key: CN_LLM_MODEL
+        sync: false

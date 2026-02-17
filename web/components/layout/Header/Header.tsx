@@ -8,7 +8,8 @@ import styles from './Header.module.css';
 
 export function Header() {
   const pathname = usePathname();
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
   const categoriesActive = isActive('/categories') || isActive('/category');
 
   return (

@@ -21,10 +21,8 @@ export default function GlobalError({ error, reset }: { error: Error; reset: () 
             <Button type="button" onClick={() => reset()}>
               Try again
             </Button>
-            <Link href="/">
-              <Button type="button" variant="secondary">
-                Go to home
-              </Button>
+            <Link href="/" className={styles.homeLink}>
+              Go to home
             </Link>
           </div>
         </section>

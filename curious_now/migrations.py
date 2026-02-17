@@ -89,12 +89,41 @@ def applied_migrations(conn: psycopg.Connection[Any]) -> set[str]:
 
 def apply_migration(conn: psycopg.Connection[Any], migration: Migration) -> None:
     sql = migration.path.read_text(encoding="utf-8")
-    with conn.cursor() as cur:
-        cur.execute(sql)
-        cur.execute(
-            "INSERT INTO schema_migrations(name) VALUES (%s) ON CONFLICT DO NOTHING;",
-            (migration.name,),
-        )
+    if "CONCURRENTLY" in sql:
+        # CREATE INDEX CONCURRENTLY cannot run inside a transaction.
+        # Execute index statements with autocommit, then record the migration.
+        old_autocommit = conn.autocommit
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cur:
+                for statement in _split_sql_statements(sql):
+                    cur.execute(statement)
+        finally:
+            conn.autocommit = old_autocommit
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO schema_migrations(name) VALUES (%s) ON CONFLICT DO NOTHING;",
+                (migration.name,),
+            )
+    else:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            cur.execute(
+                "INSERT INTO schema_migrations(name) VALUES (%s) ON CONFLICT DO NOTHING;",
+                (migration.name,),
+            )
+
+
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split SQL text into individual statements, skipping empty/comment-only ones."""
+    statements = []
+    for part in sql.split(";"):
+        stripped = part.strip()
+        # Skip empty parts and comment-only parts
+        lines = [ln for ln in stripped.splitlines() if ln.strip() and not ln.strip().startswith("--")]
+        if lines:
+            statements.append(stripped + ";")
+    return statements
 
 
 def migrate(conn: psycopg.Connection[Any], migrations_dir: Path) -> list[str]:

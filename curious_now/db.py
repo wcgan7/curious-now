@@ -35,8 +35,11 @@ class DB:
             return
         if self._pool is not None:
             return
-        if ConnectionPool is None:
-            raise RuntimeError("psycopg-pool is not installed")
+        if ConnectionPool is None:  # pragma: no cover
+            raise RuntimeError(
+                "psycopg-pool is not installed but pool_enabled=True. "
+                "Install it with: pip install psycopg-pool"
+            )
 
         self._pool = ConnectionPool(
             conninfo=self.dsn,
@@ -64,6 +67,8 @@ class DB:
 
         with self._pool.connection() as conn:
             conn.autocommit = autocommit
+            if self.statement_timeout_ms > 0:
+                conn.execute(f"SET statement_timeout = {self.statement_timeout_ms}")
             yield conn
 
     def is_ready(self) -> bool:

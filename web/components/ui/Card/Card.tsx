@@ -16,7 +16,7 @@ export function Card({
   className?: string;
   children: React.ReactNode;
 }) {
-  const Comp = as as any;
+  const Comp: React.ElementType = as;
   const content = (
     <Comp className={clsx(styles.card, className)}>{children}</Comp>
   );
