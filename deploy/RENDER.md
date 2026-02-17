@@ -202,7 +202,30 @@ Click **Deploy**. Vercel builds the Next.js app and deploys it to a `.vercel.app
 
 The pipeline worker runs `scripts/run_resilient_sync.py`, which continuously ingests feeds, clusters items, generates AI takeaways and deep dives, and updates trending scores.
 
-### Option A: Render Background Worker (Recommended)
+### Option A: Run Locally (Early Deployment)
+
+During early deployment you can run the pipeline on your local machine, pointing at the remote Neon database. This is the simplest way to get started — it uses your local LLM setup and avoids paying for a Render worker.
+
+```bash
+CN_DATABASE_URL="postgresql://..." \
+CN_LLM_ADAPTER=claude-cli \
+  python scripts/run_resilient_sync.py \
+    --loop \
+    --throughput-profile low \
+    --run-migrations
+```
+
+This runs the full pipeline (ingest → hydrate → cluster → tag → takeaways → deep dives → promote → trending) in a continuous loop. Press Ctrl-C to stop.
+
+Tips:
+- Use `--throughput-profile low` to keep LLM costs and cycle frequency manageable.
+- Drop `--loop` to run a single cycle and exit (useful for the very first run).
+- Add `--stop-on-error` to halt on the first failure instead of continuing to the next step.
+- The script acquires a PostgreSQL advisory lock, so it's safe to transition to a Render worker later — only one process runs a cycle at a time.
+
+When you're ready to run the pipeline unattended, switch to Option B or C below.
+
+### Option B: Render Background Worker (Recommended)
 
 Add a second service to your `render.yaml`:
 
@@ -235,7 +258,7 @@ Add a second service to your `render.yaml`:
 
 Then update the Blueprint in Render. Set the same `CN_DATABASE_URL`, `CN_REDIS_URL`, and LLM env vars.
 
-### Option B: Render Cron Job
+### Option C: Render Cron Job
 
 For lower-frequency pipeline runs, use a cron job instead:
 
