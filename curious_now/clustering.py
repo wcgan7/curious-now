@@ -922,12 +922,14 @@ def assign_item_to_cluster(
         new_cluster = _create_cluster(conn, title=title, item_id=item_id)
         _attach_item(conn, cluster_id=new_cluster, item_id=item_id, role="primary")
         _update_cluster_representative(conn, cluster_id=new_cluster)
+        # Always write a search doc so subsequent items in the same batch
+        # can discover this cluster via FTS.  Full metrics are deferred.
+        search_text = _build_search_text(
+            conn, cluster_id=new_cluster, max_titles=cfg.search_doc_titles_limit
+        )
+        _upsert_search_doc(conn, cluster_id=new_cluster, search_text=search_text, now_utc=now)
         if not defer_metrics:
             _recompute_cluster_metrics(conn, cluster_id=new_cluster, now_utc=now)
-            search_text = _build_search_text(
-                conn, cluster_id=new_cluster, max_titles=cfg.search_doc_titles_limit
-            )
-            _upsert_search_doc(conn, cluster_id=new_cluster, search_text=search_text, now_utc=now)
         with conn.cursor() as cur:
             cur.execute(
                 """
