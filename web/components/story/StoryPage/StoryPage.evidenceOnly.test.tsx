@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { StoryPage } from './StoryPage';
 import { renderWithProviders } from '@/test/utils';
@@ -150,5 +152,44 @@ describe('StoryPage (evidence-only)', () => {
     );
 
     expect(queryByRole('link', { name: /read the article/i })).toBeNull();
+  });
+
+  it('opens and closes a modal when the story image is clicked', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StoryPage
+        cluster={{
+          cluster_id: '00000000-0000-0000-0000-000000000004',
+          canonical_title: 'Story with image',
+          featured_image_url: 'https://example.com/story-image.jpg',
+          created_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          updated_at: new Date('2026-02-05T00:00:00Z').toISOString(),
+          distinct_source_count: 1,
+          evidence: { news: [] },
+          topics: [],
+          content_type_breakdown: {},
+          takeaway: null,
+          summary_intuition: null,
+          summary_deep_dive: null,
+          assumptions: [],
+          limitations: [],
+          what_could_change_this: [],
+          method_badges: [],
+          anti_hype_flags: [],
+          takeaway_supporting_item_ids: [],
+          summary_intuition_supporting_item_ids: [],
+          summary_deep_dive_supporting_item_ids: [],
+          glossary_entries: [],
+          is_saved: null,
+          is_watched: null,
+        }}
+      />
+    );
+
+    expect(screen.queryByRole('dialog', { name: /story with image/i })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /open story image/i }));
+    expect(screen.getByRole('dialog', { name: /story with image/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /close/i }));
+    expect(screen.queryByRole('dialog', { name: /story with image/i })).toBeNull();
   });
 });

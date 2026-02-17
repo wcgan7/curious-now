@@ -56,13 +56,13 @@ function EvidenceList({
               {it.image_url ? (
                 <img
                   src={it.image_url}
-                  alt=""
+                  alt={it.title}
                   className={styles.thumb}
                   loading="lazy"
                 />
               ) : null}
               <div className={styles.itemText}>
-                <a href={it.url} target="_blank" rel="noreferrer" className={styles.link}>
+                <a href={it.url} target="_blank" rel="noopener noreferrer" className={styles.link}>
                   {it.title}
                 </a>
                 <div className={styles.meta}>

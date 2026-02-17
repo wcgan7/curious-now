@@ -716,7 +716,7 @@ def admin_patch_cluster(
             payload=patch.model_dump(mode="json", exclude_unset=True),
         )
 
-    detail = get_cluster_detail_or_redirect(conn, cluster_id=cluster_id)
+    detail = get_cluster_detail_or_redirect(conn, cluster_id=cluster_id, require_status=None)
     if isinstance(detail, RedirectResponse):
         raise RuntimeError("unexpected redirect for patched cluster")
     return detail

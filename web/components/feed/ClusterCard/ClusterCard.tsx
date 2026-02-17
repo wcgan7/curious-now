@@ -40,7 +40,7 @@ export function ClusterCard({
         <div className={styles.imageWrapper}>
           <img
             src={cluster.featured_image_url}
-            alt=""
+            alt={cluster.canonical_title}
             className={styles.image}
             loading="lazy"
           />

@@ -157,9 +157,32 @@ class AuditLogResponse(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 
 _START_TIME = time.time()
-_MAINTENANCE_MODE = False
-_MAINTENANCE_MESSAGE: str | None = None
-_MAINTENANCE_STARTED: datetime | None = None
+
+# Maintenance mode keys in Redis (cross-process coordination).
+_MAINT_KEY = "maintenance:enabled"
+_MAINT_MSG_KEY = "maintenance:message"
+_MAINT_STARTED_KEY = "maintenance:started_at"
+
+
+def _get_maintenance_state() -> tuple[bool, str | None, datetime | None]:
+    """Read maintenance state from Redis (falls back to off)."""
+    r = get_redis_client()
+    if r is None:
+        return False, None, None
+    try:
+        enabled = r.get(_MAINT_KEY)
+        if not enabled or enabled == b"0":
+            return False, None, None
+        msg_raw = r.get(_MAINT_MSG_KEY)
+        msg: str | None = msg_raw.decode() if isinstance(msg_raw, bytes) else (str(msg_raw) if msg_raw else None)
+        started_raw = r.get(_MAINT_STARTED_KEY)
+        started: datetime | None = None
+        if started_raw:
+            ts = started_raw.decode() if isinstance(started_raw, bytes) else str(started_raw)
+            started = datetime.fromisoformat(ts)
+        return True, msg, started
+    except Exception:
+        return False, None, None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -282,12 +305,13 @@ def detailed_health_check(
             overall_status = "degraded"
 
     # Check maintenance mode
-    if _MAINTENANCE_MODE:
+    maint_enabled, maint_msg, _ = _get_maintenance_state()
+    if maint_enabled:
         checks.append(
             HealthCheckResult(
                 name="maintenance",
                 status="degraded",
-                message=_MAINTENANCE_MESSAGE or "Maintenance mode active",
+                message=maint_msg or "Maintenance mode active",
             )
         )
         if overall_status == "healthy":
@@ -371,8 +395,10 @@ def reset_rate_limit(
     if r is None:
         raise HTTPException(status_code=503, detail="Redis not available")
 
+    if not key.startswith("rl:"):
+        raise HTTPException(status_code=400, detail="Only rate-limit keys (rl:*) can be deleted")
+
     try:
-        # Delete both the exact key and pattern match
         r.delete(key)
         return simple_ok()
     except Exception as exc:
@@ -386,10 +412,11 @@ def get_maintenance_status(
     """
     Get current maintenance mode status.
     """
+    enabled, msg, started = _get_maintenance_state()
     return MaintenanceStatusResponse(
-        maintenance_mode=_MAINTENANCE_MODE,
-        message=_MAINTENANCE_MESSAGE,
-        started_at=_MAINTENANCE_STARTED,
+        maintenance_mode=enabled,
+        message=msg,
+        started_at=started,
     )
 
 
@@ -403,16 +430,23 @@ def enable_maintenance_mode(
 
     When enabled, non-critical endpoints may return 503.
     """
-    global _MAINTENANCE_MODE, _MAINTENANCE_MESSAGE, _MAINTENANCE_STARTED
-
-    _MAINTENANCE_MODE = True
-    _MAINTENANCE_MESSAGE = message
-    _MAINTENANCE_STARTED = datetime.now(timezone.utc)
+    r = get_redis_client()
+    started_at = datetime.now(timezone.utc)
+    if r is not None:
+        try:
+            r.set(_MAINT_KEY, "1")
+            if message:
+                r.set(_MAINT_MSG_KEY, message)
+            else:
+                r.delete(_MAINT_MSG_KEY)
+            r.set(_MAINT_STARTED_KEY, started_at.isoformat())
+        except Exception:
+            pass
 
     return MaintenanceStatusResponse(
         maintenance_mode=True,
         message=message,
-        started_at=_MAINTENANCE_STARTED,
+        started_at=started_at,
     )
 
 
@@ -423,11 +457,12 @@ def disable_maintenance_mode(
     """
     Disable maintenance mode.
     """
-    global _MAINTENANCE_MODE, _MAINTENANCE_MESSAGE, _MAINTENANCE_STARTED
-
-    _MAINTENANCE_MODE = False
-    _MAINTENANCE_MESSAGE = None
-    _MAINTENANCE_STARTED = None
+    r = get_redis_client()
+    if r is not None:
+        try:
+            r.delete(_MAINT_KEY, _MAINT_MSG_KEY, _MAINT_STARTED_KEY)
+        except Exception:
+            pass
 
     return MaintenanceStatusResponse(maintenance_mode=False)
 
@@ -560,7 +595,7 @@ def enhanced_search(
     id_type, id_value = detect_identifier(q)
 
     if id_type and id_value:
-        # Try to find exact match by identifier
+        # Try to find exact match by identifier (only in active clusters)
         with conn.cursor() as cur:
             if id_type == "doi":
                 cur.execute(
@@ -568,9 +603,9 @@ def enhanced_search(
                     SELECT i.id AS item_id, i.title AS item_title, i.doi,
                            ci.cluster_id, c.canonical_title
                     FROM items i
-                    LEFT JOIN cluster_items ci ON ci.item_id = i.id
-                    LEFT JOIN story_clusters c ON c.id = ci.cluster_id
-                    WHERE lower(i.doi) = %s
+                    JOIN cluster_items ci ON ci.item_id = i.id
+                    JOIN story_clusters c ON c.id = ci.cluster_id
+                    WHERE lower(i.doi) = %s AND c.status = 'active'
                     LIMIT 1;
                     """,
                     (id_value,),
@@ -581,9 +616,9 @@ def enhanced_search(
                     SELECT i.id AS item_id, i.title AS item_title, i.arxiv_id,
                            ci.cluster_id, c.canonical_title
                     FROM items i
-                    LEFT JOIN cluster_items ci ON ci.item_id = i.id
-                    LEFT JOIN story_clusters c ON c.id = ci.cluster_id
-                    WHERE lower(i.arxiv_id) = %s
+                    JOIN cluster_items ci ON ci.item_id = i.id
+                    JOIN story_clusters c ON c.id = ci.cluster_id
+                    WHERE lower(i.arxiv_id) = %s AND c.status = 'active'
                     LIMIT 1;
                     """,
                     (id_value,),
@@ -594,9 +629,9 @@ def enhanced_search(
                     SELECT i.id AS item_id, i.title AS item_title, i.pmid,
                            ci.cluster_id, c.canonical_title
                     FROM items i
-                    LEFT JOIN cluster_items ci ON ci.item_id = i.id
-                    LEFT JOIN story_clusters c ON c.id = ci.cluster_id
-                    WHERE i.pmid = %s
+                    JOIN cluster_items ci ON ci.item_id = i.id
+                    JOIN story_clusters c ON c.id = ci.cluster_id
+                    WHERE i.pmid = %s AND c.status = 'active'
                     LIMIT 1;
                     """,
                     (id_value,),

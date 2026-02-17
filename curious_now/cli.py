@@ -17,9 +17,11 @@ from curious_now.ai_generation import (
     generate_takeaways_for_clusters,
 )
 from curious_now.api.schemas import SourcePack
+from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.clustering import (
     cluster_unassigned_items,
     load_clustering_config,
+    promote_pending_clusters,
     recompute_trending,
 )
 from curious_now.db import DB
@@ -60,6 +62,15 @@ def cmd_migrate(_: argparse.Namespace) -> int:
     else:
         print("No pending migrations.")
     return 0
+
+
+def _pipeline_db() -> DB:
+    """Construct DB with pipeline-appropriate settings (statement timeout, etc.)."""
+    settings = get_settings()
+    return DB(
+        settings.database_url,
+        statement_timeout_ms=settings.statement_timeout_ms,
+    )
 
 
 def _parse_now(value: str | None) -> datetime:
@@ -107,8 +118,8 @@ def cmd_purge_logs(args: argparse.Namespace) -> int:
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
         result = ingest_due_feeds(
@@ -129,8 +140,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 
 
 def cmd_hydrate_paper_text(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
         result = hydrate_paper_text(
@@ -146,9 +157,25 @@ def cmd_hydrate_paper_text(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hydrate_article_text(args: argparse.Namespace) -> int:
+    get_settings()
+    db = _pipeline_db()
+    with db.connect(autocommit=True) as conn:
+        result = hydrate_article_text(
+            conn,
+            limit=int(args.limit),
+        )
+    print(
+        "Article text hydration complete: "
+        f"{result.items_hydrated}/{result.items_scanned} hydrated; "
+        f"{result.items_failed} failed; {result.items_skipped} skipped."
+    )
+    return 0
+
+
 def cmd_backfill_images(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = backfill_images(conn, limit=int(args.limit))
     print(
@@ -175,8 +202,8 @@ def cmd_import_source_pack(args: argparse.Namespace) -> int:
 
 
 def cmd_cluster(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     now = _parse_now(args.now)
     cfg = load_clustering_config(Path(args.config) if args.config else None)
     with db.connect(autocommit=True) as conn:
@@ -195,12 +222,22 @@ def cmd_cluster(args: argparse.Namespace) -> int:
 
 
 def cmd_recompute_trending(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
         n = recompute_trending(conn, now_utc=now, lookback_days=int(args.lookback_days))
     print(f"Recomputed trending for {n} clusters.")
+    return 0
+
+
+def cmd_promote_clusters(args: argparse.Namespace) -> int:
+    """Promote pending clusters to active once they meet readiness criteria."""
+    get_settings()
+    db = _pipeline_db()
+    with db.connect(autocommit=True) as conn:
+        n = promote_pending_clusters(conn)
+    print(f"Promoted {n} pending clusters to active.")
     return 0
 
 
@@ -328,8 +365,8 @@ def cmd_tagging_maintenance(args: argparse.Namespace) -> int:
 
 def cmd_tag_topics(args: argparse.Namespace) -> int:
     """Tag recent clusters using LLM-only classification (default)."""
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
         result = tag_recent_clusters(
@@ -345,8 +382,8 @@ def cmd_tag_topics(args: argparse.Namespace) -> int:
 
 def cmd_tag_untagged_llm(args: argparse.Namespace) -> int:
     """Tag untagged clusters using LLM only."""
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     now = _parse_now(args.now)
     with db.connect(autocommit=True) as conn:
         result = tag_untagged_clusters_llm(
@@ -360,8 +397,8 @@ def cmd_tag_untagged_llm(args: argparse.Namespace) -> int:
 
 
 def cmd_pipeline(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     now = _parse_now(args.now)
 
     if args.source_pack:
@@ -415,6 +452,18 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             f"{hydrated.items_failed} failed; {hydrated.items_skipped} skipped."
         )
 
+    if bool(args.hydrate_article_text):
+        with db.connect(autocommit=True) as conn:
+            hydrated_articles = hydrate_article_text(
+                conn,
+                limit=int(args.hydrate_article_limit),
+            )
+        print(
+            "Hydrated articles: "
+            f"{hydrated_articles.items_hydrated}/{hydrated_articles.items_scanned} hydrated; "
+            f"{hydrated_articles.items_failed} failed; {hydrated_articles.items_skipped} skipped."
+        )
+
     cfg = load_clustering_config(Path(args.clustering_config) if args.clustering_config else None)
     with db.connect(autocommit=True) as conn:
         clustered = cluster_unassigned_items(
@@ -439,6 +488,13 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
         )
     print(f"Tagged: {tagged.clusters_updated}/{tagged.clusters_scanned} clusters.")
 
+    # Promote pending clusters whose enrichment completed in a prior run
+    # (takeaway + intuition + topic tag). This is a no-op when enrichment
+    # commands haven't run yet; see run_continuous.sh or run_resilient_sync.py.
+    with db.connect(autocommit=True) as conn:
+        promoted = promote_pending_clusters(conn)
+    print(f"Promoted {promoted} pending clusters to active.")
+
     with db.connect(autocommit=True) as conn:
         n = recompute_trending(conn, now_utc=now, lookback_days=int(args.trending_lookback_days))
     print(f"Recomputed trending for {n} clusters.")
@@ -446,8 +502,8 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
 
 
 def cmd_generate_takeaways(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_takeaways_for_clusters(
             conn,
@@ -462,8 +518,8 @@ def cmd_generate_takeaways(args: argparse.Namespace) -> int:
 
 
 def cmd_generate_embeddings(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_embeddings_for_clusters(
             conn,
@@ -481,8 +537,8 @@ def cmd_generate_embeddings(args: argparse.Namespace) -> int:
 
 def cmd_enrich_stage3(args: argparse.Namespace) -> int:
     """Generate Stage 3 enrichment (intuition, deep-dive, anti-hype flags)."""
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = enrich_stage3_for_clusters(
             conn,
@@ -500,8 +556,8 @@ def cmd_enrich_stage3(args: argparse.Namespace) -> int:
 
 def cmd_generate_intuition(args: argparse.Namespace) -> int:
     """Generate layered intuition (ELI20 -> ELI5) for clusters."""
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_intuition_for_clusters(
             conn,
@@ -517,8 +573,8 @@ def cmd_generate_intuition(args: argparse.Namespace) -> int:
 
 def cmd_generate_deep_dives(args: argparse.Namespace) -> int:
     """Generate deep dives for paper-based clusters only."""
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_deep_dives_for_clusters(
             conn,
@@ -536,8 +592,8 @@ def cmd_generate_deep_dives(args: argparse.Namespace) -> int:
 
 def cmd_generate_high_impact(args: argparse.Namespace) -> int:
     """Generate provisional/final high-impact paper scores."""
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = generate_high_impact_for_clusters(
             conn,
@@ -574,8 +630,8 @@ def cmd_generate_high_impact(args: argparse.Namespace) -> int:
 
 def cmd_backfill_trust_signals(args: argparse.Namespace) -> int:
     """Backfill anti-hype flags and method badges for active clusters."""
-    settings = get_settings()
-    db = DB(settings.database_url)
+    get_settings()
+    db = _pipeline_db()
     with db.connect(autocommit=True) as conn:
         result = backfill_trust_signals_for_clusters(
             conn,
@@ -743,6 +799,15 @@ def main(argv: list[str] | None = None) -> int:
     p_hydrate.add_argument("--now", type=str, default=None, help="Override current time (ISO-8601)")
     p_hydrate.set_defaults(func=cmd_hydrate_paper_text)
 
+    p_hydrate_article = sub.add_parser(
+        "hydrate-article-text",
+        help="Hydrate full text for non-paper items (news, reports, blogs)"
+    )
+    p_hydrate_article.add_argument(
+        "--limit", type=int, default=200, help="Max items to hydrate"
+    )
+    p_hydrate_article.set_defaults(func=cmd_hydrate_article_text)
+
     p_backfill_images = sub.add_parser(
         "backfill-images",
         help="Backfill images for arXiv items missing image_url",
@@ -772,6 +837,12 @@ def main(argv: list[str] | None = None) -> int:
         "--now", type=str, default=None, help="Override current time (ISO-8601)"
     )
     p_trending.set_defaults(func=cmd_recompute_trending)
+
+    p_promote = sub.add_parser(
+        "promote-clusters",
+        help="Promote pending clusters to active once fully enriched",
+    )
+    p_promote.set_defaults(func=cmd_promote_clusters)
 
     p_seed_topics = sub.add_parser(
         "seed-topics",
@@ -897,6 +968,24 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=500,
         help="Max paper items to hydrate in pipeline",
+    )
+    p_pipeline.add_argument(
+        "--hydrate-article-text",
+        action="store_true",
+        default=True,
+        help="Hydrate article full text after ingestion (default: enabled)",
+    )
+    p_pipeline.add_argument(
+        "--no-hydrate-article-text",
+        dest="hydrate_article_text",
+        action="store_false",
+        help="Skip article text hydration during pipeline run",
+    )
+    p_pipeline.add_argument(
+        "--hydrate-article-limit",
+        type=int,
+        default=500,
+        help="Max article items to hydrate in pipeline",
     )
     p_pipeline.add_argument("--cluster-limit-items", type=int, default=2000)
     p_pipeline.add_argument("--clustering-config", type=str, default=None)

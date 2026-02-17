@@ -106,6 +106,12 @@ def test_end_to_end_pipeline_ingest_cluster_tag(
     tagged = tag_recent_clusters(db_conn, now_utc=now, lookback_days=30, limit_clusters=50)
     assert tagged.clusters_scanned >= 1
 
+    # Promote pending clusters to active so the feed can see them.
+    # In a full pipeline run, promotion happens after LLM enrichment,
+    # but this test doesn't run LLM steps, so promote directly.
+    with db_conn.cursor() as cur:
+        cur.execute("UPDATE story_clusters SET status = 'active' WHERE status = 'pending';")
+
     # Feed should return the cluster.
     resp = client.get("/v1/feed?tab=latest&page=1&page_size=10")
     assert resp.status_code == 200, resp.text

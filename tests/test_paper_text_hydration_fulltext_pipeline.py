@@ -620,7 +620,7 @@ def test_reflow_inline_fragments_does_not_merge_title_like_line() -> None:
 
 def test_backfill_images_updates_item(monkeypatch: pytest.MonkeyPatch) -> None:
     """backfill_images queries items, fetches images, and updates rows."""
-    from unittest.mock import MagicMock, call
+    from unittest.mock import MagicMock
     from uuid import uuid4
 
     item_id = uuid4()

@@ -39,7 +39,7 @@
 
 .card {
   border: var(--border-1);
-  border-radius: var(--r-3);
+  border-radius: var(--r-sm);
   background: var(--surface-1);
   padding: 14px;
   display: block;

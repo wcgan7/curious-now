@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ClusterCard } from '@/components/feed/ClusterCard/ClusterCard';
 import { getFeedClient } from '@/lib/api/feedClient';
@@ -26,19 +26,48 @@ export function InfiniteFeedList({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(!hasInitialError && initialItems.length === PAGE_SIZE);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef(1);
+  const isLoadingRef = useRef(false);
+  const hasMoreRef = useRef(!hasInitialError && initialItems.length === PAGE_SIZE);
+  const hasInitialErrorRef = useRef(hasInitialError);
+  const loadErrorRef = useRef<string | null>(null);
+  const seenIdsRef = useRef<Set<string>>(new Set(initialItems.map((item) => item.cluster_id)));
 
-  const seenIds = useMemo(() => new Set(items.map((item) => item.cluster_id)), [items]);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+
+  useEffect(() => {
+    hasInitialErrorRef.current = hasInitialError;
+  }, [hasInitialError]);
+
+  useEffect(() => {
+    loadErrorRef.current = loadError;
+  }, [loadError]);
+
+  useEffect(() => {
+    for (const item of items) seenIdsRef.current.add(item.cluster_id);
+  }, [items]);
 
   const loadNextPage = useCallback(async () => {
-    if (isLoading || !hasMore || hasInitialError) return;
-    if (page >= MAX_AUTO_PAGES) {
+    if (isLoadingRef.current || !hasMoreRef.current || hasInitialErrorRef.current) return;
+    if (pageRef.current >= MAX_AUTO_PAGES) {
       setHasMore(false);
       return;
     }
 
+    isLoadingRef.current = true;
     setIsLoading(true);
     setLoadError(null);
-    const nextPage = page + 1;
+    const nextPage = pageRef.current + 1;
 
     try {
       const feed = await getFeedClient({
@@ -47,26 +76,31 @@ export function InfiniteFeedList({
         pageSize: PAGE_SIZE,
       });
 
-      const incoming = feed.results.filter((c) => !seenIds.has(c.cluster_id));
+      const incoming = feed.results.filter((c) => !seenIdsRef.current.has(c.cluster_id));
       setItems((prev) => [...prev, ...incoming]);
       setPage(nextPage);
       setHasMore(feed.results.length === PAGE_SIZE && nextPage < MAX_AUTO_PAGES);
     } catch {
-      setLoadError('Could not load more stories. Scroll to retry.');
+      setLoadError('Could not load more stories. Tap "Load More" to retry.');
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [hasInitialError, hasMore, isLoading, page, seenIds, tab]);
+  }, [tab]);
 
   useEffect(() => {
-    if (!hasMore || hasInitialError) return;
+    if (!hasMore || hasInitialError || loadError) return;
     if (typeof IntersectionObserver === 'undefined') return;
     const node = sentinelRef.current;
     if (!node) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
+        if (
+          entries.some((entry) => entry.isIntersecting) &&
+          !isLoadingRef.current &&
+          !loadErrorRef.current
+        ) {
           void loadNextPage();
         }
       },
@@ -75,7 +109,7 @@ export function InfiniteFeedList({
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasInitialError, hasMore, loadNextPage]);
+  }, [hasInitialError, hasMore, loadError, loadNextPage]);
 
   return (
     <>
@@ -86,14 +120,19 @@ export function InfiniteFeedList({
       </div>
 
       {hasMore ? <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" /> : null}
-      {hasMore && !isLoading ? (
+      {hasMore ? (
         <div className={styles.actions}>
-          <button type="button" className={styles.loadMoreButton} onClick={() => void loadNextPage()}>
-            Load More
+          <button
+            type="button"
+            className={styles.loadMoreButton}
+            onClick={() => void loadNextPage()}
+            disabled={isLoading}
+            aria-busy={isLoading}
+          >
+            {isLoading ? 'Loading…' : 'Load More'}
           </button>
         </div>
       ) : null}
-      {isLoading ? <p className={styles.loadingNotice}>Loading more stories…</p> : null}
       {loadError ? <p className={styles.errorNotice}>{loadError}</p> : null}
       {!hasMore && items.length >= PAGE_SIZE * MAX_AUTO_PAGES ? (
         <p className={styles.emptyNotice}>
