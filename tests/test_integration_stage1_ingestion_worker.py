@@ -11,7 +11,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from curious_now.ingestion import ingest_due_feeds, normalize_url
+from curious_now.ingestion import _guess_content_type, ingest_due_feeds, normalize_url
 
 
 @pytest.fixture()
@@ -112,3 +112,43 @@ def test_stage1_ingestion_worker_ingests_and_is_idempotent(
         assert row is not None
         count = row[0] if not isinstance(row, dict) else list(row.values())[0]
         assert int(count) == 2
+
+
+def test_guess_content_type_nature_journal_article_is_peer_reviewed() -> None:
+    assert (
+        _guess_content_type("journalism", "https://www.nature.com/articles/s41586-025-09951-7")
+        == "peer_reviewed"
+    )
+
+
+def test_guess_content_type_nature_news_article_stays_news() -> None:
+    assert _guess_content_type("journalism", "https://www.nature.com/articles/d41586-026-00367-5") == "news"
+
+
+def test_guess_content_type_arxiv_id_overrides_source_type() -> None:
+    assert (
+        _guess_content_type("journalism", "https://news.ycombinator.com/item?id=123", arxiv_id="2401.12345")
+        == "preprint"
+    )
+
+
+def test_guess_content_type_journal_domain_overrides_source_type() -> None:
+    assert (
+        _guess_content_type("blog", "https://www.science.org/doi/10.1126/science.abc1234")
+        == "peer_reviewed"
+    )
+
+
+def test_guess_content_type_edu_domain() -> None:
+    assert _guess_content_type("journalism", "https://news.mit.edu/2026/new-discovery") == "press_release"
+
+
+def test_guess_content_type_gov_domain() -> None:
+    assert _guess_content_type("journalism", "https://www.nih.gov/news-events/some-report") == "report"
+
+
+def test_guess_content_type_preprint_domain() -> None:
+    assert (
+        _guess_content_type("journalism", "https://www.biorxiv.org/content/10.1101/2024.01.01.123456v1")
+        == "preprint"
+    )

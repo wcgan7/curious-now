@@ -48,6 +48,7 @@ from curious_now.ai.takeaways import (
     TakeawayResult,
     generate_takeaway,
 )
+from curious_now.article_text_hydration import hydrate_article_text
 from curious_now.impact_scoring import (
     HighImpactInput,
     compute_components,
@@ -79,6 +80,9 @@ _FULLTEXT_TEXT_SOURCES = {
 _DEEP_DIVE_SKIP_REASON_NO_FULLTEXT = "no_fulltext"
 _DEEP_DIVE_SKIP_REASON_ABSTRACT_ONLY = "abstract_only"
 _DEEP_DIVE_SKIP_REASON_GEN_FAILED = "generation_failed"
+_DEEP_DIVE_SKIP_REASON_NEWS_NO_ITEMS = "news_no_items"
+_DEEP_DIVE_SKIP_REASON_NEWS_INSUFFICIENT = "news_insufficient_context"
+_DEEP_DIVE_SKIP_REASON_NEWS_GEN_FAILED = "news_gen_failed"
 
 
 @dataclass
@@ -162,7 +166,7 @@ def _get_clusters_needing_takeaways(
                 c.canonical_title,
                 c.distinct_source_count
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NULL
               AND c.distinct_source_count >= 1
             ORDER BY c.updated_at DESC
@@ -277,6 +281,49 @@ def _ensure_paper_text_hydrated(
     return reloaded
 
 
+def _ensure_article_text_hydrated(
+    conn: psycopg.Connection[Any],
+    cluster_id: UUID,
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Ensure non-paper sources have hydrated text before news summary generation."""
+    missing_ids = [
+        item["item_id"]
+        for item in items
+        if item.get("source_type") not in _PAPER_CONTENT_TYPES
+        and not (item.get("full_text") and str(item.get("full_text")).strip())
+    ]
+    if not missing_ids:
+        return items
+
+    hydrate_article_text(conn, limit=len(missing_ids), item_ids=missing_ids)
+    reloaded = _get_cluster_items_for_takeaway(conn, cluster_id)
+    return reloaded
+
+
+def _build_combined_article_text(items: list[dict[str, Any]]) -> str | None:
+    """Combine full text from multiple items with titles as headers.
+
+    When multiple items have full text, concatenate them so the explainer
+    can synthesize across sources.
+    """
+    parts: list[str] = []
+    for item in items:
+        text = (item.get("full_text") or "").strip()
+        if not text:
+            continue
+        title = (item.get("title") or "").strip()
+        if title:
+            parts.append(f"## {title}\n\n{text}")
+        else:
+            parts.append(text)
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    return "\n\n---\n\n".join(parts)
+
+
 def _get_cluster_topics(
     conn: psycopg.Connection[Any],
     cluster_id: UUID,
@@ -295,6 +342,102 @@ def _get_cluster_topics(
             (cluster_id,),
         )
         return [row["name"] for row in cur.fetchall()]
+
+
+def _get_cluster_items_batch(
+    conn: psycopg.Connection[Any],
+    cluster_ids: list[UUID],
+) -> dict[UUID, list[dict[str, Any]]]:
+    """Fetch items for multiple clusters in one query."""
+    if not cluster_ids:
+        return {}
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT
+                ci.cluster_id,
+                i.id AS item_id, i.title, i.snippet, i.full_text,
+                i.full_text_status, i.full_text_source, i.full_text_kind,
+                i.full_text_license, s.name AS source_name,
+                i.content_type AS source_type, i.published_at,
+                ROW_NUMBER() OVER (
+                  PARTITION BY ci.cluster_id
+                  ORDER BY ci.role ASC, i.published_at DESC NULLS LAST
+                ) AS rn
+            FROM cluster_items ci
+            JOIN items i ON i.id = ci.item_id
+            JOIN sources s ON s.id = i.source_id
+            WHERE ci.cluster_id = ANY(%s::uuid[])
+            """,
+            ([str(c) for c in cluster_ids],),
+        )
+        rows = cur.fetchall()
+
+    result: dict[UUID, list[dict[str, Any]]] = {cid: [] for cid in cluster_ids}
+    for r in rows:
+        cid = UUID(str(r["cluster_id"]))
+        if r["rn"] <= 10:  # Same LIMIT 10 as single-cluster version
+            result[cid].append(r)
+    return result
+
+
+def _get_cluster_topics_batch(
+    conn: psycopg.Connection[Any],
+    cluster_ids: list[UUID],
+) -> dict[UUID, list[str]]:
+    """Fetch topics for multiple clusters in one query."""
+    if not cluster_ids:
+        return {}
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT ct.cluster_id, t.name,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY ct.cluster_id ORDER BY ct.score DESC
+                   ) AS rn
+            FROM cluster_topics ct
+            JOIN topics t ON t.id = ct.topic_id
+            WHERE ct.cluster_id = ANY(%s::uuid[])
+            """,
+            ([str(c) for c in cluster_ids],),
+        )
+        rows = cur.fetchall()
+
+    result: dict[UUID, list[str]] = {cid: [] for cid in cluster_ids}
+    for r in rows:
+        cid = UUID(str(r["cluster_id"]))
+        if r["rn"] <= 5:  # Same LIMIT 5 as single-cluster version
+            result[cid].append(r["name"])
+    return result
+
+
+def _get_cluster_content_types_batch(
+    conn: psycopg.Connection[Any],
+    cluster_ids: list[UUID],
+) -> dict[UUID, list[str]]:
+    """Fetch distinct content types for multiple clusters in one query."""
+    if not cluster_ids:
+        return {}
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ci.cluster_id, i.content_type
+            FROM cluster_items ci
+            JOIN items i ON i.id = ci.item_id
+            WHERE ci.cluster_id = ANY(%s::uuid[])
+              AND i.content_type IS NOT NULL
+            """,
+            ([str(c) for c in cluster_ids],),
+        )
+        rows = cur.fetchall()
+
+    result: dict[UUID, list[str]] = {cid: [] for cid in cluster_ids}
+    for r in rows:
+        cid = UUID(str(r["cluster_id"]))
+        ct = r["content_type"]
+        if ct not in result[cid]:
+            result[cid].append(ct)
+    return result
 
 
 def _update_cluster_takeaway(
@@ -344,21 +487,26 @@ def generate_takeaways_for_clusters(
     succeeded = 0
     failed = 0
 
+    # Batch-fetch items and topics for all clusters
+    cluster_ids = [c["cluster_id"] for c in clusters]
+    items_map = _get_cluster_items_batch(conn, cluster_ids)
+    topics_map = _get_cluster_topics_batch(conn, cluster_ids)
+
     for cluster in clusters:
         cluster_id = cluster["cluster_id"]
         canonical_title = cluster["canonical_title"]
         processed += 1
 
         try:
-            # Get items for this cluster
-            items = _get_cluster_items_for_takeaway(conn, cluster_id)
+            # Get items for this cluster (from batch)
+            items = items_map.get(cluster_id, [])
             if not items:
                 logger.warning("No items found for cluster %s", cluster_id)
                 failed += 1
                 continue
 
-            # Get topics
-            topics = _get_cluster_topics(conn, cluster_id)
+            # Get topics (from batch)
+            topics = topics_map.get(cluster_id, [])
 
             # Build input and track item IDs
             item_summaries = []
@@ -423,14 +571,14 @@ def _get_clusters_needing_embeddings(
 ) -> list[dict[str, Any]]:
     """Get clusters that need embedding generation."""
     if force:
-        # Get all active clusters
+        # Get all active/pending clusters
         query = """
             SELECT
                 c.id AS cluster_id,
                 c.canonical_title,
                 c.takeaway
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
             ORDER BY c.updated_at DESC
             LIMIT %s;
         """
@@ -443,7 +591,7 @@ def _get_clusters_needing_embeddings(
                 c.takeaway
             FROM story_clusters c
             LEFT JOIN cluster_embeddings ce ON ce.cluster_id = c.id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND ce.cluster_id IS NULL
             ORDER BY c.updated_at DESC
             LIMIT %s;
@@ -579,6 +727,10 @@ def generate_embeddings_for_clusters(
     failed = 0
     skipped = 0
 
+    # Batch-fetch topics for all clusters
+    emb_cluster_ids = [c["cluster_id"] for c in clusters]
+    emb_topics_map = _get_cluster_topics_batch(conn, emb_cluster_ids)
+
     for cluster in clusters:
         cluster_id = cluster["cluster_id"]
         canonical_title = cluster["canonical_title"]
@@ -586,8 +738,8 @@ def generate_embeddings_for_clusters(
         processed += 1
 
         try:
-            # Get topics for richer embedding
-            topics = _get_cluster_topics(conn, cluster_id)
+            # Get topics for richer embedding (from batch)
+            topics = emb_topics_map.get(cluster_id, [])
 
             # Build text for embedding
             text_parts = [canonical_title]
@@ -670,7 +822,11 @@ def _get_clusters_needing_stage3(
     *,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    """Get clusters that need Stage 3 enrichment (missing intuition or deep-dive)."""
+    """Get clusters that need Stage 3 enrichment (missing intuition).
+
+    Excludes clusters with a deep_dive_skip_reason, since those have already
+    been attempted and cannot produce further enrichment.
+    """
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
@@ -681,9 +837,10 @@ def _get_clusters_needing_stage3(
                 c.distinct_source_count,
                 c.summary_deep_dive
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NOT NULL
-              AND (c.summary_intuition IS NULL OR c.summary_deep_dive IS NULL)
+              AND c.summary_intuition IS NULL
+              AND c.deep_dive_skip_reason IS NULL
             ORDER BY c.updated_at DESC
             LIMIT %s;
             """,
@@ -697,7 +854,11 @@ def _get_clusters_needing_intuition(
     *,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    """Get clusters that need intuition (have takeaway but no intuition)."""
+    """Get clusters that need intuition (have takeaway but no intuition).
+
+    Excludes clusters with a deep_dive_skip_reason, since those have already
+    been attempted and cannot produce further enrichment.
+    """
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
@@ -708,9 +869,10 @@ def _get_clusters_needing_intuition(
                 c.distinct_source_count,
                 c.summary_deep_dive
             FROM story_clusters c
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NOT NULL
               AND c.summary_intuition IS NULL
+              AND c.deep_dive_skip_reason IS NULL
             ORDER BY c.updated_at DESC
             LIMIT %s;
             """,
@@ -733,19 +895,20 @@ def _get_clusters_needing_deep_dive(
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT DISTINCT
-                c.id AS cluster_id,
-                c.canonical_title,
-                c.takeaway,
-                c.distinct_source_count,
-                c.updated_at
+            SELECT c.id AS cluster_id, c.canonical_title, c.takeaway,
+                   c.distinct_source_count, c.updated_at
             FROM story_clusters c
-            JOIN cluster_items ci ON c.id = ci.cluster_id
-            JOIN items i ON ci.item_id = i.id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
               AND c.takeaway IS NOT NULL
               AND c.summary_deep_dive IS NULL
-              AND i.content_type IN ('preprint', 'peer_reviewed')
+              AND c.deep_dive_skip_reason IS NULL
+              AND EXISTS (
+                SELECT 1 FROM cluster_items ci
+                JOIN items i ON i.id = ci.item_id
+                WHERE ci.cluster_id = c.id
+                  AND i.content_type IN ('preprint', 'peer_reviewed')
+                LIMIT 1
+              )
             ORDER BY c.updated_at DESC
             LIMIT %s;
             """,
@@ -963,7 +1126,7 @@ def backfill_trust_signals_for_clusters(
             FROM story_clusters c
             LEFT JOIN cluster_items ci ON ci.cluster_id = c.id
             LEFT JOIN items i ON i.id = ci.item_id
-            WHERE c.status = 'active'
+            WHERE c.status IN ('active', 'pending')
             GROUP BY c.id, c.distinct_source_count, c.anti_hype_flags, c.method_badges
             ORDER BY c.updated_at DESC
             LIMIT %s;
@@ -1125,6 +1288,11 @@ def enrich_stage3_for_clusters(
     failed = 0
     skipped = 0
 
+    # Batch-fetch items and content types for all clusters
+    cluster_ids = [c["cluster_id"] for c in clusters]
+    items_map = _get_cluster_items_batch(conn, cluster_ids)
+    content_types_map = _get_cluster_content_types_batch(conn, cluster_ids)
+
     for cluster in clusters:
         cluster_id = cluster["cluster_id"]
         canonical_title = cluster["canonical_title"]
@@ -1138,12 +1306,12 @@ def enrich_stage3_for_clusters(
             continue
 
         try:
-            # Get items for supporting IDs
-            items = _get_cluster_items_for_takeaway(conn, cluster_id)
+            # Get items for supporting IDs (from batch)
+            items = items_map.get(cluster_id, [])
             item_ids = [item["item_id"] for item in items]
 
-            # Get content types for heuristics
-            content_types = _get_cluster_content_types(conn, cluster_id)
+            # Get content types for heuristics (from batch)
+            content_types = content_types_map.get(cluster_id, [])
             has_paper_sources = any(ct in _PAPER_CONTENT_TYPES for ct in content_types)
 
             # ─────────────────────────────────────────────────────────────
@@ -1185,6 +1353,10 @@ def enrich_stage3_for_clusters(
                                 cluster_id,
                                 _DEEP_DIVE_SKIP_REASON_NO_FULLTEXT,
                             )
+                        # If no abstract fallback was produced, nothing more we can do
+                        if not abstract_fallback_intuition:
+                            skipped += 1
+                            continue
                     else:
                         source_summaries = [
                             SourceSummary(
@@ -1218,37 +1390,74 @@ def enrich_stage3_for_clusters(
                                 cluster_id,
                                 _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
                             )
+                            failed += 1
+                            continue
                 else:
-                    source_summaries = [
-                        SourceSummary(
-                            title=item["title"],
-                            snippet=item.get("snippet"),
-                            source_name=item.get("source_name"),
-                            source_type=item.get("source_type"),
-                            full_text=item.get("full_text"),
-                        )
-                        for item in items
-                    ]
-                    deep_dive_input = DeepDiveInput(
-                        cluster_title=canonical_title,
-                        source_summaries=source_summaries,
-                    )
-                    deep_dive_result = generate_deep_dive(deep_dive_input, adapter=adapter)
-                    if deep_dive_result.success and deep_dive_result.content:
-                        deep_dive_markdown = deep_dive_result.content.markdown
-                        summary_deep_dive = deep_dive_to_json(deep_dive_result.content)
-                        _set_deep_dive_skip_reason(conn, cluster_id, None)
-                    else:
-                        logger.warning(
-                            "Deep-dive generation failed for cluster %s: %s",
-                            cluster_id,
-                            deep_dive_result.error,
-                        )
+                    # Non-paper sources (news, journalism, etc.): generate
+                    # a news summary for intuition instead of a deep dive.
+                    if not items:
                         _set_deep_dive_skip_reason(
-                            conn,
-                            cluster_id,
-                            _DEEP_DIVE_SKIP_REASON_GEN_FAILED,
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_NO_ITEMS,
                         )
+                        skipped += 1
+                        logger.info(
+                            "Cluster %s skipped: no items for news summary",
+                            cluster_id,
+                        )
+                        continue
+
+                    items = _ensure_article_text_hydrated(conn, cluster_id, items)
+                    item_ids = [item["item_id"] for item in items]
+                    combined_full_text = _build_combined_article_text(items)
+                    first_item = items[0]
+                    news_result = generate_news_summary(
+                        title=first_item.get("title", canonical_title),
+                        snippet=first_item.get("snippet"),
+                        full_text=combined_full_text or first_item.get("full_text"),
+                        adapter=adapter,
+                    )
+
+                    if news_result.insufficient_context:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_INSUFFICIENT,
+                        )
+                        skipped += 1
+                        logger.info(
+                            "Cluster %s skipped: insufficient context for news summary",
+                            cluster_id,
+                        )
+                        continue
+
+                    if not news_result.success:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_GEN_FAILED,
+                        )
+                        failed += 1
+                        logger.warning(
+                            "News summary generation failed for cluster %s: %s",
+                            cluster_id,
+                            news_result.error,
+                        )
+                        continue
+
+                    anti_hype_flags = _compute_anti_hype_flags(content_types, source_count)
+                    method_badges = _compute_method_badges(content_types)
+                    _update_cluster_stage3(
+                        conn,
+                        cluster_id,
+                        summary_intuition=news_result.summary,
+                        summary_intuition_item_ids=item_ids,
+                        anti_hype_flags=anti_hype_flags,
+                        method_badges=method_badges,
+                    )
+                    succeeded += 1
+                    logger.info(
+                        "News summary generated for cluster %s (words=%s confidence=%.2f)",
+                        cluster_id,
+                        news_result.word_count,
+                        news_result.confidence,
+                    )
+                    continue
 
             summary_intuition: str | None = None
             if abstract_fallback_intuition and not deep_dive_markdown:
@@ -1374,6 +1583,11 @@ def generate_intuition_for_clusters(
     failed = 0
     skipped = 0
 
+    # Batch-fetch items and content types for all clusters
+    cluster_ids = [c["cluster_id"] for c in clusters]
+    items_map = _get_cluster_items_batch(conn, cluster_ids)
+    content_types_map = _get_cluster_content_types_batch(conn, cluster_ids)
+
     for cluster in clusters:
         cluster_id = cluster["cluster_id"]
         canonical_title = cluster["canonical_title"]
@@ -1386,9 +1600,9 @@ def generate_intuition_for_clusters(
             continue
 
         try:
-            items = _get_cluster_items_for_takeaway(conn, cluster_id)
+            items = items_map.get(cluster_id, [])
             item_ids = [item["item_id"] for item in items]
-            content_types = _get_cluster_content_types(conn, cluster_id)
+            content_types = content_types_map.get(cluster_id, [])
             source_count = cluster.get("distinct_source_count", 1)
             summary_deep_dive_text = cluster.get("summary_deep_dive")
             deep_dive_markdown = _get_deep_dive_markdown(summary_deep_dive_text)
@@ -1486,6 +1700,9 @@ def generate_intuition_for_clusters(
                     # Non-paper sources (news, journalism, etc.): use simple news summary
                     # No deep dive for these - the article itself is the explanation
                     if not items:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_NO_ITEMS,
+                        )
                         skipped += 1
                         logger.info(
                             "Cluster %s skipped: no items for news summary",
@@ -1493,16 +1710,24 @@ def generate_intuition_for_clusters(
                         )
                         continue
 
-                    # Use first item's content for news summary (prefer full_text over snippet)
+                    # Just-in-time article text hydration
+                    items = _ensure_article_text_hydrated(conn, cluster_id, items)
+                    item_ids = [item["item_id"] for item in items]
+
+                    # Build combined full text from all items that have it
+                    combined_full_text = _build_combined_article_text(items)
                     first_item = items[0]
                     news_result = generate_news_summary(
                         title=first_item.get("title", canonical_title),
                         snippet=first_item.get("snippet"),
-                        full_text=first_item.get("full_text"),
+                        full_text=combined_full_text or first_item.get("full_text"),
                         adapter=adapter,
                     )
 
                     if news_result.insufficient_context:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_INSUFFICIENT,
+                        )
                         skipped += 1
                         logger.info(
                             "Cluster %s skipped: insufficient context for news summary",
@@ -1511,6 +1736,9 @@ def generate_intuition_for_clusters(
                         continue
 
                     if not news_result.success:
+                        _set_deep_dive_skip_reason(
+                            conn, cluster_id, _DEEP_DIVE_SKIP_REASON_NEWS_GEN_FAILED,
+                        )
                         failed += 1
                         logger.warning(
                             "News summary generation failed for cluster %s: %s",
@@ -1638,6 +1866,10 @@ def generate_deep_dives_for_clusters(
     failed = 0
     skipped = 0
 
+    # Batch-fetch items for all clusters
+    cluster_ids = [c["cluster_id"] for c in clusters]
+    items_map = _get_cluster_items_batch(conn, cluster_ids)
+
     for cluster in clusters:
         cluster_id = cluster["cluster_id"]
         canonical_title = cluster["canonical_title"]
@@ -1650,7 +1882,7 @@ def generate_deep_dives_for_clusters(
             continue
 
         try:
-            items = _get_cluster_items_for_takeaway(conn, cluster_id)
+            items = items_map.get(cluster_id, [])
             items = _ensure_paper_text_hydrated(conn, cluster_id, items)
             fulltext_items, abstract_items = _split_paper_items_by_text_quality(items)
             fulltext_item_ids = [item["item_id"] for item in fulltext_items]
@@ -1810,12 +2042,17 @@ def generate_high_impact_for_clusters(
     if llm_mode_enabled and llm_adapter is None:
         llm_adapter = get_llm_adapter()
 
+    # Batch-fetch items and content types for all clusters
+    hi_cluster_ids = [c["cluster_id"] for c in clusters]
+    hi_items_map = _get_cluster_items_batch(conn, hi_cluster_ids)
+    hi_content_types_map = _get_cluster_content_types_batch(conn, hi_cluster_ids)
+
     for cluster in clusters:
         cluster_id = cluster["cluster_id"]
         processed += 1
         try:
-            items = _get_cluster_items_for_takeaway(conn, cluster_id)
-            content_types = _get_cluster_content_types(conn, cluster_id)
+            items = hi_items_map.get(cluster_id, [])
+            content_types = hi_content_types_map.get(cluster_id, [])
             raw_anti_hype = cluster.get("anti_hype_flags")
             anti_hype_flags = [str(x) for x in (raw_anti_hype or [])]
             if isinstance(raw_anti_hype, str):

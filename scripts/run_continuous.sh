@@ -15,24 +15,25 @@ while true; do
     echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting pipeline run"
     echo "========================================"
 
-    # 1. Run main pipeline (ingest → cluster → tag → trending)
-    python -m curious_now.cli pipeline
+    # 1. Run main pipeline (ingest → hydrate → cluster → tag → trending)
+    python -m curious_now.cli pipeline \
+        --hydrate-paper-text \
+        --hydrate-article-text
 
     # 2. Generate AI takeaways (1-liner summaries) for new clusters
     echo ""
     echo "Generating takeaways..."
     CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli generate-takeaways --limit 50
 
-    # 3. Generate intuition (high-level understanding) for all clusters
+    # 3. Enrich stage 3: deep dives for papers, news summaries for articles
     echo ""
-    echo "Generating intuition..."
-    CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli generate-intuition --limit 50
+    echo "Enriching clusters (deep dives + news summaries)..."
+    CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli enrich-stage3 --limit 100
 
-    # 4. Generate deep dives for papers only (preprints, peer-reviewed)
-    #    News articles and press releases don't need deep dives
+    # 4. Promote pending clusters that now meet readiness criteria
     echo ""
-    echo "Generating deep dives for papers..."
-    CN_LLM_ADAPTER=${CN_LLM_ADAPTER:-claude-cli} python -m curious_now.cli generate-deep-dives --limit 50
+    echo "Promoting ready clusters..."
+    python -m curious_now.cli promote-clusters
 
     # 5. Generate embeddings for semantic search (optional)
     # echo ""

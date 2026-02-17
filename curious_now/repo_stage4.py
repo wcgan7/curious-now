@@ -17,6 +17,15 @@ from curious_now.api.schemas import (
 def get_cluster_updates(
     conn: psycopg.Connection[Any], *, cluster_id: UUID
 ) -> ClusterUpdatesResponse:
+    # Verify cluster is active before returning updates
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM story_clusters WHERE id = %s AND status = 'active';",
+            (cluster_id,),
+        )
+        if cur.fetchone() is None:
+            return ClusterUpdatesResponse(cluster_id=cluster_id, updates=[])
+
     with conn.cursor() as cur:
         cur.execute(
             """

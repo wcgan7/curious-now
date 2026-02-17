@@ -55,8 +55,15 @@ def test_hydrate_paper_text_updates_item(db_conn: psycopg.Connection[Any], monke
         )
 
     monkeypatch.setattr(
-        "curious_now.paper_text_hydration._extract_item_text",
-        lambda _item: ("Hydrated abstract text from provider", "ok", "mock", None, None),
+        "curious_now.paper_text_hydration._extract_item_text_and_image",
+        lambda _item: (
+            "Hydrated abstract text from provider",
+            "ok",
+            "mock",
+            None,
+            None,
+            "https://arxiv.org/html/1234.56789v1/figures/hero.png",
+        ),
     )
 
     result = hydrate_paper_text(db_conn, limit=10, item_ids=[item_id], now_utc=now)
@@ -67,7 +74,7 @@ def test_hydrate_paper_text_updates_item(db_conn: psycopg.Connection[Any], monke
     with db_conn.cursor() as cur:
         cur.execute(
             """
-            SELECT full_text, full_text_status, full_text_source, full_text_kind, full_text_license
+            SELECT full_text, full_text_status, full_text_source, full_text_kind, full_text_license, image_url
             FROM items
             WHERE id = %s;
             """,
@@ -80,6 +87,10 @@ def test_hydrate_paper_text_updates_item(db_conn: psycopg.Connection[Any], monke
     assert _row_get(row, "full_text_source", 2) == "mock"
     assert _row_get(row, "full_text_kind", 3) is None
     assert _row_get(row, "full_text_license", 4) is None
+    assert (
+        _row_get(row, "image_url", 5)
+        == "https://arxiv.org/html/1234.56789v1/figures/hero.png"
+    )
 
 
 def test_generate_deep_dives_skips_when_paper_text_missing(

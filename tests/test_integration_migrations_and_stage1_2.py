@@ -80,7 +80,9 @@ def test_stage1_admin_source_pack_import_and_sources(client) -> None:  # type: i
 def test_stage1_items_feed(client, db_conn: psycopg.Connection) -> None:  # type: ignore[no-untyped-def]
     now = datetime.now(timezone.utc)
     source_id = uuid4()
+    source_id_2 = uuid4()
     item_id = uuid4()
+    item_id_2 = uuid4()
     url = "https://example.com/story"
     canonical_url = "https://example.com/story"
 
@@ -91,6 +93,13 @@ def test_stage1_items_feed(client, db_conn: psycopg.Connection) -> None:  # type
             VALUES (%s, %s, %s, %s);
             """,
             (source_id, "Example News", "journalism", True),
+        )
+        cur.execute(
+            """
+            INSERT INTO sources(id, name, source_type, active)
+            VALUES (%s, %s, %s, %s);
+            """,
+            (source_id_2, "Example Lab", "lab", True),
         )
         cur.execute(
             """
@@ -113,27 +122,67 @@ def test_stage1_items_feed(client, db_conn: psycopg.Connection) -> None:  # type
                 _sha256_hex(canonical_url),
             ),
         )
+        cur.execute(
+            """
+            INSERT INTO items(
+              id, source_id, url, canonical_url, title, published_at, fetched_at,
+              content_type, language, title_hash, canonical_hash
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);
+            """,
+            (
+                item_id_2,
+                source_id_2,
+                "https://example.com/lab-story",
+                "https://example.com/lab-story",
+                "A lab story",
+                now,
+                now,
+                "press_release",
+                "en",
+                _sha256_hex("A lab story"),
+                _sha256_hex("https://example.com/lab-story"),
+            ),
+        )
 
     resp = client.get("/v1/items/feed?page=1&page_size=10")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["results"]
+    assert len(items) == 2
+
+    resp = client.get(f"/v1/items/feed?page=1&page_size=10&source_id={source_id}")
     assert resp.status_code == 200, resp.text
     items = resp.json()["results"]
     assert len(items) == 1
     assert items[0]["item_id"] == str(item_id)
     assert items[0]["source"]["name"] == "Example News"
 
+    resp = client.get("/v1/items/feed?page=1&page_size=10&source_type=lab")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["results"]
+    assert len(items) == 1
+    assert items[0]["item_id"] == str(item_id_2)
+    assert items[0]["source"]["name"] == "Example Lab"
+
 
 @pytest.mark.integration
 def test_stage2_feed_cluster_topic_search_and_redirect(client, db_conn: psycopg.Connection) -> None:  # type: ignore[no-untyped-def]
     now = datetime.now(timezone.utc)
     source_id = uuid4()
+    source_id_2 = uuid4()
     item_id = uuid4()
+    item_id_2 = uuid4()
     cluster_id = uuid4()
+    cluster_id_2 = uuid4()
     topic_id = uuid4()
 
     with db_conn.cursor() as cur:
         cur.execute(
             "INSERT INTO sources(id, name, source_type, active) VALUES (%s,%s,%s,%s);",
             (source_id, "Example News", "journalism", True),
+        )
+        cur.execute(
+            "INSERT INTO sources(id, name, source_type, active) VALUES (%s,%s,%s,%s);",
+            (source_id_2, "Example Lab", "lab", True),
         )
         cur.execute(
             """
@@ -154,6 +203,27 @@ def test_stage2_feed_cluster_topic_search_and_redirect(client, db_conn: psycopg.
                 "en",
                 _sha256_hex("AlphaBeta research"),
                 _sha256_hex("https://example.com/story2"),
+            ),
+        )
+        cur.execute(
+            """
+            INSERT INTO items(
+              id, source_id, url, canonical_url, title, published_at, fetched_at,
+              content_type, language, title_hash, canonical_hash
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);
+            """,
+            (
+                item_id_2,
+                source_id_2,
+                "https://example.com/lab-story2",
+                "https://example.com/lab-story2",
+                "Lab finding",
+                now,
+                now,
+                "press_release",
+                "en",
+                _sha256_hex("Lab finding"),
+                _sha256_hex("https://example.com/lab-story2"),
             ),
         )
         cur.execute(
@@ -179,8 +249,34 @@ def test_stage2_feed_cluster_topic_search_and_redirect(client, db_conn: psycopg.
             ),
         )
         cur.execute(
+            """
+            INSERT INTO story_clusters(
+              id, status, canonical_title, representative_item_id,
+              distinct_source_count, distinct_source_type_count, item_count,
+              velocity_6h, velocity_24h, trending_score, recency_score
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);
+            """,
+            (
+                cluster_id_2,
+                "active",
+                "Lab cluster",
+                item_id_2,
+                1,
+                1,
+                1,
+                1,
+                1,
+                9.0,
+                1.0,
+            ),
+        )
+        cur.execute(
             "INSERT INTO cluster_items(cluster_id, item_id, role) VALUES (%s,%s,%s);",
             (cluster_id, item_id, "primary"),
+        )
+        cur.execute(
+            "INSERT INTO cluster_items(cluster_id, item_id, role) VALUES (%s,%s,%s);",
+            (cluster_id_2, item_id_2, "primary"),
         )
         cur.execute(
             "INSERT INTO topics(id, name, description_short) VALUES (%s,%s,%s);",
@@ -198,8 +294,24 @@ def test_stage2_feed_cluster_topic_search_and_redirect(client, db_conn: psycopg.
     resp = client.get("/v1/feed?tab=latest&page=1&page_size=10")
     assert resp.status_code == 200, resp.text
     feed = resp.json()
+    ids = {row["cluster_id"] for row in feed["results"]}
+    assert str(cluster_id) in ids
+    assert str(cluster_id_2) in ids
+
+    cluster_1 = next(row for row in feed["results"] if row["cluster_id"] == str(cluster_id))
+    assert cluster_1["top_topics"][0]["topic_id"] == str(topic_id)
+
+    resp = client.get(f"/v1/feed?tab=latest&page=1&page_size=10&source_id={source_id}")
+    assert resp.status_code == 200, resp.text
+    feed = resp.json()
+    assert len(feed["results"]) == 1
     assert feed["results"][0]["cluster_id"] == str(cluster_id)
-    assert feed["results"][0]["top_topics"][0]["topic_id"] == str(topic_id)
+
+    resp = client.get("/v1/feed?tab=latest&page=1&page_size=10&source_type=lab")
+    assert resp.status_code == 200, resp.text
+    feed = resp.json()
+    assert len(feed["results"]) == 1
+    assert feed["results"][0]["cluster_id"] == str(cluster_id_2)
 
     resp = client.get(f"/v1/clusters/{cluster_id}")
     assert resp.status_code == 200, resp.text

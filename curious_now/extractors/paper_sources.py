@@ -5,7 +5,7 @@ from collections.abc import Callable
 from io import BytesIO
 from logging import Logger
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 
 import httpx
 
@@ -773,3 +773,65 @@ def fetch_arxiv_html_full_text(
     if not text or not is_fulltext_quality_sufficient(text):
         return None
     return text
+
+
+def extract_html_image_url(raw_html: str, *, base_url: str) -> str | None:
+    """Extract a representative image URL from an HTML page.
+
+    Checks og:image, twitter:image, link[rel=image_src], and the first
+    <img> inside main/article/figure.  Works for any publisher site.
+    """
+    try:
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(raw_html, "html.parser")
+    except Exception:
+        return None
+
+    doc_base = base_url
+    base_tag = soup.find("base")
+    if base_tag is not None:
+        href = base_tag.get("href")
+        if isinstance(href, str) and href.strip():
+            doc_base = urljoin(base_url, href.strip())
+    base_for_join = doc_base if doc_base.endswith("/") else f"{doc_base}/"
+
+    def _normalize(candidate: Any) -> str | None:
+        if not isinstance(candidate, str):
+            return None
+        value = candidate.strip()
+        if not value:
+            return None
+        lower = value.lower()
+        if lower.startswith(("data:", "javascript:")):
+            return None
+        return urljoin(base_for_join, value)
+
+    meta_candidates = [
+        soup.find("meta", attrs={"property": "og:image"}),
+        soup.find("meta", attrs={"name": "og:image"}),
+        soup.find("meta", attrs={"name": "twitter:image"}),
+        soup.find("meta", attrs={"property": "twitter:image"}),
+    ]
+    for tag in meta_candidates:
+        if tag is None:
+            continue
+        image_url = _normalize(tag.get("content"))
+        if image_url:
+            return image_url
+
+    link_image = soup.find("link", attrs={"rel": lambda v: isinstance(v, str) and "image_src" in v})
+    if link_image is not None:
+        image_url = _normalize(link_image.get("href"))
+        if image_url:
+            return image_url
+
+    for img in soup.select("main img, article img, figure img"):
+        image_url = _normalize(img.get("src"))
+        if image_url:
+            return image_url
+    return None
+
+
+# Backward-compat alias
+extract_arxiv_html_image_url = extract_html_image_url

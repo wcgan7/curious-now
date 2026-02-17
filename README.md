@@ -78,6 +78,9 @@ Then:
 - Readiness check: `curl http://localhost:8000/readyz`
 - Backward-compatible health check: `curl http://localhost:8000/healthz`
 - OpenAPI UI: `http://localhost:8000/docs`
+- Feed filters:
+  - Items feed supports `source_id`, `source_type`, and `content_type` query params.
+  - Cluster feed supports `topic_id`, `source_id`, `source_type`, and `content_type` query params.
 
 ## Container Image (Backend)
 
@@ -104,6 +107,11 @@ The core data flow is:
 2. **Cluster** unassigned items into `story_clusters` + `cluster_items`
 3. **Tag topics** (optional) by LLM classification into `cluster_topics`
 4. **Recompute trending** metrics
+
+Ingestion content-type note:
+- Default classification is source-type based, with a Nature URL override.
+- `https://www.nature.com/articles/s...` is classified as `peer_reviewed`.
+- `https://www.nature.com/articles/d41586-...` remains `news`.
 
 Run it as a single command:
 

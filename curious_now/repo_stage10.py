@@ -150,7 +150,10 @@ def get_entity_detail_or_redirect(
               c.distinct_source_count,
               c.takeaway,
               c.method_badges,
+              c.deep_dive_skip_reason,
               c.anti_hype_flags,
+              c.high_impact_label,
+              c.high_impact_reasons,
               (
                 SELECT array_agg(DISTINCT i.content_type)
                 FROM cluster_items ci

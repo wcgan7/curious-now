@@ -52,6 +52,9 @@ export function TopicPage({ detail }: { detail: TopicDetail }) {
           <h2 id="latest-heading" className={styles.h2}>
             Latest
           </h2>
+          {latestClusters.length === 0 && (
+            <p className={styles.emptyState}>No stories yet for this topic.</p>
+          )}
           <div className={styles.list}>
             {latestClusters.map((c) => (
               <ClusterCard key={c.cluster_id} cluster={c} focusCategory={focusCategory} />

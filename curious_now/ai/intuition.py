@@ -190,6 +190,8 @@ Rules:
 - Do not invent details, statistics, or implications not present in the source.
 - Do not speculate about causes, consequences, or future developments.
 - Use plain language.
+- Start directly with the substantive point; avoid meta framing.
+- Do not begin with phrases like "This news item", "This article", or "This story".
 - No hype, no filler."""
 
 NEWS_SUMMARY_USER_PROMPT_TEMPLATE = """Title: {title}
@@ -205,6 +207,8 @@ Constraints:
 - Do NOT invent or hallucinate any details, numbers, or claims.
 - If the content is too brief or vague to summarize meaningfully, output exactly: INSUFFICIENT_CONTEXT
 - Target length: 30-60 words.
+- Start immediately with the topic/content itself, not meta lead-ins.
+- Do NOT start with phrases like "This news item", "This article", "This story", or similar.
 - Output ONLY the summary text (or INSUFFICIENT_CONTEXT)."""
 
 INSUFFICIENT_CONTEXT_MARKER = "INSUFFICIENT_CONTEXT"
@@ -580,8 +584,8 @@ def generate_news_summary(
     content_source: str = ""
 
     if len(full_text_clean) >= NEWS_SUMMARY_MIN_CONTENT_CHARS:
-        # Truncate full_text to reasonable length for LLM (first ~2000 chars)
-        content_text = full_text_clean[:2000]
+        # Truncate full_text for LLM — use more when available for better summaries
+        content_text = full_text_clean[:6000]
         content_source = "full_text"
     elif len(snippet_clean) >= NEWS_SUMMARY_MIN_CONTENT_CHARS:
         content_text = snippet_clean
@@ -605,10 +609,11 @@ def generate_news_summary(
 
     logger.debug("Generating news summary from %s (%d chars)", content_source, len(content_text))
 
+    max_tokens = 300 if content_source == "full_text" else 150
     response = adapter.complete(
         user_prompt,
         system_prompt=NEWS_SUMMARY_SYSTEM_PROMPT,
-        max_tokens=150,
+        max_tokens=max_tokens,
         temperature=0.2,
     )
 

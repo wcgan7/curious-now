@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from uuid import UUID
 
 import httpx
@@ -49,6 +49,14 @@ class HydratePaperTextResult:
     items_scanned: int
     items_hydrated: int
     items_failed: int
+    items_skipped: int
+
+
+@dataclass(frozen=True)
+class BackfillImagesResult:
+    items_scanned: int
+    images_found: int
+    images_failed: int
     items_skipped: int
 
 
@@ -829,6 +837,51 @@ def _fetch_arxiv_html_full_text(arxiv_id: str) -> str | None:
     )
 
 
+def _fetch_arxiv_html_image_url(arxiv_id: str) -> str | None:
+    html_url = f"https://arxiv.org/html/{quote(arxiv_id)}"
+    resp = _http_get(html_url, timeout_s=20.0)
+    if resp.status_code != 200:
+        return None
+    content_type = (resp.headers.get("content-type") or "").lower()
+    if "html" not in content_type:
+        return None
+    return extractors.extract_html_image_url(resp.text, base_url=html_url)
+
+
+# ---------------------------------------------------------------------------
+# Generic landing-page image extraction (non-arXiv)
+# ---------------------------------------------------------------------------
+
+_DOMAIN_LAST_FETCH: dict[str, float] = {}
+
+
+def _throttle_domain(url: str, min_interval_s: float = 1.0) -> None:
+    """Sleep if we fetched from the same domain too recently."""
+    domain = urlparse(url).netloc.lower()
+    now = time.monotonic()
+    last = _DOMAIN_LAST_FETCH.get(domain)
+    if last is not None:
+        wait = min_interval_s - (now - last)
+        if wait > 0:
+            time.sleep(wait)
+    _DOMAIN_LAST_FETCH[domain] = time.monotonic()
+
+
+def _fetch_landing_page_image_url(url: str) -> str | None:
+    """Fetch a landing page and extract og:image / twitter:image / first img."""
+    _throttle_domain(url)
+    try:
+        resp = _http_get(url, timeout_s=12.0)
+    except Exception:
+        return None
+    if resp.status_code != 200:
+        return None
+    content_type = (resp.headers.get("content-type") or "").lower()
+    if "html" not in content_type:
+        return None
+    return extractors.extract_html_image_url(resp.text, base_url=url)
+
+
 def _fetch_arxiv_eprint_full_text(arxiv_id: str) -> str | None:
     url = f"https://arxiv.org/e-print/{quote(arxiv_id)}"
     resp = _http_get(url, timeout_s=20.0)
@@ -1132,15 +1185,28 @@ def _fetch_landing_page_text(
     *,
     open_access_ok: bool,
 ) -> tuple[str | None, str]:
-    if not open_access_ok:
+    _throttle_domain(url)
+    try:
+        resp = _http_get(url, timeout_s=20.0)
+    except Exception:
         return None, "not_found"
-
-    resp = _http_get(url, timeout_s=20.0)
     if resp.status_code in (401, 402, 403):
         return None, "paywalled"
     if resp.status_code != 200:
         return None, "not_found"
 
+    content_type = (resp.headers.get("content-type") or "").lower()
+    if "html" not in content_type:
+        return None, "not_found"
+
+    # Primary: trafilatura for clean article body extraction
+    from curious_now.extractors.article_sources import extract_article_text
+
+    trafilatura_text = extract_article_text(resp.text, url=url)
+    if trafilatura_text and _is_fulltext_quality_sufficient(trafilatura_text):
+        return trafilatura_text, "ok"
+
+    # Fallback: BeautifulSoup with paper-specific cleaning
     text = _clean_full_text(resp.text)
     if not text:
         return None, "not_found"
@@ -1222,6 +1288,21 @@ def _extract_item_text(
     return None, "not_found", None, None, None
 
 
+def _extract_item_text_and_image(
+    item: dict[str, Any],
+) -> tuple[str | None, str, str | None, str | None, str | None, str | None]:
+    text, status, source, kind, license_name = _extract_item_text(item)
+    image_url: str | None = None
+    arxiv_id = item.get("arxiv_id")
+    if isinstance(arxiv_id, str) and arxiv_id.strip():
+        image_url = _fetch_arxiv_html_image_url(arxiv_id.strip())
+    if not image_url and not (isinstance(arxiv_id, str) and arxiv_id.strip()):
+        landing = item.get("canonical_url") or item.get("url")
+        if isinstance(landing, str) and landing.strip():
+            image_url = _fetch_landing_page_image_url(landing.strip())
+    return text, status, source, kind, license_name, image_url
+
+
 def _get_items_needing_hydration(
     conn: psycopg.Connection[Any],
     *,
@@ -1248,7 +1329,8 @@ def _get_items_needing_hydration(
               i.full_text,
               i.full_text_status,
               i.full_text_kind,
-              i.full_text_license
+              i.full_text_license,
+              i.image_url
             FROM items i
             WHERE i.content_type IN ('preprint', 'peer_reviewed')
               AND (i.full_text IS NULL OR btrim(i.full_text) = '')
@@ -1270,6 +1352,7 @@ def _update_item_hydration(
     source: str | None,
     kind: str | None,
     license_name: str | None,
+    image_url: str | None,
     error_message: str | None,
     now_utc: datetime,
 ) -> None:
@@ -1282,12 +1365,39 @@ def _update_item_hydration(
                 full_text_source = %s,
                 full_text_kind = %s,
                 full_text_license = %s,
+                image_url = COALESCE(items.image_url, %s),
                 full_text_error = %s,
                 full_text_fetched_at = %s,
                 updated_at = now()
             WHERE id = %s;
             """,
-            (full_text, status, source, kind, license_name, error_message, now_utc, item_id),
+            (full_text, status, source, kind, license_name, image_url, error_message, now_utc, item_id),
+        )
+
+
+def _batch_update_item_hydration(
+    conn: psycopg.Connection[Any],
+    updates: list[dict[str, Any]],
+) -> None:
+    """Batch update hydration results using executemany."""
+    if not updates:
+        return
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            UPDATE items
+            SET full_text = %(full_text)s,
+                full_text_status = %(status)s,
+                full_text_source = %(source)s,
+                full_text_kind = %(kind)s,
+                full_text_license = %(license_name)s,
+                image_url = COALESCE(items.image_url, %(image_url)s),
+                full_text_error = %(error_message)s,
+                full_text_fetched_at = %(now_utc)s,
+                updated_at = now()
+            WHERE id = %(item_id)s;
+            """,
+            updates,
         )
 
 
@@ -1305,6 +1415,7 @@ def hydrate_paper_text(
     hydrated = 0
     failed = 0
     skipped = 0
+    pending_updates: list[dict[str, Any]] = []
 
     for item in items:
         item_id = UUID(str(item["item_id"]))
@@ -1313,51 +1424,152 @@ def hydrate_paper_text(
             skipped += 1
             continue
         try:
-            text, status, source, kind, license_name = _extract_item_text(item)
+            text, status, source, kind, license_name, extracted_image_url = _extract_item_text_and_image(item)
+            existing_image = item.get("image_url")
+            should_backfill_image = not (
+                isinstance(existing_image, str) and existing_image.strip()
+            )
+            image_url = extracted_image_url if should_backfill_image else None
             if text:
                 hydrated += 1
-                _update_item_hydration(
-                    conn,
-                    item_id=item_id,
-                    full_text=text,
-                    status="ok",
-                    source=source,
-                    kind=kind,
-                    license_name=license_name,
-                    error_message=None,
-                    now_utc=now_utc,
-                )
             else:
                 failed += 1
-                _update_item_hydration(
-                    conn,
-                    item_id=item_id,
-                    full_text=None,
-                    status=status,
-                    source=source,
-                    kind=kind,
-                    license_name=license_name,
-                    error_message=None,
-                    now_utc=now_utc,
-                )
+            pending_updates.append({
+                "item_id": item_id,
+                "full_text": text,
+                "status": "ok" if text else status,
+                "source": source,
+                "kind": kind,
+                "license_name": license_name,
+                "image_url": image_url,
+                "error_message": None,
+                "now_utc": now_utc,
+            })
         except Exception as exc:
             failed += 1
             logger.warning("Paper text hydration failed for item %s: %s", item_id, exc)
-            _update_item_hydration(
-                conn,
-                item_id=item_id,
-                full_text=None,
-                status="error",
-                source=None,
-                kind=None,
-                license_name=None,
-                error_message=str(exc)[:4000],
-                now_utc=now_utc,
-            )
+            pending_updates.append({
+                "item_id": item_id,
+                "full_text": None,
+                "status": "error",
+                "source": None,
+                "kind": None,
+                "license_name": None,
+                "image_url": None,
+                "error_message": str(exc)[:4000],
+                "now_utc": now_utc,
+            })
+
+    # Batch update all hydration results
+    _batch_update_item_hydration(conn, pending_updates)
 
     return HydratePaperTextResult(
         items_scanned=len(items),
         items_hydrated=hydrated,
         items_failed=failed,
+        items_skipped=skipped,
+    )
+
+
+def _get_items_needing_image_backfill(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int,
+    source: str = "arxiv",
+) -> list[dict[str, Any]]:
+    if source == "arxiv":
+        query = """
+            SELECT i.id AS item_id, i.arxiv_id, i.url, i.canonical_url, i.image_url
+            FROM items i
+            WHERE i.arxiv_id IS NOT NULL
+              AND (i.image_url IS NULL OR btrim(i.image_url) = '')
+            ORDER BY i.published_at DESC NULLS LAST, i.fetched_at DESC
+            LIMIT %s;
+        """
+    else:
+        query = """
+            SELECT i.id AS item_id, i.arxiv_id, i.url, i.canonical_url, i.image_url
+            FROM items i
+            WHERE i.arxiv_id IS NULL
+              AND (i.url IS NOT NULL OR i.canonical_url IS NOT NULL)
+              AND (i.image_url IS NULL OR btrim(i.image_url) = '')
+            ORDER BY i.published_at DESC NULLS LAST, i.fetched_at DESC
+            LIMIT %s;
+        """
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(query, (limit,))
+        return cur.fetchall()
+
+
+def _update_item_image(
+    conn: psycopg.Connection[Any],
+    *,
+    item_id: UUID,
+    image_url: str,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE items
+            SET image_url = %s, updated_at = now()
+            WHERE id = %s AND (image_url IS NULL OR btrim(image_url) = '');
+            """,
+            (image_url, item_id),
+        )
+
+
+def backfill_images(
+    conn: psycopg.Connection[Any],
+    *,
+    limit: int = 500,
+) -> BackfillImagesResult:
+    # --- Pass 1: arXiv items ---
+    arxiv_items = _get_items_needing_image_backfill(conn, limit=limit, source="arxiv")
+    found = 0
+    failed = 0
+    skipped = 0
+
+    for item in arxiv_items:
+        item_id = UUID(str(item["item_id"]))
+        arxiv_id = item.get("arxiv_id")
+        if not isinstance(arxiv_id, str) or not arxiv_id.strip():
+            skipped += 1
+            continue
+        try:
+            image_url = _fetch_arxiv_html_image_url(arxiv_id.strip())
+            if image_url:
+                _update_item_image(conn, item_id=item_id, image_url=image_url)
+                found += 1
+            else:
+                skipped += 1
+        except Exception as exc:
+            failed += 1
+            logger.warning("Image backfill failed for item %s: %s", item_id, exc)
+
+    # --- Pass 2: non-arXiv items (landing page og:image) ---
+    landing_items = _get_items_needing_image_backfill(conn, limit=limit, source="landing_page")
+
+    for item in landing_items:
+        item_id = UUID(str(item["item_id"]))
+        landing = item.get("canonical_url") or item.get("url")
+        if not isinstance(landing, str) or not landing.strip():
+            skipped += 1
+            continue
+        try:
+            image_url = _fetch_landing_page_image_url(landing.strip())
+            if image_url:
+                _update_item_image(conn, item_id=item_id, image_url=image_url)
+                found += 1
+            else:
+                skipped += 1
+        except Exception as exc:
+            failed += 1
+            logger.warning("Image backfill (landing page) failed for item %s: %s", item_id, exc)
+
+    total_scanned = len(arxiv_items) + len(landing_items)
+    return BackfillImagesResult(
+        items_scanned=total_scanned,
+        images_found=found,
+        images_failed=failed,
         items_skipped=skipped,
     )

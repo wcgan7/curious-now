@@ -34,6 +34,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       disabled={disabled || isLoading}
+      aria-busy={isLoading}
       className={clsx(styles.button, styles[variant], styles[size], className)}
       {...props}
     >

@@ -239,6 +239,8 @@ def get_feed(
     *,
     tab: Literal["latest", "trending"],
     topic_id: UUID | None,
+    source_id: UUID | None,
+    source_type: str | None,
     content_type: str | None,
     page: int,
     page_size: int,
@@ -253,6 +255,21 @@ def get_feed(
             f"WHERE ct.cluster_id = c.id AND {_topic_match_clause_sql()})"
         )
         params.extend([topic_id, topic_id])
+    if source_id:
+        where.append(
+            "EXISTS (SELECT 1 FROM cluster_items ci "
+            "JOIN items i ON i.id = ci.item_id "
+            "WHERE ci.cluster_id = c.id AND i.source_id = %s)"
+        )
+        params.append(source_id)
+    if source_type:
+        where.append(
+            "EXISTS (SELECT 1 FROM cluster_items ci "
+            "JOIN items i ON i.id = ci.item_id "
+            "JOIN sources s ON s.id = i.source_id "
+            "WHERE ci.cluster_id = c.id AND s.source_type = %s)"
+        )
+        params.append(source_type)
     if content_type:
         where.append(
             "EXISTS (SELECT 1 FROM cluster_items ci "
@@ -319,7 +336,10 @@ def cluster_redirect_to(conn: psycopg.Connection[Any], *, cluster_id: UUID) -> U
 
 def get_cluster_updated_at(conn: psycopg.Connection[Any], *, cluster_id: UUID) -> datetime | None:
     with conn.cursor() as cur:
-        cur.execute("SELECT updated_at FROM story_clusters WHERE id = %s;", (cluster_id,))
+        cur.execute(
+            "SELECT updated_at FROM story_clusters WHERE id = %s AND status = 'active';",
+            (cluster_id,),
+        )
         row = cur.fetchone()
     if not row:
         return None
@@ -336,15 +356,13 @@ def get_topic_updated_at(conn: psycopg.Connection[Any], *, topic_id: UUID) -> da
 
 
 def get_cluster_detail_or_redirect(
-    conn: psycopg.Connection[Any], *, cluster_id: UUID
+    conn: psycopg.Connection[Any], *, cluster_id: UUID, require_status: str | None = "active"
 ) -> ClusterDetail | RedirectResponse:
     to_id = _cluster_redirect(conn, cluster_id)
     if to_id:
         return RedirectResponse(redirect_to_cluster_id=to_id)
 
-    with conn.cursor() as cur:
-        cur.execute(
-            """
+    base_query = """
             SELECT
               id AS cluster_id,
               canonical_title,
@@ -368,10 +386,15 @@ def get_cluster_detail_or_redirect(
               summary_deep_dive_supporting_item_ids,
               deep_dive_skip_reason
             FROM story_clusters
-            WHERE id = %s;
-            """,
-            (cluster_id,),
-        )
+            WHERE id = %s"""
+    if require_status:
+        base_query += " AND status = %s"
+        params: tuple[Any, ...] = (cluster_id, require_status)
+    else:
+        params = (cluster_id,)
+
+    with conn.cursor() as cur:
+        cur.execute(base_query + ";", params)
         cluster = cur.fetchone()
     if not cluster:
         raise KeyError("cluster not found")

@@ -18,6 +18,7 @@ from curious_now.api.schemas import (
     SourceFeedHealth,
     SourcePack,
     SourcesResponse,
+    SourceType,
 )
 from curious_now.db import DB
 from curious_now.ingestion import ingest_due_feeds
@@ -38,6 +39,7 @@ def get_items_feed(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     source_id: UUID | None = None,
+    source_type: SourceType | None = None,
     content_type: ContentType | None = None,
     conn: psycopg.Connection[Any] = Depends(get_db),
 ) -> ItemsFeedResponse:
@@ -46,6 +48,7 @@ def get_items_feed(
         page=page,
         page_size=page_size,
         source_id=source_id,
+        source_type=source_type.value if source_type else None,
         content_type=content_type.value if content_type else None,
     )
 

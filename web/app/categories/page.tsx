@@ -4,6 +4,8 @@ import { getTopics } from '@/lib/api/topics';
 
 import styles from './page.module.css';
 
+export const metadata = { title: 'Categories | Curious Now', description: 'Browse science stories by category and topic.' };
+
 const SEEDED_CATEGORY_ORDER = [
   'Artificial Intelligence',
   'Computing',
@@ -26,15 +28,16 @@ const SEEDED_CATEGORY_RANK: ReadonlyMap<string, number> = new Map(
 export default async function CategoriesPage() {
   const topics = await getTopics();
   const subtopicsByCategory = new Map<string, number>();
+  const topicList = topics?.topics ?? [];
 
-  for (const topic of topics.topics) {
+  for (const topic of topicList) {
     if (topic.topic_type !== 'subtopic' || !topic.parent_topic_id) continue;
     subtopicsByCategory.set(
       topic.parent_topic_id,
       (subtopicsByCategory.get(topic.parent_topic_id) || 0) + 1
     );
   }
-  const categories = topics.topics
+  const categories = topicList
     .filter(
       (topic) => topic.topic_type === 'category' && (subtopicsByCategory.get(topic.topic_id) || 0) > 0
     )
@@ -55,7 +58,7 @@ export default async function CategoriesPage() {
         <header className={styles.header}>
           <p className={styles.kicker}>Browse</p>
           <h1 className={styles.title}>Top categories</h1>
-          <p className={styles.subtitle}>Choose a category to read only stories in that area.</p>
+          <p className={styles.subtitle}>Browse stories by category.</p>
         </header>
 
         {categories.length ? (

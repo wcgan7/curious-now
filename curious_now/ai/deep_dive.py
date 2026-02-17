@@ -84,35 +84,23 @@ Requirements:
 
 DEEP_DIVE_USER_PROMPT_TEMPLATE = """Create a Technical Deep Dive for the following science story.
 
+Objective: Give the reader a thorough, self-contained understanding of the work — what problem it addresses, how it was approached, what was found, and how confident we should be — so they never need to read the original paper(s). Every structural choice you make should serve this objective.
+
 Cluster Title: {cluster_title}
 
 Source Text (articles/abstracts/papers):
 {articles_text}
 
-What to optimize for:
-- Strong reader understanding of the problem, approach, evidence, and results
-- Clear mental model of the methodology and evaluation
-- Honest boundaries of what is established vs uncertain
-
 Grounding rules:
 - Only include claims supported by the source text.
 - Do not invent numbers, datasets, metrics, architectures, or mechanisms.
-- Omit sections that are not supported by the sources.
 - If synthesizing multiple sources, merge only when consistent.
 
 Formatting:
 - Use Markdown with clear headers and bullet points where helpful.
 - Dense but readable. No conversational language.
-
-Suggested structure (adapt freely as needed):
-## Overview
-## Problem & Context
-## Methodology / Approach
-## Data & Experimental Setup
-## Results
-## Interpretation (only if authors provide one)
-## Limitations & Uncertainties
-## What Comes Next (only if stated or clearly implied)
+- Choose whatever section structure best conveys the material. The headers below are suggestions, not requirements — use them, adapt them, or ignore them entirely based on what the sources support:
+  Overview / Problem & Context / Methodology / Data & Experimental Setup / Results / Interpretation / Limitations & Uncertainties / What Comes Next
 
 Respond with ONLY the Markdown."""
 

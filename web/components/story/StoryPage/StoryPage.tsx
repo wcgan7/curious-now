@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ClusterDetail } from '@/types/api';
 
@@ -12,23 +12,24 @@ import { IntuitionSection } from '@/components/story/IntuitionSection/IntuitionS
 
 function parseDeepDivePayload(
   summaryDeepDive: string | null | undefined
-): { markdown?: string; eli5?: string; eli20?: string } {
-  if (!summaryDeepDive) return {};
+): { isPayload: boolean; markdown?: string; eli5?: string; eli20?: string } {
+  if (!summaryDeepDive) return { isPayload: false };
   const text = summaryDeepDive.trim();
-  if (!(text.startsWith('{') && text.endsWith('}'))) return {};
+  if (!(text.startsWith('{') && text.endsWith('}'))) return { isPayload: false };
 
   try {
     const parsed = JSON.parse(text) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { isPayload: false };
     const obj = parsed as Record<string, unknown>;
 
     return {
+      isPayload: true,
       markdown: typeof obj.markdown === 'string' ? obj.markdown : undefined,
       eli5: typeof obj.eli5 === 'string' ? obj.eli5 : undefined,
       eli20: typeof obj.eli20 === 'string' ? obj.eli20 : undefined,
     };
   } catch {
-    return {};
+    return { isPayload: false };
   }
 }
 
@@ -62,6 +63,62 @@ function sourceCtaLabel(contentType: string | undefined): string {
 
 type EvidenceFilter = 'all' | 'news' | 'press_release' | 'preprint' | 'peer_reviewed' | 'report';
 
+function ImageModal({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    closeRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'Tab') {
+        // Trap focus within modal — only the close button is focusable
+        e.preventDefault();
+        closeRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={overlayRef}
+      className={styles.imageModalOverlay}
+      onClick={(e) => {
+        if (e.target === overlayRef.current) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={alt}
+    >
+      <div className={styles.imageModalDialog}>
+        <button
+          ref={closeRef}
+          type="button"
+          className={styles.imageModalClose}
+          onClick={onClose}
+        >
+          Close
+        </button>
+        <img src={src} alt={alt} className={styles.imageModalImg} />
+      </div>
+    </div>
+  );
+}
+
 export function StoryPage({
   cluster,
   hasUpdates = false,
@@ -78,6 +135,12 @@ export function StoryPage({
     top_categories?: { category_id: string; name: string; score: number }[];
   };
   const deepDivePayload = parseDeepDivePayload(cluster.summary_deep_dive);
+  const deepDiveMarkdown =
+    deepDivePayload.isPayload
+      ? hasText(deepDivePayload.markdown)
+        ? deepDivePayload.markdown
+        : null
+      : cluster.summary_deep_dive;
   const eli5 =
     extended.summary_intuition_eli5 ?? cluster.summary_intuition ?? deepDivePayload.eli5 ?? null;
   const eli20 = extended.summary_intuition_eli20 ?? deepDivePayload.eli20 ?? null;
@@ -89,7 +152,7 @@ export function StoryPage({
     cluster.summary_intuition_supporting_item_ids;
   const hasTakeaway = hasText(cluster.takeaway);
   const hasIntuition = hasText(eli5) || hasText(eli20);
-  const hasDeepDive = hasText(cluster.summary_deep_dive);
+  const hasDeepDive = hasText(deepDiveMarkdown);
   const hasContextLists =
     !!cluster.assumptions?.length ||
     !!cluster.limitations?.length ||
@@ -100,6 +163,7 @@ export function StoryPage({
   const directSourceLabel = sourceCtaLabel(primarySource?.contentType);
   const categoryChips = (extended.categories ?? extended.top_categories ?? []).slice(0, 2);
   const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all');
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const relevantItemIds = useMemo(
     () => [
       ...(cluster.takeaway_supporting_item_ids || []),
@@ -125,14 +189,19 @@ export function StoryPage({
       <article className={styles.container}>
         <header className={styles.hero}>
           {cluster.featured_image_url ? (
-            <div className={styles.heroImage}>
+            <button
+              type="button"
+              className={`${styles.heroImage} ${styles.heroImageButton}`}
+              onClick={() => setIsImageModalOpen(true)}
+              aria-label="Open story image"
+            >
               <img
                 src={cluster.featured_image_url}
-                alt=""
+                alt={cluster.canonical_title}
                 className={styles.heroImg}
                 loading="eager"
               />
-            </div>
+            </button>
           ) : null}
           <div className={styles.heroTop}>
             <p className={styles.eyebrow}>Story</p>
@@ -241,7 +310,7 @@ export function StoryPage({
               <section id="deep-dive" className={styles.panel}>
                 <div className={styles.section}>
                   <h2 className={styles.h2}>Deep Dive</h2>
-                  <DeepDive value={deepDivePayload.markdown ?? cluster.summary_deep_dive!} />
+                  <DeepDive value={deepDiveMarkdown!} />
                 </div>
               </section>
             ) : null}
@@ -280,6 +349,13 @@ export function StoryPage({
           </aside>
         </div>
       </article>
+      {isImageModalOpen && cluster.featured_image_url ? (
+        <ImageModal
+          src={cluster.featured_image_url}
+          alt={cluster.canonical_title}
+          onClose={() => setIsImageModalOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }

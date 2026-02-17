@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
 import styles from './page.module.css';
-import { Button } from '@/components/ui/Button/Button';
 
 export const metadata = {
   title: 'Offline',
@@ -16,8 +15,8 @@ export default function OfflinePage() {
           Check your connection and try again.
         </p>
         <div className={styles.row}>
-          <Link href="/">
-            <Button variant="primary">Home</Button>
+          <Link href="/" className={styles.homeLink}>
+            Home
           </Link>
         </div>
       </div>

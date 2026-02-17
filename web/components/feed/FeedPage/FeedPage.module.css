@@ -68,6 +68,7 @@
   margin-top: 14px;
   display: flex;
   justify-content: center;
+  min-height: 42px;
 }
 
 .loadMoreButton {
@@ -85,12 +86,17 @@
   background: color-mix(in srgb, var(--surface-2) 56%, white);
 }
 
+.loadMoreButton:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .errorNotice {
   margin: 0 0 16px;
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, #d0312d 28%, var(--border));
-  background: color-mix(in srgb, #d0312d 8%, var(--surface));
+  background: color-mix(in srgb, #d0312d 8%, var(--surface-1));
   color: color-mix(in srgb, #d0312d 72%, var(--text-1));
 }
 
@@ -99,7 +105,7 @@
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-1);
   color: var(--text-2);
 }
 

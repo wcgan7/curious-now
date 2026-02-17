@@ -27,8 +27,8 @@ export async function FeedPage({
           </h1>
           <p className={styles.subtitle}>
             {tab === 'latest'
-              ? 'Recent science stories, grouped and explained without noise.'
-              : 'Stories ranked by estimated impact, with momentum and recency as fallback.'}
+              ? "What's new in science"
+              : 'Top stories to watch now'}
           </p>
         </header>
         {hasFeedError ? (
