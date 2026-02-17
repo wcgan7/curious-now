@@ -2,7 +2,7 @@ services:
   - type: web
     name: curious-now-api
     runtime: docker
-    plan: free
+    plan: starter  # $7/mo — always-on, no cold starts (free tier sleeps after 15min)
     healthCheckPath: /readyz
     dockerfilePath: ./Dockerfile
     dockerContext: .

@@ -1,230 +1,284 @@
-# Full-Stack Deployment Guide (Render + Vercel)
+# Deployment Guide
 
-Deploy the complete Curious Now stack: **FastAPI backend** on Render, **Next.js frontend** on Vercel, and a **pipeline worker** on Render — backed by external Postgres and Redis.
+Deploy Curious Now to production: **FastAPI API** on Render, **Next.js frontend** on Vercel, **pipeline worker** on your local machine (using your local LLM), backed by managed Postgres.
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
 ┌─────────────────┐       ┌──────────────────────────┐
 │  Vercel          │       │  Render                  │
 │  (Next.js)       │──────▶│  Web Service (FastAPI)   │
 │  web/            │  API  │  curious-now-api         │
-└─────────────────┘       ├──────────────────────────┤
-                          │  Background Worker       │
-                          │  run_resilient_sync.py   │
-                          └──────┬───────┬───────────┘
-                                 │       │
-                    ┌────────────┘       └────────────┐
-                    ▼                                  ▼
-           ┌──────────────┐                  ┌──────────────┐
-           │  Neon         │                  │  Upstash      │
-           │  (Postgres +  │                  │  (Redis)      │
-           │   pgvector)   │                  └──────────────┘
-           └──────────────┘
+└─────────────────┘       └──────────┬───────────────┘
+                                     │
+┌─────────────────┐                  │
+│  Your Machine    │                  │
+│  run_resilient   │                  │
+│  _sync.py        │─────────────────┤
+│  (local LLM)     │                  │
+└─────────────────┘                  │
+                                     ▼
+                            ┌──────────────┐
+                            │  Neon         │
+                            │  (Postgres +  │
+                            │   pgvector)   │
+                            └──────────────┘
 ```
 
-The backend API and pipeline worker share the same database and Redis instance. The frontend is a static Next.js app deployed to Vercel that calls the backend API.
+The API and your local pipeline worker share the same Neon database. The frontend is a Next.js app on Vercel that calls the API. Redis is optional and not needed for this setup.
 
 ---
 
-## 1. Prerequisites
+## Step 1. Create Accounts
 
-- This repo pushed to GitHub
-- Accounts on:
-  - [Render](https://render.com) — hosts the API and pipeline worker
-  - [Vercel](https://vercel.com) — hosts the Next.js frontend
-  - [Neon](https://neon.tech) — managed Postgres with pgvector
-  - [Upstash](https://upstash.com) — managed Redis
+You need three services:
+
+| Service | Plan | Cost | Purpose |
+|---------|------|------|---------|
+| [Neon](https://neon.tech) | **Launch** | ~$19/mo | Postgres + pgvector (always-on, no suspend) |
+| [Render](https://render.com) | **Starter** | $7/mo | API server (always-on, no cold starts) |
+| [Vercel](https://vercel.com) | Free | $0 | Next.js frontend |
+
+**Total: ~$26/month.**
+
+Do not use free tiers for the database or API — Neon free suspends after 5 minutes of inactivity and Render free sleeps after 15 minutes. Both will cause downtime.
+
+Locally you need:
+- Python 3.13+ with this repo's dependencies installed (`pip install -e .` or `uv sync`)
+- A working LLM setup (Claude CLI, Codex CLI, or Ollama)
 
 ---
 
-## 2. Database Setup (Neon)
+## Step 2. Set Up Database (Neon)
 
-1. Create a new Neon project (any region — pick one close to your Render region).
-2. In the Neon SQL editor, enable the pgvector extension:
+1. Create a new Neon project. Pick a region close to Render's Oregon (us-west) or Frankfurt (eu) region.
+2. Choose the **Launch** plan during creation.
+3. In the Neon SQL editor, enable pgvector:
 
    ```sql
    CREATE EXTENSION IF NOT EXISTS vector;
    ```
 
-3. Copy the connection string. It will look like:
+4. Copy the connection string:
 
    ```
    postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require
    ```
 
-   You'll use this as `CN_DATABASE_URL`.
+   Save this — you'll use it as `CN_DATABASE_URL` everywhere.
 
 ---
 
-## 3. Redis Setup (Upstash)
+## Step 3. Deploy the API (Render)
 
-1. Create an Upstash Redis database (choose a region near your Render region).
-2. Copy the connection string in `redis://` format:
+### 3a. Deploy via Blueprint
 
-   ```
-   redis://default:password@xxx.upstash.io:6379
-   ```
-
-   You'll use this as `CN_REDIS_URL`.
-
----
-
-## 4. Backend Deployment (Render)
-
-### 4a. Deploy via Blueprint
-
-1. In Render, go to **Blueprints** → **New Blueprint Instance**.
+1. In Render, go to **Blueprints** > **New Blueprint Instance**.
 2. Connect your GitHub repo.
 3. Render reads `render.yaml` and creates the `curious-now-api` web service.
-4. Set the required environment variables when prompted (see below).
-5. Click **Apply**.
+4. **Change the plan from Free to Starter** in the service settings ($7/mo).
+5. Set the environment variables below, then click **Apply**.
 
-### 4b. Required Environment Variables
+### 3b. Environment Variables
 
 Set these in the Render dashboard for the `curious-now-api` service:
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `CN_DATABASE_URL` | Yes | Neon Postgres connection string |
-| `CN_REDIS_URL` | Yes | Upstash Redis connection string |
-| `CN_ADMIN_TOKEN` | Yes | Secret token for admin API endpoints |
-| `CN_PUBLIC_APP_BASE_URL` | Yes | Public URL of the API, e.g. `https://api.yourdomain.com` |
-| `CN_LLM_ADAPTER` | Recommended | LLM backend: `claude-cli`, `codex-cli`, `ollama`, or `mock` (defaults to `ollama`) |
-| `CN_LLM_MODEL` | No | Model name (adapter-specific; uses adapter default if unset) |
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `CN_DATABASE_URL` | Your Neon connection string | Required |
+| `CN_ADMIN_TOKEN` | A random secret (e.g. `openssl rand -hex 32`) | Required — protects admin endpoints |
+| `CN_PUBLIC_APP_BASE_URL` | `https://your-app.onrender.com` | Update later when you add a custom domain |
+| `CN_CORS_ALLOWED_ORIGINS` | `https://your-app.vercel.app` | Your Vercel frontend URL (update after step 6) |
+| `CN_LLM_ADAPTER` | `mock` | The API doesn't run the pipeline — `mock` is fine here |
 
-The following are set automatically by `render.yaml` with sensible defaults:
+Leave `CN_REDIS_URL` empty — Redis is optional and not needed for this setup.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CN_COOKIE_SECURE` | `true` | Secure cookie flag (keep `true` in production) |
-| `CN_TRUST_PROXY_HEADERS` | `true` | Trust `X-Forwarded-*` headers from Render's proxy |
-| `CN_SECURITY_HEADERS_ENABLED` | `true` | Add security response headers |
-| `CN_DB_POOL_ENABLED` | `true` | Enable connection pooling |
-| `CN_DB_POOL_MIN_SIZE` | `1` | Minimum pool connections |
-| `CN_DB_POOL_MAX_SIZE` | `10` | Maximum pool connections |
-| `CN_DB_POOL_TIMEOUT_SECONDS` | `10` | Pool connection timeout |
-| `CN_STATEMENT_TIMEOUT_MS` | `30000` | SQL statement timeout (30s) |
+The remaining variables are set automatically by `render.yaml` with production defaults (connection pooling, security headers, proxy trust, 30s statement timeout).
 
-### 4c. Migrations
+### 3c. Verify
 
-Migrations run automatically before each deploy via the pre-deploy command:
-
-```
-python -m curious_now.cli migrate
-```
-
-This applies any pending SQL migrations from `design_docs/migrations/`.
-
-### 4d. Verify
-
-After deploy completes:
+Migrations run automatically before each deploy. After the deploy completes:
 
 ```bash
-curl https://your-render-url.onrender.com/livez
-# → {"status":"ok"}
+curl https://your-app.onrender.com/livez
+# {"status":"ok"}
 
-curl https://your-render-url.onrender.com/readyz
-# → {"status":"ready"}
+curl https://your-app.onrender.com/readyz
+# {"status":"ready"}
 ```
 
-`/livez` always returns 200. `/readyz` returns 200 only when the database connection pool is ready (503 otherwise).
-
-### 4e. Custom Domain
-
-1. In the Render service settings, add your custom domain (e.g. `api.yourdomain.com`).
-2. Add the DNS records Render provides at your domain registrar.
-3. Wait for TLS certificate issuance.
-4. Verify: `curl https://api.yourdomain.com/readyz`
+If `/readyz` returns 503, check that `CN_DATABASE_URL` is correct and that your Neon project is active.
 
 ---
 
-## 5. Initial Data Seeding
+## Step 4. Seed the Database
 
-After the backend is deployed and migrations have run, seed the database with sources and topics.
-
-### Option A: Render Shell
-
-Open a shell in the Render dashboard for the `curious-now-api` service:
+Before running the pipeline, seed sources and topics. Run these locally, pointing at your Neon database:
 
 ```bash
+export CN_DATABASE_URL="postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require"
+
 python -m curious_now.cli import-source-pack config/source_pack.sample.v0.json
 python -m curious_now.cli seed-topics-v1 --path config/topics.seed.v1.json
 ```
 
-### Option B: Local CLI with Remote DB
-
-Set `CN_DATABASE_URL` to your Neon connection string locally, then run:
-
-```bash
-CN_DATABASE_URL="postgresql://..." python -m curious_now.cli import-source-pack config/source_pack.sample.v0.json
-CN_DATABASE_URL="postgresql://..." python -m curious_now.cli seed-topics-v1 --path config/topics.seed.v1.json
-```
-
-Both commands are idempotent — safe to run multiple times.
+Both commands are idempotent — safe to run multiple times. You should see log output confirming sources and topics were imported.
 
 ---
 
-## 6. Frontend Deployment (Vercel)
+## Step 5. Run the Pipeline Locally
 
-### 6a. Import Project
+This is the core of your setup. The pipeline ingests feeds, hydrates full text, clusters items, generates AI content, and computes trending scores — all using your local LLM.
 
-1. In Vercel, click **Add New Project** → **Import Git Repository**.
+### 5a. Create a `.env` file
+
+Create a `.env` file in the repo root (it's already in `.gitignore`):
+
+```bash
+CN_DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require
+CN_LLM_ADAPTER=claude-cli
+```
+
+Set `CN_LLM_ADAPTER` to whichever LLM you have locally: `claude-cli`, `codex-cli`, or `ollama`.
+
+### 5b. First run (single cycle)
+
+Run one full cycle to verify everything works end-to-end:
+
+```bash
+python scripts/run_resilient_sync.py \
+  --throughput-profile low \
+  --run-migrations \
+  --stop-on-error
+```
+
+This runs: ingest > hydrate papers > hydrate articles > cluster > tag > takeaways > deep dives > enrich > promote > trending — then exits.
+
+Watch the output. You should see each step complete with `ok`. If a step fails, `--stop-on-error` halts immediately so you can fix it.
+
+### 5c. Continuous loop
+
+Once the first run succeeds, start the continuous loop:
+
+```bash
+python scripts/run_resilient_sync.py \
+  --loop \
+  --throughput-profile low
+```
+
+This repeats the full pipeline every 10 minutes (the `low` profile interval). Leave it running in a terminal or tmux/screen session.
+
+### 5d. Throughput profiles
+
+| Profile | Cycle interval | Feeds/cycle | Items/feed | Clusters | Takeaways | Deep dives |
+|---------|---------------|-------------|------------|----------|-----------|------------|
+| `low` | 10 min | 10 | 100 | 400 | 60 | 20 |
+| `balanced` | 5 min | 25 | 200 | 1,200 | 120 | 40 |
+| `high` | 3 min | 50 | 250 | 2,500 | 250 | 80 |
+
+Start with `low`. Once you're comfortable with the LLM costs and cycle times, switch to `balanced`. Use `high` only for bulk catch-up ingestion.
+
+### 5e. Notes
+
+- The pipeline acquires a PostgreSQL advisory lock, so only one instance runs at a time. Safe to restart without coordination.
+- Press Ctrl-C to stop gracefully. The current step finishes, then the process exits.
+- Use `--allow-mock-llm` to test ingestion and clustering without a real LLM (AI-generated content steps are skipped).
+- Use `--log-level DEBUG` for verbose output when troubleshooting.
+
+---
+
+## Step 6. Deploy the Frontend (Vercel)
+
+### 6a. Import project
+
+1. In Vercel, click **Add New Project** > **Import Git Repository**.
 2. Select your repo.
 3. Set **Root Directory** to `web/`.
-4. Vercel auto-detects Next.js. Confirm build settings:
+4. Confirm build settings (Vercel auto-detects Next.js):
    - **Build Command:** `npm run build`
    - **Output Directory:** `.next`
    - **Install Command:** `npm install`
 
-### 6b. Environment Variables
+### 6b. Environment variables
 
 Set these in the Vercel project settings:
 
-| Variable | Example | Description |
-|----------|---------|-------------|
-| `NEXT_PUBLIC_API_URL` | `https://api.yourdomain.com/v1` | Backend API base URL (include `/v1`) |
-| `NEXT_PUBLIC_APP_URL` | `https://yourdomain.com` | Frontend public URL |
-| `NEXT_PUBLIC_ENABLE_FOR_YOU` | `false` | Enable "For You" personalized feed |
-| `NEXT_PUBLIC_ENABLE_ENTITIES` | `false` | Enable entity pages |
-| `NEXT_PUBLIC_ENABLE_LINEAGE` | `true` | Enable paper lineage view |
-| `NEXT_PUBLIC_PWA_ENABLED` | `true` | Enable PWA support |
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://your-app.onrender.com/v1` (include `/v1`) |
+| `NEXT_PUBLIC_APP_URL` | `https://your-app.vercel.app` |
+| `NEXT_PUBLIC_ENABLE_FOR_YOU` | `false` |
+| `NEXT_PUBLIC_ENABLE_ENTITIES` | `false` |
+| `NEXT_PUBLIC_ENABLE_LINEAGE` | `true` |
+| `NEXT_PUBLIC_PWA_ENABLED` | `true` |
 
 ### 6c. Deploy
 
-Click **Deploy**. Vercel builds the Next.js app and deploys it to a `.vercel.app` URL. You can add a custom domain in Vercel's domain settings.
+Click **Deploy**. After it finishes, visit your `.vercel.app` URL to verify the app loads.
 
 ---
 
-## 7. Pipeline Worker Setup
+## Step 7. Custom Domains
 
-The pipeline worker runs `scripts/run_resilient_sync.py`, which continuously ingests feeds, clusters items, generates AI takeaways and deep dives, and updates trending scores.
+### API (Render)
 
-### Option A: Render Background Worker (Recommended)
+1. In the Render service settings, add your domain (e.g. `api.yourdomain.com`).
+2. Add the DNS records Render provides at your registrar.
+3. Wait for TLS certificate issuance.
+4. Update `CN_PUBLIC_APP_BASE_URL` to `https://api.yourdomain.com` in Render env vars.
+5. Update `CN_CORS_ALLOWED_ORIGINS` to include your frontend domain.
 
-Add a second service to your `render.yaml`:
+### Frontend (Vercel)
+
+1. In Vercel project settings > Domains, add your domain (e.g. `yourdomain.com`).
+2. Add the DNS records Vercel provides.
+3. Update `NEXT_PUBLIC_API_URL` to `https://api.yourdomain.com/v1`.
+4. Update `NEXT_PUBLIC_APP_URL` to `https://yourdomain.com`.
+5. Redeploy (Vercel > Deployments > Redeploy, or push a commit).
+
+---
+
+## Step 8. Verify Everything
+
+After completing steps 1-7, check each item:
+
+- [ ] **API is live:** `curl https://api.yourdomain.com/livez` returns `{"status":"ok"}`
+- [ ] **API is ready:** `curl https://api.yourdomain.com/readyz` returns `{"status":"ready"}`
+- [ ] **Frontend loads:** Visit `https://yourdomain.com`, confirm the app renders
+- [ ] **CORS working:** No CORS errors in browser dev console
+- [ ] **Pipeline ran:** Your local terminal shows completed ingest/cluster/tag cycles
+- [ ] **Frontend shows data:** The feed page displays clusters from the API
+- [ ] **Admin works:** `curl -H "Authorization: Bearer $CN_ADMIN_TOKEN" https://api.yourdomain.com/v1/admin/stats` returns data
+
+If the frontend shows no data, the most likely cause is that the pipeline hasn't completed a full cycle yet. Clusters start in `pending` status and become visible after the promote step.
+
+---
+
+## Step 9. Ongoing Operations
+
+### Auto-deploy
+
+Both Render and Vercel auto-deploy on push to your configured branch. Migrations run automatically on each Render deploy via the pre-deploy command.
+
+### Upgrading the pipeline
+
+When you're ready to run the pipeline unattended (instead of on your laptop), move it to a Render Background Worker. Add to `render.yaml`:
 
 ```yaml
   - type: worker
     name: curious-now-worker
     runtime: docker
-    plan: starter  # or free (sleeps when idle)
+    plan: starter
     dockerfilePath: ./Dockerfile
     dockerContext: .
     envVars:
       - key: CN_DATABASE_URL
         sync: false
-      - key: CN_REDIS_URL
-        sync: false
       - key: CN_LLM_ADAPTER
         sync: false
       - key: CN_LLM_MODEL
-        sync: false
-      - key: CN_ADMIN_TOKEN
-        sync: false
-      - key: CN_PUBLIC_APP_BASE_URL
         sync: false
     startCommand: >-
       python scripts/run_resilient_sync.py
@@ -233,74 +287,32 @@ Add a second service to your `render.yaml`:
       --run-migrations
 ```
 
-Then update the Blueprint in Render. Set the same `CN_DATABASE_URL`, `CN_REDIS_URL`, and LLM env vars.
+Set the same `CN_DATABASE_URL` and `CN_LLM_ADAPTER` env vars. The advisory lock ensures your local pipeline and the Render worker never run simultaneously — you can transition without downtime.
 
-### Option B: Render Cron Job
+### Rollback
 
-For lower-frequency pipeline runs, use a cron job instead:
-
-```yaml
-  - type: cron
-    name: curious-now-pipeline
-    runtime: docker
-    plan: starter
-    schedule: "*/10 * * * *"  # every 10 minutes
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    envVars:
-      # ... same as above
-    startCommand: >-
-      python scripts/run_resilient_sync.py
-      --throughput-profile balanced
-      --run-migrations
-```
-
-Without `--loop`, the script runs once and exits.
-
-### Throughput Profiles
-
-| Profile | Interval | Feeds | Items/Feed | Clusters | Takeaways | Deep Dives |
-|---------|----------|-------|------------|----------|-----------|------------|
-| `low` | 10 min | 10 | 100 | 400 | 60 | 20 |
-| `balanced` | 5 min | 25 | 200 | 1,200 | 120 | 40 |
-| `high` | 3 min | 50 | 250 | 2,500 | 250 | 80 |
-
-Use `low` for early launch or limited LLM budgets. Use `balanced` (default) for normal operation. Use `high` for large-scale ingestion.
-
-### LLM Configuration
-
-The pipeline uses an LLM for tagging, takeaways, and deep dives. Set `CN_LLM_ADAPTER` to one of:
-
-- `claude-cli` — Uses the Claude CLI (requires Claude credentials on the worker)
-- `codex-cli` — Uses the Codex CLI
-- `ollama` — Local Ollama instance (not suitable for cloud workers)
-- `mock` — Returns placeholder content (for testing only)
-
-`CN_LLM_MODEL` optionally overrides the adapter's default model.
+Use Render's deploy history or Vercel's deployment list to roll back to a previous version.
 
 ---
 
-## 8. CORS & Networking
+## Appendix A. CORS
 
 The backend automatically allows these origins:
 
 - `http://localhost:3000`, `http://localhost:3001` (local dev)
-- `https://curious.now`, `https://www.curious.now`, `https://staging.curious.now`
 - The value of `CN_PUBLIC_APP_BASE_URL`
 
-To add your Vercel frontend domain, set `CN_CORS_ALLOWED_ORIGINS` on the backend:
+To add more origins (e.g. your Vercel `.vercel.app` URL and your custom domain), set `CN_CORS_ALLOWED_ORIGINS` as a comma-separated list:
 
 ```
 CN_CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://your-app.vercel.app
 ```
 
-This is a comma-separated list. All origins are merged and deduplicated.
-
-`CN_PUBLIC_APP_BASE_URL` is also used to generate links in notifications and emails, so set it to the backend's public URL.
+All origins are merged and deduplicated.
 
 ---
 
-## 9. Environment Variables Reference
+## Appendix B. Environment Variables Reference
 
 ### Backend (`CN_*`)
 
@@ -309,9 +321,9 @@ All backend env vars are prefixed with `CN_` and configured in `curious_now/sett
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CN_DATABASE_URL` | *(required)* | Postgres connection string |
-| `CN_REDIS_URL` | `None` | Redis connection string |
+| `CN_REDIS_URL` | `None` | Redis connection string (optional) |
 | `CN_ADMIN_TOKEN` | `None` | Secret for admin endpoints |
-| `CN_PUBLIC_APP_BASE_URL` | `http://localhost:8000` | Public API URL (used for CORS + notification links) |
+| `CN_PUBLIC_APP_BASE_URL` | `http://localhost:8000` | Public API URL (used for CORS + links) |
 | `CN_CORS_ALLOWED_ORIGINS` | `None` | Comma-separated extra CORS origins |
 | `CN_COOKIE_SECURE` | `false` | Set `true` in production |
 | `CN_LOG_MAGIC_LINK_TOKENS` | `false` | Log magic link tokens (dev only) |
@@ -337,7 +349,7 @@ All backend env vars are prefixed with `CN_` and configured in `curious_now/sett
 | `CN_EMAIL_FROM_NAME` | `Curious Now` | Sender display name |
 | `CN_UNPAYWALL_EMAIL` | `None` | Email for Unpaywall API (paper hydration) |
 | `CN_DEFAULT_TIMEZONE` | `UTC` | Default timezone for notification scheduling |
-| `CN_DEFAULT_QUIET_HOURS_START` | `22:00` | Default quiet hours start (notifications paused) |
+| `CN_DEFAULT_QUIET_HOURS_START` | `22:00` | Default quiet hours start |
 | `CN_DEFAULT_QUIET_HOURS_END` | `08:00` | Default quiet hours end |
 
 ### Frontend (`NEXT_PUBLIC_*`)
@@ -355,63 +367,35 @@ Set in the Vercel dashboard or in `web/.env.local`.
 
 ---
 
-## 10. Post-Deploy Verification Checklist
-
-- [ ] **Backend health:** `GET /livez` → `{"status":"ok"}`
-- [ ] **Backend readiness:** `GET /readyz` → `{"status":"ready"}`
-- [ ] **Frontend loads:** Visit your Vercel URL, confirm the app renders
-- [ ] **Frontend fetches data:** The feed page loads clusters from the API
-- [ ] **CORS working:** No CORS errors in browser console
-- [ ] **Pipeline running:** Check worker logs in Render dashboard — you should see ingest/cluster/tag cycles
-- [ ] **Admin endpoints:** `curl -H "Authorization: Bearer $CN_ADMIN_TOKEN" https://api.yourdomain.com/v1/admin/stats` returns data
-
----
-
-## 11. Upgrading & Maintenance
-
-- **Auto-deploy:** Both Render and Vercel auto-deploy on push to your configured branch (configurable in each dashboard).
-- **Migrations:** Run automatically on each Render deploy via the pre-deploy command. No manual steps needed.
-- **Pipeline worker:** Restarts automatically after deploy. Uses PostgreSQL advisory locks to prevent duplicate runs.
-- **Rollback:** Use Render's deploy history or Vercel's deployment list to roll back to a previous version.
-
----
-
-## 12. Troubleshooting
+## Appendix C. Troubleshooting
 
 ### CORS Errors
 
-- Verify `CN_CORS_ALLOWED_ORIGINS` includes your frontend domain.
+- Verify `CN_CORS_ALLOWED_ORIGINS` includes your frontend domain (exact match, including `https://`).
 - Check that `CN_PUBLIC_APP_BASE_URL` is set to the backend's URL.
-- Both values are added to the allowed origins list automatically.
 
 ### Database Connection Failures
 
-- Confirm `CN_DATABASE_URL` uses `?sslmode=require` for Neon.
+- Confirm `CN_DATABASE_URL` ends with `?sslmode=require` for Neon.
 - Check that pgvector is enabled: `CREATE EXTENSION IF NOT EXISTS vector;`
-- Verify the Neon project is not suspended (free tier suspends after inactivity).
+- Verify the Neon project is on the Launch plan (free tier suspends after inactivity).
 
 ### Migration Failures
 
-- Check the pre-deploy command logs in Render.
-- Migrations are in `design_docs/migrations/` and run in alphabetical order.
-- You can run migrations manually: `python -m curious_now.cli migrate`
+- Check the pre-deploy command logs in the Render dashboard.
+- Migrations are in `design_docs/migrations/` and run in filename order.
+- Run migrations manually: `python -m curious_now.cli migrate`
 
-### Pipeline Not Running
+### Pipeline Errors
 
-- Check the worker service logs in Render for errors.
-- Verify `CN_LLM_ADAPTER` is set to a valid adapter with proper credentials.
-- Use `--allow-mock-llm` for testing without a real LLM.
-- Ensure source packs and topics have been seeded (section 5).
+- Check that `CN_LLM_ADAPTER` matches your local setup and the LLM is running.
+- Use `--allow-mock-llm` to skip LLM-dependent steps and test ingestion/clustering only.
+- Ensure source packs and topics have been seeded (step 4).
+- Use `--log-level DEBUG` for detailed output.
 
 ### Frontend Shows No Data
 
 - Confirm `NEXT_PUBLIC_API_URL` ends with `/v1`.
-- Verify the backend is healthy (`/readyz`).
-- Check that the pipeline has run at least one full cycle (ingest → cluster → promote).
-- Clusters start in `pending` status and are promoted to `active` automatically.
-
-### Free Tier Limitations
-
-- Render free web services sleep after 15 minutes of inactivity and cold-start on the next request.
-- Neon free tier suspends after 5 minutes of inactivity.
-- For always-on service, upgrade to Render's Starter plan ($7/mo) and Neon's Launch plan.
+- Verify the backend is healthy (`/readyz` returns 200).
+- Check that the pipeline has completed at least one full cycle (all steps through promote).
+- Clusters start in `pending` status and become visible after the promote step runs.
