@@ -362,9 +362,7 @@ def get_cluster_detail_or_redirect(
     if to_id:
         return RedirectResponse(redirect_to_cluster_id=to_id)
 
-    with conn.cursor() as cur:
-        cur.execute(
-            """
+    base_query = """
             SELECT
               id AS cluster_id,
               canonical_title,
@@ -388,10 +386,15 @@ def get_cluster_detail_or_redirect(
               summary_deep_dive_supporting_item_ids,
               deep_dive_skip_reason
             FROM story_clusters
-            WHERE id = %s{" AND status = %s" if require_status else ""};
-            """,
-            (cluster_id, require_status) if require_status else (cluster_id,),
-        )
+            WHERE id = %s"""
+    if require_status:
+        base_query += " AND status = %s"
+        params: tuple[Any, ...] = (cluster_id, require_status)
+    else:
+        params = (cluster_id,)
+
+    with conn.cursor() as cur:
+        cur.execute(base_query + ";", params)
         cluster = cur.fetchone()
     if not cluster:
         raise KeyError("cluster not found")
