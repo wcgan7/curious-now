@@ -21,3 +21,6 @@ web/node_modules/
 web/test-results/
 web/*.log
 web/tsconfig.tsbuildinfo
+web/public/sw.js
+web/public/workbox-*.js
+web/public/fallback-*.js
