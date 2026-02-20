@@ -32,11 +32,6 @@ def _sha256_hex(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _iter_sql_statements(sql: str) -> list[str]:
-    # CI prep migrations are simple DDL files; semicolon splitting is sufficient.
-    return [stmt.strip() for stmt in sql.split(";") if stmt.strip()]
-
-
 def _normalize_for_ci(statement: str) -> str:
     # The smoke DB is disposable, so concurrent index builds are unnecessary and
     # can fail if sent within a transactional context by the driver.
@@ -60,8 +55,7 @@ def main() -> int:
         with conn.cursor() as cur:
             for rel_path in MIGRATIONS:
                 sql = (repo_root / rel_path).read_text(encoding="utf-8")
-                for statement in _iter_sql_statements(sql):
-                    cur.execute(_normalize_for_ci(statement))
+                cur.execute(_normalize_for_ci(sql))
 
             source_id = uuid4()
             item_id = uuid4()
