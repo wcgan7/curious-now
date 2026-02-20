@@ -64,7 +64,6 @@ export default async function CategoriesPage() {
         {categories.length ? (
           <section className={styles.grid} aria-label="Category list">
             {categories.map((category) => {
-              const subtopicCount = subtopicsByCategory.get(category.topic_id) || 0;
               return (
                 <Link
                   key={category.topic_id}
@@ -75,9 +74,6 @@ export default async function CategoriesPage() {
                   {category.description_short ? (
                     <p className={styles.cardDesc}>{category.description_short}</p>
                   ) : null}
-                  <p className={styles.cardMeta}>
-                    {subtopicCount} subtopic{subtopicCount === 1 ? '' : 's'}
-                  </p>
                 </Link>
               );
             })}
