@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -47,6 +48,8 @@ from curious_now.topic_tagging import (
     tag_recent_clusters,
     tag_untagged_clusters_llm,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def cmd_migrate(_: argparse.Namespace) -> int:

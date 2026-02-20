@@ -23,6 +23,7 @@ MIGRATIONS = [
     "design_docs/migrations/2026_02_07_0200_stage3_deep_dive_skip_reason.sql",
     "design_docs/migrations/2026_02_10_0200_drop_confidence_band.sql",
     "design_docs/migrations/2026_02_10_0300_stage3_high_impact.sql",
+    "design_docs/migrations/2026_02_20_0300_impact_score_unification.sql",
 ]
 
 
