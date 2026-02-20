@@ -1401,6 +1401,21 @@ def _batch_update_item_hydration(
         )
 
 
+def _flush_pending_hydration_updates(
+    conn: psycopg.Connection[Any],
+    pending_updates: list[dict[str, Any]],
+    *,
+    force: bool = False,
+    flush_size: int = 10,
+) -> None:
+    if not pending_updates:
+        return
+    if not force and len(pending_updates) < flush_size:
+        return
+    _batch_update_item_hydration(conn, pending_updates)
+    pending_updates.clear()
+
+
 def hydrate_paper_text(
     conn: psycopg.Connection[Any],
     *,
@@ -1445,6 +1460,7 @@ def hydrate_paper_text(
                 "error_message": None,
                 "now_utc": now_utc,
             })
+            _flush_pending_hydration_updates(conn, pending_updates)
         except Exception as exc:
             failed += 1
             logger.warning("Paper text hydration failed for item %s: %s", item_id, exc)
@@ -1459,9 +1475,10 @@ def hydrate_paper_text(
                 "error_message": str(exc)[:4000],
                 "now_utc": now_utc,
             })
+            _flush_pending_hydration_updates(conn, pending_updates)
 
-    # Batch update all hydration results
-    _batch_update_item_hydration(conn, pending_updates)
+    # Flush any remaining hydration results.
+    _flush_pending_hydration_updates(conn, pending_updates, force=True)
 
     return HydratePaperTextResult(
         items_scanned=len(items),

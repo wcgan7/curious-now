@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 _PAPER_CONTENT_TYPES = ("preprint", "peer_reviewed")
 _PAYWALL_STATUS_CODES = {401, 402, 403}
+_HYDRATION_FLUSH_SIZE = 10
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,9 @@ def hydrate_article_text(
                 "error_message": None,
                 "now_utc": now_utc,
             })
+            if len(pending_updates) >= _HYDRATION_FLUSH_SIZE:
+                _batch_update_item_hydration(conn, pending_updates)
+                pending_updates.clear()
         except Exception as exc:
             failed += 1
             logger.warning("Article text hydration failed for item %s: %s", item_id, exc)
@@ -169,8 +173,11 @@ def hydrate_article_text(
                 "error_message": str(exc)[:4000],
                 "now_utc": now_utc,
             })
+            if len(pending_updates) >= _HYDRATION_FLUSH_SIZE:
+                _batch_update_item_hydration(conn, pending_updates)
+                pending_updates.clear()
 
-    # Batch update all hydration results
+    # Batch update any remaining hydration results.
     _batch_update_item_hydration(conn, pending_updates)
 
     return HydrateArticleTextResult(
