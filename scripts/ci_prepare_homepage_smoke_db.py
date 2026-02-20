@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -31,6 +32,22 @@ def _sha256_hex(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _iter_sql_statements(sql: str) -> list[str]:
+    # CI prep migrations are simple DDL files; semicolon splitting is sufficient.
+    return [stmt.strip() for stmt in sql.split(";") if stmt.strip()]
+
+
+def _normalize_for_ci(statement: str) -> str:
+    # The smoke DB is disposable, so concurrent index builds are unnecessary and
+    # can fail if sent within a transactional context by the driver.
+    return re.sub(
+        r"\bCREATE\s+INDEX\s+CONCURRENTLY\b",
+        "CREATE INDEX",
+        statement,
+        flags=re.IGNORECASE,
+    )
+
+
 def main() -> int:
     dsn = os.environ.get("CN_DATABASE_URL")
     if not dsn:
@@ -43,7 +60,8 @@ def main() -> int:
         with conn.cursor() as cur:
             for rel_path in MIGRATIONS:
                 sql = (repo_root / rel_path).read_text(encoding="utf-8")
-                cur.execute(sql)
+                for statement in _iter_sql_statements(sql):
+                    cur.execute(_normalize_for_ci(statement))
 
             source_id = uuid4()
             item_id = uuid4()
