@@ -18,7 +18,7 @@ see `CODE_REVIEW.md`.
 High-level, v0 functionality implemented in this codebase:
 
 - Stage 1: sources + item feed + admin source pack import
-- Stage 2: cluster feed (latest/trending/for_you), topics, cluster detail, search (Postgres FTS + optional trigram)
+- Stage 2: cluster feed (latest/in-focus/for_you), topics, cluster detail, search (Postgres FTS + optional trigram)
 - Stage 3: glossary lookup + glossary links on cluster detail
 - Stage 4: cluster update log + topic lineage graph
 - Stage 5–6: deferred for initial authless launch (no user accounts/sessions/personalization yet)
@@ -106,7 +106,7 @@ The core data flow is:
 1. **Ingest** RSS/Atom feeds into `items`
 2. **Cluster** unassigned items into `story_clusters` + `cluster_items`
 3. **Tag topics** (optional) by LLM classification into `cluster_topics`
-4. **Recompute trending** metrics
+4. **Recompute impact** metrics
 
 Ingestion content-type note:
 - Default classification is source-type based, with a Nature URL override.
@@ -122,7 +122,7 @@ Or do it step-by-step:
 - `python -m curious_now.cli ingest --force`
 - `python -m curious_now.cli cluster`
 - `python -m curious_now.cli tag-topics`
-- `python -m curious_now.cli recompute-trending`
+- `python -m curious_now.cli recompute-trending` (legacy command name; recomputes impact)
 
 ## Downtime-Tolerant Local Sync
 
@@ -138,7 +138,7 @@ Notes:
 - Uses retries with exponential backoff for each step.
 - Uses a Postgres advisory lock so overlapping resilient-sync processes skip instead of double-running.
 - Defaults to `untagged` topic mode to reduce wasted retag LLM calls.
-- Executes: ingest → hydrate-paper-text → cluster → tag → takeaways → deep-dives → trending.
+- Executes: ingest → hydrate-paper-text → cluster → tag → takeaways → deep-dives → impact (In Focus).
 - Includes throughput profiles:
   - `--throughput-profile low` for low daily volume / tighter LLM budget
   - `--throughput-profile balanced` (default) for typical early launch
@@ -197,7 +197,7 @@ All CLI commands are invoked as `python -m curious_now.cli ...` (or via the `mak
 - Cluster unassigned items: `python -m curious_now.cli cluster`
 - Seed topics (v1): `python -m curious_now.cli seed-topics-v1`
 - Tag topics for recent clusters: `python -m curious_now.cli tag-topics`
-- Recompute trending: `python -m curious_now.cli recompute-trending`
+- Recompute impact: `python -m curious_now.cli recompute-trending`
 - Run end-to-end pipeline: `python -m curious_now.cli pipeline --force`
 
 ## Admin Auth

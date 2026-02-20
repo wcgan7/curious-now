@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -23,11 +24,23 @@ MIGRATIONS = [
     "design_docs/migrations/2026_02_07_0200_stage3_deep_dive_skip_reason.sql",
     "design_docs/migrations/2026_02_10_0200_drop_confidence_band.sql",
     "design_docs/migrations/2026_02_10_0300_stage3_high_impact.sql",
+    "design_docs/migrations/2026_02_20_0300_impact_score_unification.sql",
 ]
 
 
 def _sha256_hex(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _normalize_for_ci(statement: str) -> str:
+    # The smoke DB is disposable, so concurrent index builds are unnecessary and
+    # can fail if sent within a transactional context by the driver.
+    return re.sub(
+        r"\bCREATE\s+INDEX\s+CONCURRENTLY\b",
+        "CREATE INDEX",
+        statement,
+        flags=re.IGNORECASE,
+    )
 
 
 def main() -> int:
@@ -42,7 +55,7 @@ def main() -> int:
         with conn.cursor() as cur:
             for rel_path in MIGRATIONS:
                 sql = (repo_root / rel_path).read_text(encoding="utf-8")
-                cur.execute(sql)
+                cur.execute(_normalize_for_ci(sql))
 
             source_id = uuid4()
             item_id = uuid4()

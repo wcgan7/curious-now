@@ -15,6 +15,7 @@ from curious_now.ai.llm_adapter import get_llm_adapter
 from curious_now.ai_generation import (
     enrich_stage3_for_clusters,
     generate_deep_dives_for_clusters,
+    generate_high_impact_for_clusters,
     generate_takeaways_for_clusters,
 )
 from curious_now.article_text_hydration import hydrate_article_text
@@ -22,7 +23,7 @@ from curious_now.clustering import (
     cluster_unassigned_items,
     load_clustering_config,
     promote_pending_clusters,
-    recompute_trending,
+    recompute_impact,
 )
 from curious_now.db import DB
 from curious_now.ingestion import ingest_due_feeds
@@ -49,6 +50,7 @@ class ThroughputProfile:
     takeaways_limit: int
     deep_dives_limit: int
     enrich_stage3_limit: int
+    high_impact_limit: int
 
 
 THROUGHPUT_PROFILES: dict[str, ThroughputProfile] = {
@@ -64,6 +66,7 @@ THROUGHPUT_PROFILES: dict[str, ThroughputProfile] = {
         takeaways_limit=60,
         deep_dives_limit=20,
         enrich_stage3_limit=40,
+        high_impact_limit=40,
     ),
     # Balanced default for first production rollout
     "balanced": ThroughputProfile(
@@ -77,6 +80,7 @@ THROUGHPUT_PROFILES: dict[str, ThroughputProfile] = {
         takeaways_limit=120,
         deep_dives_limit=40,
         enrich_stage3_limit=80,
+        high_impact_limit=80,
     ),
     # Higher throughput for larger feeds and faster freshness
     "high": ThroughputProfile(
@@ -90,6 +94,7 @@ THROUGHPUT_PROFILES: dict[str, ThroughputProfile] = {
         takeaways_limit=250,
         deep_dives_limit=80,
         enrich_stage3_limit=150,
+        high_impact_limit=150,
     ),
 }
 
@@ -98,7 +103,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Run a downtime-tolerant local sync loop for ingest -> cluster -> tag -> "
-            "takeaway -> deep-dive -> trending."
+            "takeaway -> deep-dive -> impact (In Focus)."
         )
     )
     parser.add_argument("--loop", action="store_true", default=False, help="Run continuously")
@@ -125,7 +130,13 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--hydrate-article-limit", type=int, default=None)
     parser.add_argument("--deep-dives-limit", type=int, default=None)
     parser.add_argument("--enrich-stage3-limit", type=int, default=None)
-    parser.add_argument("--trending-lookback-days", type=int, default=14)
+    parser.add_argument("--high-impact-limit", type=int, default=None)
+    parser.add_argument(
+        "--trending-lookback-days",
+        type=int,
+        default=14,
+        help="Deprecated and ignored (kept for backward compatibility).",
+    )
 
     parser.add_argument("--step-retries", type=int, default=3, help="Retries per step")
     parser.add_argument("--retry-backoff-seconds", type=float, default=5.0)
@@ -161,6 +172,8 @@ def _apply_profile_defaults(args: argparse.Namespace) -> None:
         args.deep_dives_limit = profile.deep_dives_limit
     if args.enrich_stage3_limit is None:
         args.enrich_stage3_limit = profile.enrich_stage3_limit
+    if args.high_impact_limit is None:
+        args.high_impact_limit = profile.high_impact_limit
 
 
 def _row_get(row: Any, key: str, idx: int) -> Any:
@@ -249,19 +262,29 @@ def _run_cycle(
     db: DB,
     clustering_config_path: Path | None,
 ) -> bool:
-    ok, conn_any = _run_with_retry(
+    ok, lock_conn_any = _run_with_retry(
         name="connect_db",
         step_fn=lambda: db.connect(autocommit=True),
         retries=args.step_retries,
         backoff_seconds=args.retry_backoff_seconds,
     )
-    if not ok or conn_any is None:
+    if not ok or lock_conn_any is None:
         return False
 
-    conn = conn_any
+    lock_conn = lock_conn_any
+
+    def run_db_step(name: str, step_fn: Callable[[Any], Any]) -> bool:
+        ok_step, _ = _run_with_retry(
+            name=name,
+            step_fn=lambda: _run_db_step_once(db=db, step_fn=step_fn),
+            retries=args.step_retries,
+            backoff_seconds=args.retry_backoff_seconds,
+        )
+        return ok_step
+
     try:
         if not _try_acquire_lock(
-            conn,
+            lock_conn,
             namespace=args.lock_namespace,
             lock_id=args.lock_id,
         ):
@@ -275,11 +298,9 @@ def _run_cycle(
 
             if args.run_migrations:
                 migrations_dir = Path(__file__).resolve().parents[1] / "design_docs" / "migrations"
-                ok, _ = _run_with_retry(
-                    name="migrate",
-                    step_fn=lambda: migrate(conn, migrations_dir),
-                    retries=args.step_retries,
-                    backoff_seconds=args.retry_backoff_seconds,
+                ok = run_db_step(
+                    "migrate",
+                    lambda conn: migrate(conn, migrations_dir),
                 )
                 if not ok and args.stop_on_error:
                     return False
@@ -309,163 +330,160 @@ def _run_cycle(
                 else:
                     logger.info("LLM health check passed: %s", health_detail)
 
-            ok, _ = _run_with_retry(
-                name="ingest",
-                step_fn=lambda: ingest_due_feeds(
+            ok = run_db_step(
+                "ingest",
+                lambda conn: ingest_due_feeds(
                     conn,
                     now_utc=now,
                     limit_feeds=args.limit_feeds,
                     max_items_per_feed=args.max_items_per_feed,
                     force=args.force_ingest,
                 ),
-                retries=args.step_retries,
-                backoff_seconds=args.retry_backoff_seconds,
             )
             if not ok and args.stop_on_error:
                 return False
 
-            ok, _ = _run_with_retry(
-                name="hydrate_paper_text",
-                step_fn=lambda: hydrate_paper_text(
+            ok = run_db_step(
+                "hydrate_paper_text",
+                lambda conn: hydrate_paper_text(
                     conn,
                     limit=args.hydrate_limit,
                     now_utc=now,
                 ),
-                retries=args.step_retries,
-                backoff_seconds=args.retry_backoff_seconds,
             )
             if not ok and args.stop_on_error:
                 return False
 
-            ok, _ = _run_with_retry(
-                name="hydrate_article_text",
-                step_fn=lambda: hydrate_article_text(
+            ok = run_db_step(
+                "hydrate_article_text",
+                lambda conn: hydrate_article_text(
                     conn,
                     limit=args.hydrate_article_limit,
                 ),
-                retries=args.step_retries,
-                backoff_seconds=args.retry_backoff_seconds,
             )
             if not ok and args.stop_on_error:
                 return False
 
             cfg = load_clustering_config(clustering_config_path)
-            ok, _ = _run_with_retry(
-                name="cluster",
-                step_fn=lambda: cluster_unassigned_items(
+            ok = run_db_step(
+                "cluster",
+                lambda conn: cluster_unassigned_items(
                     conn,
                     now_utc=now,
                     limit_items=args.cluster_limit_items,
                     cfg=cfg,
                 ),
-                retries=args.step_retries,
-                backoff_seconds=args.retry_backoff_seconds,
             )
             if not ok and args.stop_on_error:
                 return False
 
             if llm_ready:
                 if args.tagging_mode in {"untagged", "both"}:
-                    ok, _ = _run_with_retry(
-                        name="tag_untagged_llm",
-                        step_fn=lambda: tag_untagged_clusters_llm(
+                    ok = run_db_step(
+                        "tag_untagged_llm",
+                        lambda conn: tag_untagged_clusters_llm(
                             conn,
                             now_utc=now,
                             limit_clusters=args.tag_limit_clusters,
                             max_topics_per_cluster=args.max_topics_per_cluster,
                         ),
-                        retries=args.step_retries,
-                        backoff_seconds=args.retry_backoff_seconds,
                     )
                     if not ok and args.stop_on_error:
                         return False
 
                 if args.tagging_mode in {"recent", "both"}:
-                    ok, _ = _run_with_retry(
-                        name="tag_recent",
-                        step_fn=lambda: tag_recent_clusters(
+                    ok = run_db_step(
+                        "tag_recent",
+                        lambda conn: tag_recent_clusters(
                             conn,
                             now_utc=now,
                             lookback_days=args.tag_lookback_days,
                             limit_clusters=args.tag_limit_clusters,
                             max_topics_per_cluster=args.max_topics_per_cluster,
                         ),
-                        retries=args.step_retries,
-                        backoff_seconds=args.retry_backoff_seconds,
                     )
                     if not ok and args.stop_on_error:
                         return False
 
-                ok, _ = _run_with_retry(
-                    name="generate_takeaways",
-                    step_fn=lambda: generate_takeaways_for_clusters(
+                ok = run_db_step(
+                    "generate_takeaways",
+                    lambda conn: generate_takeaways_for_clusters(
                         conn,
                         limit=args.takeaways_limit,
                         adapter=adapter,
                     ),
-                    retries=args.step_retries,
-                    backoff_seconds=args.retry_backoff_seconds,
                 )
                 if not ok and args.stop_on_error:
                     return False
 
-                ok, _ = _run_with_retry(
-                    name="generate_deep_dives",
-                    step_fn=lambda: generate_deep_dives_for_clusters(
+                ok = run_db_step(
+                    "generate_deep_dives",
+                    lambda conn: generate_deep_dives_for_clusters(
                         conn,
                         limit=args.deep_dives_limit,
                         adapter=adapter,
                     ),
-                    retries=args.step_retries,
-                    backoff_seconds=args.retry_backoff_seconds,
                 )
                 if not ok and args.stop_on_error:
                     return False
 
-                ok, _ = _run_with_retry(
-                    name="enrich_stage3",
-                    step_fn=lambda: enrich_stage3_for_clusters(
+                ok = run_db_step(
+                    "enrich_stage3",
+                    lambda conn: enrich_stage3_for_clusters(
                         conn,
                         limit=args.enrich_stage3_limit,
                         adapter=adapter,
                     ),
-                    retries=args.step_retries,
-                    backoff_seconds=args.retry_backoff_seconds,
                 )
                 if not ok and args.stop_on_error:
                     return False
 
-            ok, _ = _run_with_retry(
-                name="promote_pending_clusters",
-                step_fn=lambda: promote_pending_clusters(conn),
-                retries=args.step_retries,
-                backoff_seconds=args.retry_backoff_seconds,
+                ok = run_db_step(
+                    "generate_high_impact",
+                    lambda conn: generate_high_impact_for_clusters(
+                        conn,
+                        limit=args.high_impact_limit,
+                        llm_blend=True,
+                        adapter=adapter,
+                    ),
+                )
+                if not ok and args.stop_on_error:
+                    return False
+
+            ok = run_db_step(
+                "promote_pending_clusters",
+                lambda conn: promote_pending_clusters(conn),
             )
             if not ok and args.stop_on_error:
                 return False
 
-            ok, _ = _run_with_retry(
-                name="recompute_trending",
-                step_fn=lambda: recompute_trending(
+            ok = run_db_step(
+                "recompute_impact",
+                lambda conn: recompute_impact(
                     conn,
                     now_utc=now,
-                    lookback_days=args.trending_lookback_days,
                 ),
-                retries=args.step_retries,
-                backoff_seconds=args.retry_backoff_seconds,
             )
             if not ok and args.stop_on_error:
                 return False
 
             return True
         finally:
-            _release_lock(
-                conn,
-                namespace=args.lock_namespace,
-                lock_id=args.lock_id,
-            )
+            try:
+                _release_lock(
+                    lock_conn,
+                    namespace=args.lock_namespace,
+                    lock_id=args.lock_id,
+                )
+            except Exception as exc:
+                logger.warning("Failed to release advisory lock cleanly: %s", exc)
     finally:
-        conn.close()
+        lock_conn.close()
+
+
+def _run_db_step_once(*, db: DB, step_fn: Callable[[Any], Any]) -> Any:
+    with db.connect(autocommit=True) as conn:
+        return step_fn(conn)
 
 
 def main() -> int:
@@ -477,7 +495,7 @@ def main() -> int:
     logger.info(
         "Throughput profile=%s interval=%ss feeds=%s items_per_feed=%s "
         "hydrate_paper=%s hydrate_article=%s cluster_items=%s tag_clusters=%s "
-        "takeaways=%s deep_dives=%s enrich_stage3=%s",
+        "takeaways=%s deep_dives=%s enrich_stage3=%s high_impact=%s",
         args.throughput_profile,
         args.interval_seconds,
         args.limit_feeds,
@@ -489,7 +507,10 @@ def main() -> int:
         args.takeaways_limit,
         args.deep_dives_limit,
         args.enrich_stage3_limit,
+        args.high_impact_limit,
     )
+    if args.trending_lookback_days != 14:
+        logger.warning("--trending-lookback-days is deprecated and ignored.")
 
     settings = get_settings()
     db = DB(settings.database_url, statement_timeout_ms=settings.statement_timeout_ms)

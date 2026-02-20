@@ -130,7 +130,7 @@ Both commands are idempotent — safe to run multiple times. You should see log 
 
 ## Step 5. Run the Pipeline Locally
 
-This is the core of your setup. The pipeline ingests feeds, hydrates full text, clusters items, generates AI content, and computes trending scores — all using your local LLM.
+This is the core of your setup. The pipeline ingests feeds, hydrates full text, clusters items, generates AI content, and computes impact scores (In Focus) — all using your local LLM.
 
 ### 5a. Create a `.env` file
 
@@ -154,7 +154,7 @@ python scripts/run_resilient_sync.py \
   --stop-on-error
 ```
 
-This runs: ingest > hydrate papers > hydrate articles > cluster > tag > takeaways > deep dives > enrich > promote > trending — then exits.
+This runs: ingest > hydrate papers > hydrate articles > cluster > tag > takeaways > deep dives > enrich > promote > impact (In Focus) — then exits.
 
 Watch the output. You should see each step complete with `ok`. If a step fails, `--stop-on-error` halts immediately so you can fix it.
 
