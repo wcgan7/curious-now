@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const OFFLINE_RECHECK_MS = 15_000;
 const PROBE_TIMEOUT_MS = 3_000;
@@ -8,29 +8,44 @@ const PROBE_TIMEOUT_MS = 3_000;
 async function probeConnectivity(): Promise<boolean> {
   if (typeof window === 'undefined') return true;
 
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  // Try two same-origin resources to avoid false negatives from one blocked path.
+  const probePaths = ['/manifest.json', '/'];
 
-  try {
-    const probeUrl = new URL('/manifest.json', window.location.origin);
-    probeUrl.searchParams.set('_', String(Date.now()));
-    await fetch(probeUrl, {
-      method: 'HEAD',
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    return true;
-  } catch {
-    return false;
-  } finally {
-    window.clearTimeout(timeoutId);
+  for (const path of probePaths) {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller
+      ? window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
+      : null;
+
+    try {
+      const probeUrl = new URL(path, window.location.origin);
+      probeUrl.searchParams.set('_', String(Date.now()));
+      const res = await fetch(probeUrl, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'same-origin',
+        signal: controller?.signal,
+      });
+      if (res.status < 500) return true;
+    } catch {
+      // Try next probe path.
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    }
   }
+
+  return false;
 }
 
 export function useNetworkStatus() {
   const [isOnline, setIsOnline] = useState(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
+  const isOnlineRef = useRef(isOnline);
+
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
 
   useEffect(() => {
     let disposed = false;
@@ -60,9 +75,7 @@ export function useNetworkStatus() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     const intervalId = window.setInterval(() => {
-      if (!navigator.onLine) {
-        void reconcile();
-      }
+      if (!isOnlineRef.current) void reconcile();
     }, OFFLINE_RECHECK_MS);
 
     return () => {
