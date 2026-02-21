@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,7 +23,7 @@ from curious_now.clustering import (
     cluster_unassigned_items,
     load_clustering_config,
     promote_pending_clusters,
-    recompute_trending,
+    recompute_impact,
 )
 from curious_now.db import DB
 from curious_now.impact_scoring import get_high_impact_debug_report, get_high_impact_rate_windows
@@ -47,6 +48,8 @@ from curious_now.topic_tagging import (
     tag_recent_clusters,
     tag_untagged_clusters_llm,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def cmd_migrate(_: argparse.Namespace) -> int:
@@ -225,9 +228,11 @@ def cmd_recompute_trending(args: argparse.Namespace) -> int:
     get_settings()
     db = _pipeline_db()
     now = _parse_now(args.now)
+    if int(args.lookback_days) != 14:
+        logger.warning("--lookback-days is deprecated and ignored.")
     with db.connect(autocommit=True) as conn:
-        n = recompute_trending(conn, now_utc=now, lookback_days=int(args.lookback_days))
-    print(f"Recomputed trending for {n} clusters.")
+        n = recompute_impact(conn, now_utc=now)
+    print(f"Recomputed impact for {n} clusters.")
     return 0
 
 
@@ -495,9 +500,11 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
         promoted = promote_pending_clusters(conn)
     print(f"Promoted {promoted} pending clusters to active.")
 
+    if int(args.trending_lookback_days) != 14:
+        logger.warning("--trending-lookback-days is deprecated and ignored.")
     with db.connect(autocommit=True) as conn:
-        n = recompute_trending(conn, now_utc=now, lookback_days=int(args.trending_lookback_days))
-    print(f"Recomputed trending for {n} clusters.")
+        n = recompute_impact(conn, now_utc=now)
+    print(f"Recomputed impact for {n} clusters.")
     return 0
 
 
@@ -830,9 +837,14 @@ def main(argv: list[str] | None = None) -> int:
     p_cluster.set_defaults(func=cmd_cluster)
 
     p_trending = sub.add_parser(
-        "recompute-trending", help="Recompute trending metrics for clusters"
+        "recompute-trending", help="Recompute impact metrics for clusters (legacy alias)"
     )
-    p_trending.add_argument("--lookback-days", type=int, default=14)
+    p_trending.add_argument(
+        "--lookback-days",
+        type=int,
+        default=14,
+        help="Deprecated and ignored (kept for backward compatibility).",
+    )
     p_trending.add_argument(
         "--now", type=str, default=None, help="Override current time (ISO-8601)"
     )
@@ -937,7 +949,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tag_llm.set_defaults(func=cmd_tag_untagged_llm)
 
     p_pipeline = sub.add_parser(
-        "pipeline", help="Run ingest → cluster → tag → trending (end-to-end)"
+        "pipeline", help="Run ingest → cluster → tag → impact (end-to-end)"
     )
     p_pipeline.add_argument("--source-pack", type=str, default=None)
     p_pipeline.add_argument("--seed-topics", action="store_true", default=False)
@@ -992,7 +1004,12 @@ def main(argv: list[str] | None = None) -> int:
     p_pipeline.add_argument("--tag-lookback-days", type=int, default=14)
     p_pipeline.add_argument("--tag-limit-clusters", type=int, default=500)
     p_pipeline.add_argument("--tag-max-topics-per-cluster", type=int, default=3)
-    p_pipeline.add_argument("--trending-lookback-days", type=int, default=14)
+    p_pipeline.add_argument(
+        "--trending-lookback-days",
+        type=int,
+        default=14,
+        help="Deprecated and ignored (kept for backward compatibility).",
+    )
     p_pipeline.add_argument(
         "--now", type=str, default=None, help="Override current time (ISO-8601)"
     )

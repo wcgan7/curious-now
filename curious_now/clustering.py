@@ -485,10 +485,34 @@ def _recompute_cluster_metrics(
                   + LEAST(distinct_source_count, 10) * 0.3
                 )
                 * exp(-EXTRACT(EPOCH FROM (%s - updated_at)) / 86400.0)
-              )
+              ),
+              impact_score = GREATEST(
+                0.0,
+                LEAST(
+                  1.0,
+                  (
+                    (
+                      0.82 * COALESCE(high_impact_final_score, high_impact_provisional_score, 0.0)
+                      + 0.18 * LEAST(
+                        1.0,
+                        (
+                          0.55 * LN(1 + velocity_6h) / LN(6)
+                          + 0.30 * LN(1 + velocity_24h) / LN(12)
+                          + 0.15 * (LEAST(distinct_source_count, 10) / 10.0)
+                        )
+                      )
+                    )
+                    * (
+                      0.90
+                      + 0.10 * exp(-EXTRACT(EPOCH FROM (%s - updated_at)) / (3600.0 * 120.0))
+                    )
+                  )
+                )
+              ),
+              impact_assessed_at = %s
             WHERE id = %s;
             """,
-            (now_utc, now_utc, cluster_id),
+            (now_utc, now_utc, now_utc, now_utc, cluster_id),
         )
 
 
@@ -530,7 +554,31 @@ def _batch_recompute_cluster_metrics(
               trending_score = (
                 (cm.velocity_6h + 0.5 * cm.velocity_24h + LEAST(cm.distinct_source_count, 10) * 0.3)
                 * exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / 86400.0)
-              )
+              ),
+              impact_score = GREATEST(
+                0.0,
+                LEAST(
+                  1.0,
+                  (
+                    (
+                      0.82 * COALESCE(c.high_impact_final_score, c.high_impact_provisional_score, 0.0)
+                      + 0.18 * LEAST(
+                        1.0,
+                        (
+                          0.55 * LN(1 + cm.velocity_6h) / LN(6)
+                          + 0.30 * LN(1 + cm.velocity_24h) / LN(12)
+                          + 0.15 * (LEAST(cm.distinct_source_count, 10) / 10.0)
+                        )
+                      )
+                    )
+                    * (
+                      0.90
+                      + 0.10 * exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / (3600.0 * 120.0))
+                    )
+                  )
+                )
+              ),
+              impact_assessed_at = %s
             FROM cluster_metrics cm
             WHERE c.id = cm.cluster_id;
             """,
@@ -538,6 +586,8 @@ def _batch_recompute_cluster_metrics(
                 now_utc, now_utc,
                 [str(c) for c in cluster_ids],
                 now_utc, now_utc,
+                now_utc,
+                now_utc,
                 now_utc,
             ),
         )
@@ -1016,16 +1066,22 @@ def cluster_unassigned_items(
     )
 
 
-def recompute_trending(
+def recompute_impact(
     conn: psycopg.Connection[Any],
     *,
     now_utc: datetime | None = None,
     lookback_days: int = 14,
 ) -> int:
+    """Recompute impact-related cluster metrics and in-focus labels.
+
+    `lookback_days` is retained only for backward compatibility and is ignored.
+    """
     now = now_utc or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("now_utc must be timezone-aware")
-    window_start = now - timedelta(days=lookback_days)
+    if int(lookback_days) != 14:
+        logger.warning("recompute_impact: lookback_days is deprecated and ignored.")
+    _ = lookback_days  # Retained for backward-compatible API shape.
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -1041,7 +1097,7 @@ def recompute_trending(
                  WHERE ci.cluster_id = c.id) AS src_count,
                 exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / 86400.0) AS decay
               FROM story_clusters c
-              WHERE c.status IN ('active', 'pending') AND c.updated_at >= %s
+              WHERE c.status IN ('active', 'pending')
             )
             UPDATE story_clusters c
             SET
@@ -1051,13 +1107,66 @@ def recompute_trending(
               recency_score = m.decay,
               trending_score = (
                 (m.v6h + 0.5 * m.v24h + LEAST(m.src_count, 10) * 0.3) * m.decay
-              )
+              ),
+              impact_score = GREATEST(
+                0.0,
+                LEAST(
+                  1.0,
+                  (
+                    (
+                      0.82 * COALESCE(c.high_impact_final_score, c.high_impact_provisional_score, 0.0)
+                      + 0.18 * LEAST(
+                        1.0,
+                        (
+                          0.55 * LN(1 + m.v6h) / LN(6)
+                          + 0.30 * LN(1 + m.v24h) / LN(12)
+                          + 0.15 * (LEAST(m.src_count, 10) / 10.0)
+                        )
+                      )
+                    )
+                    * (0.90 + 0.10 * exp(-EXTRACT(EPOCH FROM (%s - c.updated_at)) / (3600.0 * 120.0)))
+                  )
+                )
+              ),
+              impact_assessed_at = %s
             FROM metrics m
             WHERE c.id = m.id;
             """,
-            (now, now, now, window_start),
+            (now, now, now, now, now),
         )
-        return int(cur.rowcount)
+        scored = int(cur.rowcount)
+        cur.execute(
+            """
+            WITH ranked AS (
+              SELECT
+                id,
+                row_number() OVER (ORDER BY impact_score DESC, updated_at DESC, id DESC) AS rn,
+                GREATEST(1, CEIL(COUNT(*) OVER () * 0.01)::int) AS k
+              FROM story_clusters
+              WHERE status = 'active'
+            )
+            UPDATE story_clusters c
+            SET in_focus_label = (r.rn <= r.k)
+            FROM ranked r
+            WHERE c.id = r.id
+              AND c.in_focus_label IS DISTINCT FROM (r.rn <= r.k);
+            """
+        )
+        return scored
+
+
+def recompute_trending(
+    conn: psycopg.Connection[Any],
+    *,
+    now_utc: datetime | None = None,
+    lookback_days: int = 14,
+) -> int:
+    """Backward-compatible alias for recompute_impact."""
+    return recompute_impact(
+        conn,
+        now_utc=now_utc,
+        lookback_days=lookback_days,
+    )
 
 
 def promote_pending_clusters(

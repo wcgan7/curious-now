@@ -141,4 +141,9 @@ jobs:
 
       - name: Print API log on failure
         if: failure()
-        run: cat /tmp/api.log
+        run: |
+          if [ -f /tmp/api.log ]; then
+            cat /tmp/api.log
+          else
+            echo "/tmp/api.log not found"
+          fi

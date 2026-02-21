@@ -1,8 +1,7 @@
 import { FeedPage } from '@/components/feed/FeedPage/FeedPage';
 
-export const metadata = { title: 'In Focus | Curious Now', description: 'Trending science stories curated from multiple sources.' };
+export const metadata = { title: 'In Focus | Curious Now', description: 'High-impact science stories with recency-aware ranking.' };
 
 export default async function TrendingPage() {
   return <FeedPage tab="trending" />;
 }
-

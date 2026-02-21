@@ -213,10 +213,8 @@ def _cluster_cards_from_rows(
                 method_badges=[str(x) for x in _normalize_json_array(r.get("method_badges"))],
                 takeaway=r.get("takeaway"),
                 anti_hype_flags=[str(x) for x in _normalize_json_array(r.get("anti_hype_flags"))],
-                high_impact_label=bool(r.get("high_impact_label") or False),
-                high_impact_reasons=[
-                    str(x) for x in _normalize_json_array(r.get("high_impact_reasons"))
-                ],
+                impact_score=float(r.get("impact_score") or 0.0),
+                in_focus_label=bool(r.get("in_focus_label") or False),
                 featured_image_url=featured_images.get(r["cluster_id"]),
                 deep_dive_skip_reason=r.get("deep_dive_skip_reason"),
             )
@@ -281,7 +279,7 @@ def get_feed(
     order_sql = (
         "c.updated_at DESC"
         if tab == "latest"
-        else "c.high_impact_final_score DESC NULLS LAST, c.trending_score DESC, c.updated_at DESC"
+        else "c.impact_score DESC, c.updated_at DESC"
     )
     where_sql = " AND ".join(where)
 
@@ -297,8 +295,8 @@ def get_feed(
               c.method_badges,
               c.deep_dive_skip_reason,
               c.anti_hype_flags,
-              c.high_impact_label,
-              c.high_impact_reasons,
+              c.impact_score,
+              c.in_focus_label,
               (
                 SELECT array_agg(DISTINCT i.content_type)
                 FROM cluster_items ci
@@ -377,10 +375,8 @@ def get_cluster_detail_or_redirect(
               what_could_change_this,
               method_badges,
               anti_hype_flags,
-              high_impact_label,
-              high_impact_reasons,
-              high_impact_final_score,
-              high_impact_confidence,
+              impact_score,
+              in_focus_label,
               takeaway_supporting_item_ids,
               summary_intuition_supporting_item_ids,
               summary_deep_dive_supporting_item_ids,
@@ -472,20 +468,8 @@ def get_cluster_detail_or_redirect(
         ],
         method_badges=[str(x) for x in _normalize_json_array(cluster.get("method_badges"))],
         anti_hype_flags=[str(x) for x in _normalize_json_array(cluster.get("anti_hype_flags"))],
-        high_impact_label=bool(cluster.get("high_impact_label") or False),
-        high_impact_reasons=[
-            str(x) for x in _normalize_json_array(cluster.get("high_impact_reasons"))
-        ],
-        high_impact_final_score=(
-            float(cluster["high_impact_final_score"])
-            if cluster.get("high_impact_final_score") is not None
-            else None
-        ),
-        high_impact_confidence=(
-            float(cluster["high_impact_confidence"])
-            if cluster.get("high_impact_confidence") is not None
-            else None
-        ),
+        impact_score=float(cluster.get("impact_score") or 0.0),
+        in_focus_label=bool(cluster.get("in_focus_label") or False),
         takeaway_supporting_item_ids=list(_normalize_json_array(cluster.get("takeaway_supporting_item_ids"))),
         summary_intuition_supporting_item_ids=list(
             _normalize_json_array(cluster.get("summary_intuition_supporting_item_ids"))
@@ -573,8 +557,8 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
               c.method_badges,
               c.deep_dive_skip_reason,
               c.anti_hype_flags,
-              c.high_impact_label,
-              c.high_impact_reasons,
+              c.impact_score,
+              c.in_focus_label,
               (
                 SELECT array_agg(DISTINCT i.content_type)
                 FROM cluster_items ci
@@ -602,8 +586,8 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
               c.method_badges,
               c.deep_dive_skip_reason,
               c.anti_hype_flags,
-              c.high_impact_label,
-              c.high_impact_reasons,
+              c.impact_score,
+              c.in_focus_label,
               (
                 SELECT array_agg(DISTINCT i.content_type)
                 FROM cluster_items ci
@@ -613,7 +597,7 @@ def get_topic_detail(conn: psycopg.Connection[Any], *, topic_id: UUID) -> TopicD
             FROM story_clusters c
             JOIN cluster_topics ct ON ct.cluster_id = c.id
             WHERE {_topic_match_clause_sql()} AND c.status = 'active'
-            ORDER BY c.trending_score DESC, c.updated_at DESC
+            ORDER BY c.impact_score DESC, c.updated_at DESC
             LIMIT 20;
             """,
             (topic_id, topic_id),
@@ -640,8 +624,8 @@ def search(conn: psycopg.Connection[Any], *, query: str) -> SearchResponse:
           c.method_badges,
           c.deep_dive_skip_reason,
           c.anti_hype_flags,
-          c.high_impact_label,
-          c.high_impact_reasons,
+          c.impact_score,
+          c.in_focus_label,
           (
             SELECT array_agg(DISTINCT i.content_type)
             FROM cluster_items ci

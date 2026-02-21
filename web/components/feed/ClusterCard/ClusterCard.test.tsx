@@ -103,8 +103,7 @@ describe('ClusterCard', () => {
           content_type_badges: [],
           takeaway: null,
           anti_hype_flags: [],
-          high_impact_label: true,
-          high_impact_reasons: [],
+          in_focus_label: true,
         }}
       />
     );
@@ -124,8 +123,7 @@ describe('ClusterCard', () => {
           content_type_badges: [],
           takeaway: null,
           anti_hype_flags: [],
-          high_impact_label: false,
-          high_impact_reasons: [],
+          in_focus_label: false,
         }}
       />
     );

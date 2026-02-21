@@ -65,7 +65,7 @@ export function TopicPage({ detail }: { detail: TopicDetail }) {
         {trendingClusters.length ? (
           <section className={styles.section} aria-labelledby="trending-heading">
             <h2 id="trending-heading" className={styles.h2}>
-              {isCategory ? 'Trending in this category' : 'Trending in this topic'}
+              {isCategory ? 'In Focus in this category' : 'In Focus in this topic'}
             </h2>
             <div className={styles.list}>
               {trendingClusters.map((c) => (

@@ -32,7 +32,7 @@ export function ClusterCard({
     .filter((topic) => !categoryNameSet.has(topic.name.toLowerCase()))
     .slice(0, 2);
   const sourceTypeBadges = cluster.content_type_badges || [];
-  const showInFocus = Boolean(cluster.high_impact_label);
+  const showInFocus = Boolean(cluster.in_focus_label);
 
   return (
     <Card as="article" href={`/story/${cluster.cluster_id}`}>

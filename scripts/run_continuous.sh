@@ -15,7 +15,7 @@ while true; do
     echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting pipeline run"
     echo "========================================"
 
-    # 1. Run main pipeline (ingest → hydrate → cluster → tag → trending)
+    # 1. Run main pipeline (ingest → hydrate → cluster → tag → impact (In Focus))
     python -m curious_now.cli pipeline \
         --hydrate-paper-text \
         --hydrate-article-text

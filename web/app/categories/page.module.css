@@ -67,12 +67,6 @@
   font-size: 0.95rem;
 }
 
-.cardMeta {
-  margin: 10px 0 0;
-  color: var(--text-3);
-  font-size: 0.82rem;
-}
-
 .empty {
   color: var(--text-2);
 }
