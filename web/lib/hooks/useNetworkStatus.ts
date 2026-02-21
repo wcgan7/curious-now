@@ -38,10 +38,9 @@ async function probeConnectivity(): Promise<boolean> {
 }
 
 export function useNetworkStatus() {
-  const [isOnline, setIsOnline] = useState(() =>
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
-  const isOnlineRef = useRef(isOnline);
+  // Start optimistic — only show the banner after a probe confirms we're offline.
+  const [isOnline, setIsOnline] = useState(true);
+  const isOnlineRef = useRef(true);
 
   useEffect(() => {
     isOnlineRef.current = isOnline;
@@ -53,12 +52,7 @@ export function useNetworkStatus() {
       if (!disposed) setIsOnline(value);
     };
 
-    const reconcile = async () => {
-      if (typeof navigator === 'undefined') return;
-      if (navigator.onLine) {
-        setOnlineSafe(true);
-        return;
-      }
+    const probe = async () => {
       const reachable = await probeConnectivity();
       setOnlineSafe(reachable);
     };
@@ -67,15 +61,15 @@ export function useNetworkStatus() {
       setOnlineSafe(true);
     }
     function handleOffline() {
-      // Validate connectivity because navigator.onLine can report false positives.
-      void reconcile();
+      // Don't trust the event — probe to verify actual connectivity.
+      void probe();
     }
 
-    void reconcile();
+    // Don't probe on mount — we're optimistic and the page just loaded successfully.
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     const intervalId = window.setInterval(() => {
-      if (!isOnlineRef.current) void reconcile();
+      if (!isOnlineRef.current) void probe();
     }, OFFLINE_RECHECK_MS);
 
     return () => {
