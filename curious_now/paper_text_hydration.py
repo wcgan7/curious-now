@@ -581,8 +581,8 @@ def _clean_full_text(value: str | None) -> str | None:
         or re.search(r"</\s*[a-zA-Z][^>]*>", text)
     )
     if looks_like_html:
-        text = re.sub(r"<script[\\s\\S]*?</script>", " ", text, flags=re.IGNORECASE)
-        text = re.sub(r"<style[\\s\\S]*?</style>", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"<script[\s\S]*?</script>", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.IGNORECASE)
         text = re.sub(r"<[^>]+>", "\n", text)
 
     normalized_lines = _normalize_extracted_lines(text.split("\n"))
