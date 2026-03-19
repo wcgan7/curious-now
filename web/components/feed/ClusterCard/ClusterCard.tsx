@@ -3,6 +3,7 @@ import { formatDistanceToNow } from 'date-fns';
 import type { ClusterCard as ClusterCardType } from '@/types/api';
 import { Card } from '@/components/ui/Card/Card';
 import { Badge } from '@/components/ui/Badge/Badge';
+import { ClusterCardImage } from './ClusterCardImage';
 
 import styles from './ClusterCard.module.css';
 
@@ -37,18 +38,7 @@ export function ClusterCard({
   return (
     <Card as="article" href={`/story/${cluster.cluster_id}`}>
       {cluster.featured_image_url ? (
-        <div className={styles.imageWrapper}>
-          <img
-            src={cluster.featured_image_url}
-            alt={cluster.canonical_title}
-            className={styles.image}
-            loading="lazy"
-            onError={(e) => {
-              const wrapper = (e.target as HTMLElement).parentElement;
-              if (wrapper) wrapper.style.display = 'none';
-            }}
-          />
-        </div>
+        <ClusterCardImage src={cluster.featured_image_url} alt={cluster.canonical_title} />
       ) : null}
       <Card.Content>
         {topCategories.length || topSubtopics.length || showInFocus ? (
