@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import logging
 import re
+
 from psycopg.rows import dict_row
 
 from curious_now.db import DB
