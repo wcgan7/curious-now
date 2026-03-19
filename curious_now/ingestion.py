@@ -738,7 +738,7 @@ def ingest_due_feeds(
                 published_at = _parse_published_at(e)
                 author = e.get("author") if isinstance(e.get("author"), str) else None
                 snippet = _get_entry_snippet(e)
-                arxiv_id, doi = _extract_ids(f"{title} {url}")
+                arxiv_id, doi = _extract_ids(f"{title} {url} {snippet or ''}")
                 content_type = _guess_content_type(f.source_type, url, arxiv_id, doi)
                 image_url = _extract_image_url(e)
                 canonical_hash = _sha256_hex(canonical_url)
