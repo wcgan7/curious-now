@@ -200,6 +200,10 @@ export function StoryPage({
                 alt={cluster.canonical_title}
                 className={styles.heroImg}
                 loading="eager"
+                onError={(e) => {
+                  const btn = (e.target as HTMLElement).parentElement;
+                  if (btn) btn.style.display = 'none';
+                }}
               />
             </button>
           ) : null}
