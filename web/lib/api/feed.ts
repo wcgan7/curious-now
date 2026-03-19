@@ -18,18 +18,30 @@ export async function getFeed(options: {
   if (options.contentType) url.searchParams.set('content_type', options.contentType);
 
   const cookie = (await headers()).get('cookie');
-  const res = await fetch(url, {
-    headers: {
-      ...(cookie ? { cookie } : {}),
-      Accept: 'application/json',
-    },
-    credentials: 'include',
-    cache: 'no-store',
-  });
 
-  if (!res.ok) {
-    throw new Error(`Feed request failed: ${res.status}`);
+  const maxRetries = 3;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          ...(cookie ? { cookie } : {}),
+          Accept: 'application/json',
+        },
+        credentials: 'include',
+        cache: 'no-store',
+      });
+
+      if (!res.ok) {
+        throw new Error(`Feed request failed: ${res.status}`);
+      }
+
+      return (await res.json()) as ClustersFeedResponse;
+    } catch (err) {
+      if (attempt === maxRetries) throw err;
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
   }
 
-  return (await res.json()) as ClustersFeedResponse;
+  // Unreachable, but satisfies TypeScript
+  throw new Error('Feed request failed after retries');
 }
