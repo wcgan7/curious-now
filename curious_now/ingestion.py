@@ -216,6 +216,9 @@ def _guess_content_type(
     return "news"
 
 
+_CAMEL_SPLIT_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+
 def _extract_ids(text: str) -> tuple[str | None, str | None]:
     arxiv = None
     doi = None
@@ -224,7 +227,10 @@ def _extract_ids(text: str) -> tuple[str | None, str | None]:
     elif m := _ARXIV_OLD_RE.search(text):
         arxiv = m.group(0)
     if m := _DOI_RE.search(text):
-        doi = m.group(0)
+        # Snippet text may lack a space between DOI and next word
+        # (e.g. "doi:10.1038/d41586-026-00814-3The ..."), so split at the
+        # camelCase boundary where the DOI ends and the word begins.
+        doi = _CAMEL_SPLIT_RE.split(m.group(0))[0].rstrip("-_./") or None
     return arxiv, doi
 
 
