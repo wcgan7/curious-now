@@ -230,6 +230,27 @@ def test_fetch_arxiv_html_image_url_resolves_plain_relative_paths(
     assert image_url == "https://arxiv.org/html/2602.12259v1/x1.png"
 
 
+def test_fetch_arxiv_html_image_url_handles_relative_path_that_includes_version_dir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = """
+    <html>
+      <body>
+        <main>
+          <figure><img src="2602.22270v1/x1.png" /></figure>
+        </main>
+      </body>
+    </html>
+    """
+
+    def _mock_get(_url: str, *, timeout_s: float = 20.0) -> httpx.Response:
+        return httpx.Response(200, text=body, headers={"content-type": "text/html; charset=utf-8"})
+
+    monkeypatch.setattr(pth, "_http_get", _mock_get)
+    image_url = pth._fetch_arxiv_html_image_url("2602.22270v1")
+    assert image_url == "https://arxiv.org/html/2602.22270v1/x1.png"
+
+
 def test_fetch_arxiv_html_image_url_prefers_base_href_for_relative_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

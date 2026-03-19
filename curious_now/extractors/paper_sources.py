@@ -5,7 +5,7 @@ from collections.abc import Callable
 from io import BytesIO
 from logging import Logger
 from typing import Any
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, urljoin, urlparse
 
 import httpx
 
@@ -794,7 +794,9 @@ def extract_html_image_url(raw_html: str, *, base_url: str) -> str | None:
         href = base_tag.get("href")
         if isinstance(href, str) and href.strip():
             doc_base = urljoin(base_url, href.strip())
-    base_for_join = doc_base if doc_base.endswith("/") else f"{doc_base}/"
+    doc_path = urlparse(doc_base).path.rstrip("/")
+    doc_last_segment = doc_path.rsplit("/", 1)[-1] if doc_path else ""
+    base_as_dir = doc_base if doc_base.endswith("/") else f"{doc_base}/"
 
     def _normalize(candidate: Any) -> str | None:
         if not isinstance(candidate, str):
@@ -805,7 +807,12 @@ def extract_html_image_url(raw_html: str, *, base_url: str) -> str | None:
         lower = value.lower()
         if lower.startswith(("data:", "javascript:")):
             return None
-        return urljoin(base_for_join, value)
+        # arXiv HTML sometimes emits paths like "<id>/x1.png"; joining against a
+        # forced trailing slash duplicates the id segment.
+        first_segment = value.lstrip("/").split("/", 1)[0]
+        if doc_last_segment and first_segment == doc_last_segment:
+            return urljoin(doc_base, value)
+        return urljoin(base_as_dir, value)
 
     meta_candidates = [
         soup.find("meta", attrs={"property": "og:image"}),

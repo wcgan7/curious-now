@@ -43,6 +43,10 @@ export function ClusterCard({
             alt={cluster.canonical_title}
             className={styles.image}
             loading="lazy"
+            onError={(e) => {
+              const wrapper = (e.target as HTMLElement).parentElement;
+              if (wrapper) wrapper.style.display = 'none';
+            }}
           />
         </div>
       ) : null}

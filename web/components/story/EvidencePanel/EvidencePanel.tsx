@@ -59,6 +59,9 @@ function EvidenceList({
                   alt={it.title}
                   className={styles.thumb}
                   loading="lazy"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
                 />
               ) : null}
               <div className={styles.itemText}>
