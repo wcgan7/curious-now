@@ -1,0 +1,200 @@
+# Curious Now v2 — Architecture
+
+## Design goals
+
+The architecture optimizes for:
+
+- one excellent web reader;
+- continuous but asynchronous collection;
+- precomputed, cacheable explanations;
+- evidence provenance;
+- failure isolation;
+- very low idle cost;
+- simple operation by one person.
+
+It does not optimize for hypothetical clients, large editorial teams, or
+high-volume user mutations.
+
+## Runtime shape
+
+V2 separates the read path from the write path.
+
+```text
+                         WRITE PATH (scheduled)
+sources -> ingest -> normalize -> hydrate -> cluster -> evidence packet
+                                                   -> explain -> concepts -> rank
+                                                                  |
+                                                                  v
+                                                               Postgres
+                                                                  ^
+                                                                  |
+                         READ PATH (on demand)                     |
+browser -> Next.js server components / route handlers ------------+
+```
+
+### Reader
+
+The Next.js application owns the public read path. Server-side code reads Postgres
+directly and returns rendered pages or narrow route-handler responses.
+
+There is no standalone public FastAPI deployment in the initial v2 architecture.
+This removes an always-on service, cross-origin configuration, an extra network
+hop, and a duplicated API type contract. A public API can be introduced if a
+second real client appears.
+
+### Pipeline
+
+Python owns scheduled and operator-triggered work:
+
+- source ingestion;
+- document extraction;
+- clustering;
+- scholarly metadata enrichment;
+- evidence-packet construction;
+- explanation generation;
+- concept candidate generation;
+- ranking;
+- maintenance and evaluation.
+
+Pipeline jobs are idempotent. They may be run by GitHub Actions, a low-cost cron
+service, or a local machine without changing their semantics.
+
+### Storage
+
+Postgres stores product records, provenance, generated explanations, and graph
+relationships.
+
+Object storage may hold legally permitted extraction artifacts that do not belong
+in Postgres. A database record stores the object reference, checksum, access
+policy, and provenance.
+
+Redis is not part of v2. HTTP caching, server-rendering caches, and indexed
+Postgres queries are sufficient until observed load demonstrates otherwise.
+
+## Core pipeline
+
+### 1. Ingest
+
+- Fetch only configured feeds and APIs.
+- Preserve source identity and source policy.
+- Normalize URLs deterministically.
+- Deduplicate exact items by canonical URL hash.
+- Extract DOI, arXiv, PMID, and provider-native identifiers.
+- Store metadata even when richer text is unavailable.
+
+### 2. Hydrate
+
+- Prefer abstracts and open-access primary text.
+- Do not store paywalled full text.
+- Store the extraction method, license/access class, checksum, and object
+  reference.
+- Extraction failure does not block the item or its story.
+
+### 3. Cluster
+
+Clustering uses a confidence ladder:
+
+1. exact scholarly identifier;
+2. canonical URL identity;
+3. strong bibliographic match;
+4. conservative title/entity/time similarity;
+5. otherwise create a separate story.
+
+False merges are more harmful than temporary duplicate stories. Fuzzy decisions
+must record a score and reason.
+
+### 4. Construct the evidence packet
+
+The evidence packet is the factual interface between retrieval and generation.
+It contains structured claims, supporting items, excerpts or locators,
+limitations, uncertainty, and prerequisite concepts.
+
+Claims without supporting items are invalid. The evidence packet is versioned;
+new evidence creates a new version rather than silently changing the basis of an
+existing explanation.
+
+### 5. Explain
+
+All explanation depths reference one evidence-packet version.
+
+- Glance is generated for the broadest set of stories.
+- Explain is generated when text sufficiency permits.
+- Technical is restricted to suitable primary research.
+- Generated content is never produced in a reader request.
+- Model, prompt version, evidence-packet version, and generation status are stored.
+
+### 6. Connect concepts and research
+
+Bibliographic APIs provide citation and reference candidates. LLMs may propose
+concept relationships but cannot publish unsupported research relationships.
+
+Concept explanations are reusable, versioned assets. A concept is not regenerated
+for every story that mentions it.
+
+### 7. Rank
+
+Ranking is computed in the pipeline and stores both a score and inspectable
+reasons. Initial signals include:
+
+- freshness;
+- evidence quality;
+- primary-source availability;
+- independent-source diversity;
+- estimated significance;
+- topical variety;
+- duplicate and low-information penalties.
+
+Ranking does not use per-user engagement.
+
+## Publication rules
+
+A story can be published when it has:
+
+- a non-empty title;
+- at least one visible evidence item;
+- a canonical source link.
+
+Explanations are optional. If no valid explanation exists, the reader presents
+evidence-only mode.
+
+An explanation is eligible for display only when:
+
+- its generation succeeded;
+- it references the current evidence packet;
+- the packet contains no unsupported claims;
+- its depth is appropriate for the available evidence.
+
+## Failure model
+
+- Source failure: retain prior content and record the feed error.
+- Hydration failure: publish metadata/evidence when otherwise eligible.
+- LLM failure: publish evidence-only or retain the previous valid explanation.
+- Concept failure: omit the link; never block the story.
+- Ranking failure: fall back to reverse chronological order.
+- Read-store failure: show a clear temporary error; do not attempt generation.
+
+## Deployment target
+
+The initial low-cost target is:
+
+- Next.js reader and thin server-side reads on a scale-to-zero platform;
+- managed scale-to-zero Postgres;
+- optional object storage;
+- scheduled Python pipeline;
+- batch LLM calls with persistent results.
+
+The read application must remain usable while the pipeline is offline. Freshness
+may degrade; availability must not.
+
+## Transition strategy
+
+V1 remains available under the `legacy-v0` tag. V2 is developed behind separate
+Python modules and a fresh schema until it can serve a real feed.
+
+Cutover occurs only after:
+
+1. source import and ingestion work;
+2. evidence-only stories appear in the reader;
+3. at least Glance and Explain are grounded in a versioned evidence packet;
+4. basic search and continuous pagination work;
+5. a legacy-content importer has either been run or deliberately rejected.

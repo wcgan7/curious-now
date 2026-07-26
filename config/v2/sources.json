@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "name": "arXiv AI",
+      "homepage_url": "https://arxiv.org/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://rss.arxiv.org/rss/cs.AI",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 60
+        },
+        {
+          "url": "https://rss.arxiv.org/rss/cs.LG",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Primary author-submitted research; peer review is not implied."
+      }
+    },
+    {
+      "name": "medRxiv",
+      "homepage_url": "https://www.medrxiv.org/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://connect.medrxiv.org/medrxiv_xml.php?subject=all",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Medical preprints require prominent non-peer-reviewed labeling."
+      }
+    },
+    {
+      "name": "Nature",
+      "homepage_url": "https://www.nature.com/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.nature.com/nature.rss",
+          "kind": "rss",
+          "default_content_type": "peer_reviewed",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "Store metadata and permitted abstracts; do not ingest paywalled text."
+      }
+    },
+    {
+      "name": "OpenAI",
+      "homepage_url": "https://openai.com/news/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://openai.com/news/rss.xml",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "First-party lab material; seek paper links and independent coverage."
+      }
+    },
+    {
+      "name": "Google DeepMind",
+      "homepage_url": "https://deepmind.google/blog/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://deepmind.google/blog/rss.xml",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "First-party lab material; seek paper links and independent coverage."
+      }
+    },
+    {
+      "name": "Google Research",
+      "homepage_url": "https://research.google/blog/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://research.google/blog/rss/",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "First-party research blog; attach primary papers when available."
+      }
+    },
+    {
+      "name": "Microsoft Research",
+      "homepage_url": "https://www.microsoft.com/en-us/research/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://www.microsoft.com/en-us/research/feed/",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "First-party research blog; attach primary papers when available."
+      }
+    },
+    {
+      "name": "NVIDIA Deep Learning",
+      "homepage_url": "https://blogs.nvidia.com/blog/category/deep-learning/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://blogs.nvidia.com/blog/category/deep-learning/feed/",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "First-party company material; do not treat as independent validation."
+      }
+    },
+    {
+      "name": "Quanta Magazine",
+      "homepage_url": "https://www.quantamagazine.org/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.quantamagazine.org/feed/",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": false
+      }
+    },
+    {
+      "name": "Science News",
+      "homepage_url": "https://www.sciencenews.org/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.sciencenews.org/feed",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": false
+      }
+    },
+    {
+      "name": "BBC Science & Environment",
+      "homepage_url": "https://www.bbc.com/news/science_and_environment",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": false
+      }
+    },
+    {
+      "name": "STAT",
+      "homepage_url": "https://www.statnews.com/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.statnews.com/feed/",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": false
+      }
+    },
+    {
+      "name": "Carbon Brief",
+      "homepage_url": "https://www.carbonbrief.org/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.carbonbrief.org/feed/",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": false
+      }
+    },
+    {
+      "name": "NASA",
+      "homepage_url": "https://www.nasa.gov/",
+      "role": "government",
+      "feeds": [
+        {
+          "url": "https://www.nasa.gov/news-release/feed/",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "Authoritative for agency activity, but first-party for agency claims."
+      }
+    },
+    {
+      "name": "European Space Agency",
+      "homepage_url": "https://www.esa.int/",
+      "role": "institutional",
+      "feeds": [
+        {
+          "url": "https://www.esa.int/rssfeed/Our_Activities/Space_Science",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "Authoritative for agency activity, but first-party for agency claims."
+      }
+    }
+  ]
+}

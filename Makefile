@@ -1,4 +1,4 @@
-.PHONY: venv install dev-up dev-down migrate api test lint typecheck check sync-once sync-loop
+.PHONY: venv install dev-up dev-down migrate api test lint typecheck check sync-once sync-loop v2-sources v2-migrate v2-sync-sources v2-ingest v2-test v2-lint v2-typecheck reader-install reader-dev reader-typecheck reader-build v2-check
 
 venv:
 	python -m venv .venv
@@ -34,3 +34,38 @@ sync-once:
 
 sync-loop:
 	.venv/bin/python scripts/run_resilient_sync.py --loop
+
+v2-sources:
+	.venv/bin/python -m curious_now_v2.cli validate-sources config/v2/sources.json
+
+v2-migrate:
+	.venv/bin/python -m curious_now_v2.cli migrate
+
+v2-sync-sources:
+	.venv/bin/python -m curious_now_v2.cli sync-sources config/v2/sources.json
+
+v2-ingest:
+	.venv/bin/python -m curious_now_v2.cli ingest-once config/v2/sources.json
+
+v2-test:
+	.venv/bin/python -m pytest tests/test_v2_*.py
+
+v2-lint:
+	.venv/bin/python -m ruff check curious_now_v2 tests/test_v2_*.py
+
+v2-typecheck:
+	.venv/bin/python -m mypy curious_now_v2
+
+reader-install:
+	npm --prefix apps/reader ci
+
+reader-dev:
+	npm --prefix apps/reader run dev
+
+reader-typecheck:
+	npm --prefix apps/reader run typecheck
+
+reader-build:
+	npm --prefix apps/reader run build
+
+v2-check: v2-sources v2-test v2-lint v2-typecheck reader-typecheck

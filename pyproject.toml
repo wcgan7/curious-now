@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "curious-now"
 version = "0.1.0"
-description = "Curious Now backend service"
+description = "A calm, evidence-grounded, continuously updated science reader"
 requires-python = ">=3.13"
 dependencies = [
   "fastapi==0.115.6",
@@ -30,6 +30,9 @@ dependencies = [
   "trafilatura>=1.12.0",
 ]
 
+[project.scripts]
+curious-now-v2 = "curious_now_v2.cli:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest==8.3.4",
@@ -49,6 +52,9 @@ testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
 markers = [
   "integration: requires a running Postgres/Redis (e.g. via docker compose)",
+]
+filterwarnings = [
+  "ignore:'count' is passed as positional argument:DeprecationWarning:feedparser.html",
 ]
 
 [tool.mypy]

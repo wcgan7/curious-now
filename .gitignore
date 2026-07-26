@@ -26,3 +26,9 @@ web/tsconfig.tsbuildinfo
 web/public/sw.js
 web/public/workbox-*.js
 web/public/fallback-*.js
+
+# V2 reader artifacts
+apps/reader/.next/
+apps/reader/node_modules/
+apps/reader/.env.local
+apps/reader/tsconfig.tsbuildinfo
