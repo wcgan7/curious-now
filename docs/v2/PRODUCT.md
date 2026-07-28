@@ -28,42 +28,105 @@ shape the core architecture until the reading loop is proven.
 ## Core reader loop
 
 1. Open a mobile-friendly feed.
-2. Scroll through distinct science stories rather than duplicate links.
-3. Read a short explanation of what happened and why it matters.
-4. Change depth without changing the underlying facts.
-5. Open a technical deep dive when the story is based on a suitable paper.
-6. Tap an unfamiliar concept to learn it without losing the story.
-7. Follow related concepts, papers, and developments through the knowledge web.
+2. Scroll through approachable titles for distinct science stories rather than
+   duplicate links or inline summaries.
+3. Open an interesting title into Glance, the default orientation for someone new
+   to the topic.
+4. Switch to Explain when already familiar with the field or when more context is
+   wanted.
+5. Enter Technical only after establishing the central intuition and deciding the
+   work merits investigation.
+6. Inspect original sources and supporting evidence from every presentation.
+7. Tap an unfamiliar concept to learn it without losing the story.
+8. Follow related concepts, papers, and developments through the knowledge web.
 
-## Explanation depths
+## Presentation ladder
 
-The UI uses reader-friendly names. `glance`, `explain`, and `technical` are the
-canonical internal identifiers.
+Curious Now has four presentation layers, but they are not four equal tabs.
 
-### Glance
+```text
+Discovery                 Orientation                    Investigation
 
-- approximately 1–3 sentences;
-- understandable in roughly ten seconds;
-- states what happened and why it may matter;
-- preserves uncertainty and important qualifications.
+Title              ->     Glance and/or Explain    ->    Technical
+                           new to it   know the field     go deep
+```
 
-### Explain
+`title` is a presentation layer, not an explanation depth. The canonical
+explanation identifiers remain `glance`, `explain`, and `technical`.
 
-- assumes curiosity but little topic-specific background;
-- builds intuition before terminology;
-- introduces only the prerequisites needed for this story;
-- corresponds roughly to the original ELI5/ELI20 motivation, without infantilizing
-  the reader.
+### Title — discovery
 
-### Technical
+- approximately 6–14 words;
+- approachable without sacrificing the material qualification;
+- describes the scientific development rather than merely naming the paper;
+- accurate, specific, calm, and non-clickbait;
+- sufficient for deciding whether to open the story.
 
-- only generated when accessible primary material is sufficient;
-- explains the mechanism, method, evidence, assumptions, and limitations;
-- includes an intuitive account, not merely a compressed paper;
-- identifies prerequisites and links them to reusable concept cards.
+Every source item retains its original title. A story may additionally have a
+versioned display title derived from its current evidence packet. Generated titles
+never overwrite source titles.
 
-The depths are alternate views of one evidence packet. They must not be generated
-as independent interpretations of the source material.
+### Glance — orientation for a newcomer
+
+Glance is the internal equivalent of ELI5, without using that label in the
+interface.
+
+- assumes no topic-specific knowledge;
+- takes approximately 30–60 seconds to read;
+- provides the simplest accurate intuition;
+- states what happened, why it might matter, and the essential qualification;
+- avoids jargon or explains it immediately;
+- prefers a useful mental model over methodological detail.
+
+Glance is the default presentation after opening a title.
+
+### Explain — orientation for a familiar reader
+
+Explain is the internal equivalent of ELI20.
+
+- assumes foundational familiarity with the field;
+- takes approximately 3–6 minutes to read;
+- may use established terminology and useful jargon;
+- explains what is new, how it works, how it differs from the normal approach,
+  the key evidence, and the important limitations;
+- remains intuitive rather than reproducing academic prose.
+
+Explain must stand alone for a reader who skips Glance, while feeling like a
+natural expansion for a reader who uses both.
+
+### Technical — investigation
+
+- is reached progressively from Glance or Explain rather than promoted as the
+  normal entry point from the feed;
+- takes approximately 8–15 minutes to read;
+- is generated only when accessible primary material is sufficient;
+- covers problem formulation, methods, experimental design, baselines, results,
+  comparisons, assumptions, and limitations;
+- uses equations or algorithms when they materially improve understanding;
+- identifies prerequisites and links them to reusable concept cards;
+- remains an intuitive walkthrough, not merely a compressed paper.
+
+The interface encourages orientation before Technical but does not enforce reading
+completion. Direct links to a Technical presentation remain valid.
+
+### Cross-layer consistency
+
+All four layers share one versioned evidence packet and one conceptual spine:
+
+- central claim;
+- genuine novelty;
+- core intuition;
+- why it matters;
+- strongest supporting evidence;
+- essential qualification;
+- prerequisite concepts.
+
+The presentations are adapted for different assumptions, not independently
+invented interpretations. Glance is not produced by mechanically shortening
+Explain, and Explain is not produced by truncating Technical.
+
+The normative layer and evaluation rules live in
+[`PRESENTATION_CONTRACT.md`](PRESENTATION_CONTRACT.md).
 
 ## The canonical story
 
@@ -111,6 +174,10 @@ uncertainty; it does not provide advice.
 The feed:
 
 - scrolls continuously through collected stories;
+- presents one approachable display title per story with only minimal trust
+  metadata;
+- does not place Glance excerpts or equal depth controls inside the feed;
+- opens a story into Glance by default;
 - prioritizes freshness, significance, evidence quality, and topical variety;
 - does not optimize for outrage, compulsion, or raw click-through rate;
 - suppresses duplicates and low-information reposts;
@@ -164,6 +231,7 @@ V2 includes:
 - paper metadata and legally accessible text hydration;
 - story clustering;
 - a structured evidence packet;
+- a versioned conceptual spine and display title;
 - Glance and Explain generation;
 - Technical deep dives for suitable papers;
 - visible evidence and trust information;
@@ -186,17 +254,24 @@ V2 includes:
 - native mobile applications;
 - a public general-purpose API.
 
-Local browser preferences may remember display depth without introducing accounts.
+Local browser preferences may remember an orientation choice without introducing
+accounts. Familiarity is topic-specific, so the product must not silently infer a
+permanent expertise level from clicks.
 
 ## Success criteria
 
 V2 succeeds when:
 
 - opening the app reliably produces interesting, non-duplicate science stories;
-- the Glance view is useful without opening the source;
-- Explain creates genuine understanding for an unfamiliar topic;
+- display titles are useful enough to scan without becoming sensational;
+- a newcomer gains the right intuition from Glance;
+- a field-aware reader gets meaningful detail from Explain without being forced
+  through beginner material;
+- moving from Glance to Explain feels like expansion rather than contradiction or
+  repetition;
 - Technical helps a capable reader understand a paper without first reading it end
   to end;
+- Technical feels like a deliberate continuation of the established intuition;
 - every generated claim remains inspectable against sources;
 - concept links make an unfamiliar story easier rather than creating a distracting
   graph;

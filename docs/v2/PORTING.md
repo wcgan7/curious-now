@@ -25,7 +25,7 @@ are checked against the v2 product and accompanied by focused tests.
 | Fuzzy clustering | Needs inspectable decisions and false-merge evaluation |
 | AI generation | Depths must derive from one evidence packet |
 | Feed ranking | Must reflect the new significance/evidence contract |
-| Story page | Trust and depth selection are the primary interface |
+| Story page | Title-only discovery, Glance/Explain orientation, progressive Technical, and trust are the primary interface |
 | Topic classification | Needs a smaller taxonomy and explicit confidence |
 | Updates/lineage | Split concept, paper, and story relationships |
 | Database access | Replace stage repositories with domain-oriented modules |

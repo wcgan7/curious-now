@@ -4,15 +4,20 @@ Curious Now is a calm, continuously updated science feed. It collects research,
 science journalism, and frontier-lab publications; groups duplicate coverage into
 canonical stories; and explains each story at the depth the reader wants.
 
-The v2 product has three reading depths:
+The v2 product has a progressive four-layer presentation:
 
-- **Glance** — what happened and why it matters
-- **Explain** — an intuitive account for a reader new to the topic
-- **Technical** — mechanism, method, evidence, and limitations for suitable papers
+```text
+Title -> Glance and/or Explain -> Technical
+```
 
-All depths derive from one versioned evidence packet. Every published story keeps
-its original sources visible, and stories can appear in evidence-only mode when AI
-enrichment is unavailable.
+- **Title** supports fast, calm discovery in the feed.
+- **Glance** gives a newcomer the simplest accurate intuition.
+- **Explain** gives a field-aware reader the important terminology and detail.
+- **Technical** investigates methods, evidence, results, and limitations.
+
+All layers derive from one versioned evidence packet and conceptual spine. Every
+published story keeps its original source titles visible, and stories can appear in
+evidence-only mode when AI enrichment is unavailable.
 
 ## V2 status
 
@@ -23,6 +28,8 @@ the transition.
 The v2 source of truth is:
 
 - [Product contract](docs/v2/PRODUCT.md)
+- [Presentation contract](docs/v2/PRESENTATION_CONTRACT.md)
+- [Reader experience and wireframes](docs/v2/READER_EXPERIENCE.md)
 - [Architecture](docs/v2/ARCHITECTURE.md)
 - [Porting decisions](docs/v2/PORTING.md)
 - [Operations and cost controls](docs/v2/OPERATIONS.md)
@@ -32,7 +39,7 @@ The first executable slice is in place:
 - a versioned registry with 15 sources and 16 feeds;
 - deterministic feed parsing, URL normalization, and identifier extraction;
 - a fresh PostgreSQL schema and idempotent migration command;
-- evidence-packet, explanation-depth, publication, and reader contracts.
+- evidence-packet, explanation-depth, publication, and reader contracts;
 - a fresh Next.js reader under `apps/reader/` with continuous cursor pagination.
 
 Run the focused checks with:

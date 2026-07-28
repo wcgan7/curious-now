@@ -22,14 +22,15 @@ V2 separates the read path from the write path.
 ```text
                          WRITE PATH (scheduled)
 sources -> ingest -> normalize -> hydrate -> cluster -> evidence packet
-                                                   -> explain -> concepts -> rank
-                                                                  |
-                                                                  v
-                                                               Postgres
-                                                                  ^
-                                                                  |
+                                                   -> conceptual spine
+                                                   -> presentations -> concepts -> rank
+                                                                        |
+                                                                        v
+                                                                     Postgres
+                                                                        ^
+                                                                        |
                          READ PATH (on demand)                     |
-browser -> Next.js server components / route handlers ------------+
+browser -> Next.js server components / route handlers ------------------+
 ```
 
 ### Reader
@@ -51,7 +52,8 @@ Python owns scheduled and operator-triggered work:
 - clustering;
 - scholarly metadata enrichment;
 - evidence-packet construction;
-- explanation generation;
+- conceptual-spine construction;
+- display-title and explanation generation;
 - concept candidate generation;
 - ranking;
 - maintenance and evaluation.
@@ -113,15 +115,28 @@ Claims without supporting items are invalid. The evidence packet is versioned;
 new evidence creates a new version rather than silently changing the basis of an
 existing explanation.
 
-### 5. Explain
+### 5. Present
 
-All explanation depths reference one evidence-packet version.
+Every generated presentation references one evidence-packet version and one
+conceptual spine.
 
-- Glance is generated for the broadest set of stories.
-- Explain is generated when text sufficiency permits.
-- Technical is restricted to suitable primary research.
+- The display title is a versioned reader artifact, distinct from immutable source
+  titles and the internal story working title.
+- Title and Glance are generated for the broadest set of supported stories.
+- Glance assumes no topic familiarity and establishes the simplest accurate
+  intuition.
+- Explain assumes foundational field familiarity and adds terminology, mechanism,
+  evidence, comparison, and limitations.
+- Technical is restricted to suitable primary research with enough accessible
+  material to inspect methods and evidence.
+- Glance and Explain are orientation choices; Technical is a progressive
+  investigation reached after either orientation.
 - Generated content is never produced in a reader request.
 - Model, prompt version, evidence-packet version, and generation status are stored.
+
+The normative content rules are defined in
+[`PRESENTATION_CONTRACT.md`](PRESENTATION_CONTRACT.md). The screen hierarchy is
+defined in [`READER_EXPERIENCE.md`](READER_EXPERIENCE.md).
 
 ### 6. Connect concepts and research
 
@@ -150,12 +165,14 @@ Ranking does not use per-user engagement.
 
 A story can be published when it has:
 
-- a non-empty title;
+- a non-empty safe reader title, which may be a generated display title or a source
+  fallback;
 - at least one visible evidence item;
 - a canonical source link.
 
-Explanations are optional. If no valid explanation exists, the reader presents
-evidence-only mode.
+Generated display titles and explanations are optional. Source titles remain
+available as publication fallbacks. If no valid explanation exists, the reader
+presents evidence-only mode without empty orientation controls.
 
 An explanation is eligible for display only when:
 
@@ -164,11 +181,15 @@ An explanation is eligible for display only when:
 - the packet contains no unsupported claims;
 - its depth is appropriate for the available evidence.
 
+Presentations from different evidence-packet versions must not be mixed in one
+reader session.
+
 ## Failure model
 
 - Source failure: retain prior content and record the feed error.
 - Hydration failure: publish metadata/evidence when otherwise eligible.
 - LLM failure: publish evidence-only or retain the previous valid explanation.
+- Display-title failure: use the safest eligible source title.
 - Concept failure: omit the link; never block the story.
 - Ranking failure: fall back to reverse chronological order.
 - Read-store failure: show a clear temporary error; do not attempt generation.
@@ -195,6 +216,7 @@ Cutover occurs only after:
 
 1. source import and ingestion work;
 2. evidence-only stories appear in the reader;
-3. at least Glance and Explain are grounded in a versioned evidence packet;
+3. generated display titles, Glance, and Explain are grounded in a versioned
+   evidence packet and conceptual spine;
 4. basic search and continuous pagination work;
 5. a legacy-content importer has either been run or deliberately rejected.

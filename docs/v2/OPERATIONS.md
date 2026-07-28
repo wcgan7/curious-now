@@ -60,8 +60,8 @@ feeds.
   useful.
 - Resolve exact paper identifiers before spending inference on clustering.
 - Publish source-backed stories before enrichment.
-- Generate Glance broadly, Explain selectively, and Technical only for accessible
-  primary research.
+- Generate Title and Glance broadly, Explain when evidence supports a field-aware
+  treatment, and Technical only for accessible primary research.
 - Store every output by evidence-packet and prompt version; never regenerate on a
   page request.
 - Batch model work and cap it by stories, input characters, and estimated spend per
