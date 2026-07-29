@@ -121,6 +121,12 @@ The evidence packet is the factual interface between retrieval and generation.
 It contains structured claims, supporting items, excerpts or locators,
 limitations, uncertainty, and prerequisite concepts.
 
+The packet also records which presentation elements the sources support. This is
+where a layer becomes ineligible for lack of evidence: a packet with no
+limitation claims cannot ground an Explain, because Explain is required to cover
+limitations. Recording support per element, rather than asking a generator
+whether it feels equipped, keeps the decision checkable by code.
+
 Claims without supporting items are invalid. The evidence packet is versioned;
 new evidence creates a new version rather than silently changing the basis of an
 existing explanation.
@@ -141,6 +147,8 @@ conceptual spine.
   accessible text to inspect methods and evidence.
 - Glance and Explain are orientation choices; Technical is a progressive
   investigation reached after either orientation.
+- A layer may be declined for insufficient evidence; the decline and its reason
+  are stored, and a declined layer never withdraws a shallower one.
 - Generated content is never produced in a reader request.
 - Model, prompt version, evidence-packet version, conceptual-spine version,
   generation status, and validation status are stored.

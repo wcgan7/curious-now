@@ -255,6 +255,44 @@ Explain. It MUST also support a direct URL for sharing and returning readers.
 
 The interface MUST NOT require proof that a reader completed an orientation.
 
+## Sufficiency and abstention
+
+A layer is produced only when the evidence supports every element that layer
+requires. Generation MUST be able to decline a layer, and declining MUST be
+recorded with the element that was unsupported.
+
+Sufficiency is judged per required element, never as a single global
+"is this enough" question:
+
+- each required element resolves to one or more supported claims in the
+  evidence packet, or it is unsupported;
+- an unsupported required element makes that layer ineligible;
+- eligibility is decided from the recorded per-element result, not from the
+  generator's overall confidence.
+
+This ordering keeps each check where it is reliable:
+
+1. a deterministic text gate rejects material that cannot ground anything,
+   before any inference is spent;
+2. evidence-packet extraction records which elements the sources actually
+   support;
+3. depth planning derives eligible layers from those recorded elements;
+4. generation MAY still decline, and a declined layer is recorded rather than
+   produced.
+
+Distinguish two reasons an element may be absent. An element that is genuinely
+inapplicable to the story kind MAY be omitted, as described in Story kinds. An
+element that is applicable but unsupported by the available evidence MUST cause
+the layer to be declined. Neither may be satisfied with invented material,
+generic hedging, or restatement that presents thin evidence as thorough.
+
+Declining one layer MUST NOT withdraw a shallower layer. A story whose evidence
+supports Glance but not Explain publishes with Glance alone.
+
+Abstention counts and their reasons MUST be visible to the operator. A layer
+declined often for the same missing element indicates a retrieval gap rather
+than a generation failure.
+
 ## Cross-layer invariants
 
 Across one evidence-packet version:

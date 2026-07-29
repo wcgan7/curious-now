@@ -60,6 +60,15 @@ def make_item(
     )
 
 
+# The elements Explain requires: mechanism, comparison, and a qualification.
+COMPLETE_KINDS = (
+    ClaimKind.RESULT,
+    ClaimKind.METHOD,
+    ClaimKind.COMPARISON,
+    ClaimKind.LIMITATION,
+)
+
+
 def make_packet(
     *,
     story_id: UUID,
@@ -67,6 +76,7 @@ def make_packet(
     packet_id: UUID,
     version: int = 1,
     access_class: AccessClass = AccessClass.ABSTRACT,
+    kinds: tuple[ClaimKind, ...] = COMPLETE_KINDS,
 ) -> EvidencePacket:
     return EvidencePacket(
         packet_id=packet_id,
@@ -74,10 +84,10 @@ def make_packet(
         version=version,
         text_sufficiency=access_class,
         central_claim="The measured effect increased.",
-        claims=(
+        claims=tuple(
             EvidenceClaim(
-                kind=ClaimKind.RESULT,
-                text="The measured effect increased.",
+                kind=kind,
+                text=f"A supported {kind.value} claim.",
                 confidence=0.82,
                 supports=(
                     EvidenceSupport(
@@ -86,7 +96,8 @@ def make_packet(
                         locator={"section": "Results"},
                     ),
                 ),
-            ),
+            )
+            for kind in kinds
         ),
         limitations=("This is an initial study.",),
         created_at=NOW,
@@ -536,6 +547,124 @@ def test_full_text_technical_report_is_eligible_for_technical() -> None:
     plan = plan_explanations(story, packet)
 
     assert ExplanationDepth.TECHNICAL in plan.depths
+
+
+@pytest.mark.parametrize(
+    ("missing", "kinds"),
+    [
+        (
+            "mechanism",
+            (ClaimKind.RESULT, ClaimKind.COMPARISON, ClaimKind.LIMITATION),
+        ),
+        (
+            "comparison",
+            (ClaimKind.RESULT, ClaimKind.METHOD, ClaimKind.LIMITATION),
+        ),
+        (
+            "limitation or uncertainty",
+            (ClaimKind.RESULT, ClaimKind.METHOD, ClaimKind.COMPARISON),
+        ),
+    ],
+)
+def test_explain_is_declined_and_names_the_missing_element(
+    missing: str,
+    kinds: tuple[ClaimKind, ...],
+) -> None:
+    """A layer is declined for a named element rather than padded out."""
+
+    item = make_item()
+    story_id = uuid4()
+    packet_id = uuid4()
+    story = StoryDraft(
+        story_id=story_id,
+        working_title=item.title,
+        items=(item,),
+        current_evidence_packet_id=packet_id,
+    )
+    packet = make_packet(
+        story_id=story_id,
+        item_id=item.item_id,
+        packet_id=packet_id,
+        kinds=kinds,
+    )
+
+    plan = plan_explanations(story, packet)
+
+    assert ExplanationDepth.EXPLAIN not in plan.depths
+    assert missing in plan.skipped_reasons[ExplanationDepth.EXPLAIN]
+
+
+def test_declining_explain_leaves_glance_available() -> None:
+    item = make_item()
+    story_id = uuid4()
+    packet_id = uuid4()
+    story = StoryDraft(
+        story_id=story_id,
+        working_title=item.title,
+        items=(item,),
+        current_evidence_packet_id=packet_id,
+    )
+    packet = make_packet(
+        story_id=story_id,
+        item_id=item.item_id,
+        packet_id=packet_id,
+        kinds=(ClaimKind.RESULT,),
+    )
+
+    plan = plan_explanations(story, packet)
+
+    assert plan.depths == (ExplanationDepth.GLANCE,)
+
+
+def test_context_only_evidence_supports_nothing() -> None:
+    item = make_item()
+    story_id = uuid4()
+    packet_id = uuid4()
+    story = StoryDraft(
+        story_id=story_id,
+        working_title=item.title,
+        items=(item,),
+        current_evidence_packet_id=packet_id,
+    )
+    packet = make_packet(
+        story_id=story_id,
+        item_id=item.item_id,
+        packet_id=packet_id,
+        kinds=(ClaimKind.CONTEXT,),
+    )
+
+    plan = plan_explanations(story, packet)
+
+    assert plan.depths == ()
+    assert "no result, observation, or method claim" in plan.skipped_reasons[
+        ExplanationDepth.GLANCE
+    ]
+
+
+def test_technical_needs_reported_results_not_just_full_text() -> None:
+    item = make_item(access_class=AccessClass.OPEN_FULL_TEXT)
+    story_id = uuid4()
+    packet_id = uuid4()
+    story = StoryDraft(
+        story_id=story_id,
+        working_title=item.title,
+        items=(item,),
+        current_evidence_packet_id=packet_id,
+    )
+    packet = make_packet(
+        story_id=story_id,
+        item_id=item.item_id,
+        packet_id=packet_id,
+        access_class=AccessClass.OPEN_FULL_TEXT,
+        kinds=(ClaimKind.METHOD, ClaimKind.COMPARISON, ClaimKind.LIMITATION),
+    )
+
+    plan = plan_explanations(story, packet)
+
+    assert ExplanationDepth.TECHNICAL not in plan.depths
+    assert plan.skipped_reasons[ExplanationDepth.TECHNICAL] == (
+        "evidence lacks reported results"
+    )
 
 
 def test_blocked_story_raises_in_projection() -> None:

@@ -4,8 +4,16 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from curious_now_v2.core.enums import AccessClass, ExplanationDepth
+from curious_now_v2.core.enums import AccessClass, ClaimKind, ExplanationDepth
 from curious_now_v2.core.models import EvidencePacket, StoryDraft
+
+# Each layer's required content, expressed as the claim kinds that must be
+# supported. Absence of a required kind means the evidence cannot ground that
+# layer, so it is declined rather than padded.
+SUBSTANTIVE_KINDS = frozenset(
+    {ClaimKind.RESULT, ClaimKind.OBSERVATION, ClaimKind.METHOD}
+)
+QUALIFYING_KINDS = frozenset({ClaimKind.LIMITATION, ClaimKind.UNCERTAINTY})
 
 
 class ExplanationPlan(BaseModel):
@@ -23,7 +31,13 @@ def plan_explanations(
     story: StoryDraft,
     packet: EvidencePacket | None,
 ) -> ExplanationPlan:
-    """Choose explanation depths without making them publication requirements."""
+    """Choose the depths the evidence can honestly support.
+
+    Eligibility is decided per required element, so a layer is declined for a
+    named missing element rather than produced from thin material. The reasons
+    are diagnostic: the same element missing repeatedly points at a retrieval
+    gap, not a generation failure.
+    """
 
     if packet is None or not packet.claims:
         reason = "no supported evidence claims"
@@ -31,31 +45,58 @@ def plan_explanations(
             story_id=story.story_id,
             evidence_packet_id=packet.packet_id if packet else None,
             depths=(),
-            skipped_reasons={
-                ExplanationDepth.GLANCE: reason,
-                ExplanationDepth.EXPLAIN: reason,
-                ExplanationDepth.TECHNICAL: reason,
-            },
+            skipped_reasons=dict.fromkeys(ExplanationDepth, reason),
         )
 
-    depths: list[ExplanationDepth] = [ExplanationDepth.GLANCE]
+    kinds = {claim.kind for claim in packet.claims}
+    depths: list[ExplanationDepth] = []
     skipped: dict[ExplanationDepth, str] = {}
 
-    if packet.text_sufficiency in {
-        AccessClass.SNIPPET,
-        AccessClass.ABSTRACT,
-        AccessClass.OPEN_FULL_TEXT,
-    }:
-        depths.append(ExplanationDepth.EXPLAIN)
+    # Glance needs something to have happened. Its essential qualification may
+    # come from a claim or from source metadata such as preprint status.
+    if kinds & SUBSTANTIVE_KINDS:
+        depths.append(ExplanationDepth.GLANCE)
     else:
-        skipped[ExplanationDepth.EXPLAIN] = "metadata-only evidence is insufficient"
+        skipped[ExplanationDepth.GLANCE] = (
+            "no result, observation, or method claim to explain"
+        )
 
-    if story.has_primary_material and packet.text_sufficiency is AccessClass.OPEN_FULL_TEXT:
-        depths.append(ExplanationDepth.TECHNICAL)
-    elif not story.has_primary_material:
-        skipped[ExplanationDepth.TECHNICAL] = "story has no primary material"
+    # Explain must cover mechanism, comparison, and limitations. Mechanism and
+    # limitations are the elements abstracts systematically lack.
+    explain_missing = [
+        name
+        for name, present in (
+            ("mechanism", ClaimKind.METHOD in kinds),
+            ("comparison", ClaimKind.COMPARISON in kinds),
+            ("limitation or uncertainty", bool(kinds & QUALIFYING_KINDS)),
+        )
+        if not present
+    ]
+    if ExplanationDepth.GLANCE not in depths:
+        skipped[ExplanationDepth.EXPLAIN] = "no orientation to expand"
+    elif packet.text_sufficiency is AccessClass.METADATA_ONLY:
+        skipped[ExplanationDepth.EXPLAIN] = "metadata-only evidence is insufficient"
+    elif explain_missing:
+        skipped[ExplanationDepth.EXPLAIN] = (
+            f"evidence lacks {', '.join(explain_missing)}"
+        )
     else:
+        depths.append(ExplanationDepth.EXPLAIN)
+
+    # Technical inspects the work itself, so it needs primary material and
+    # enough accessible text to cite sections, figures, and tables.
+    if not story.has_primary_material:
+        skipped[ExplanationDepth.TECHNICAL] = "story has no primary material"
+    elif packet.text_sufficiency is not AccessClass.OPEN_FULL_TEXT:
         skipped[ExplanationDepth.TECHNICAL] = "open primary text is unavailable"
+    elif ExplanationDepth.EXPLAIN not in depths:
+        skipped[ExplanationDepth.TECHNICAL] = (
+            "no orientation established to go deeper from"
+        )
+    elif ClaimKind.RESULT not in kinds:
+        skipped[ExplanationDepth.TECHNICAL] = "evidence lacks reported results"
+    else:
+        depths.append(ExplanationDepth.TECHNICAL)
 
     return ExplanationPlan(
         story_id=story.story_id,
