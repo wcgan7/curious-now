@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import pytest
+
+from curious_now_v2.retrieval.document import (
+    Section,
+    SectionKind,
+    classify_section,
+    inherit_section_kinds,
+)
+from curious_now_v2.retrieval.extract_arxiv import extract_arxiv_html
+from curious_now_v2.retrieval.extract_jats import extract_jats
+from tests.fixtures.loader import fixture_text
+
+
+@pytest.fixture(scope="module")
+def arxiv_doc():
+    return extract_arxiv_html(fixture_text("arxiv_latexml_html"))
+
+
+@pytest.fixture(scope="module")
+def jats_doc():
+    return extract_jats(fixture_text("pmc_jats_xml"))
+
+
+# --- section classification -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("3 Methodology", SectionKind.METHOD),
+        ("Materials and methods", SectionKind.METHOD),
+        ("4 Experimental Setup", SectionKind.METHOD),
+        ("2 Related Work", SectionKind.RELATED_WORK),
+        ("5 Results", SectionKind.RESULTS),
+        ("Results and discussion", SectionKind.RESULTS),
+        ("Limitations", SectionKind.LIMITATIONS),
+        ("6 Conclusion", SectionKind.CONCLUSION),
+        ("1 Introduction", SectionKind.INTRODUCTION),
+        ("References", SectionKind.REFERENCES),
+        ("3.1. Preliminaries", SectionKind.OTHER),
+        (None, SectionKind.OTHER),
+    ],
+)
+def test_headings_map_to_their_role(title: str | None, expected: SectionKind) -> None:
+    assert classify_section(title) is expected
+
+
+def test_related_work_is_not_mistaken_for_results() -> None:
+    """"Related Work" contains "work", and "Results and discussion" contains
+    "discussion"; the more specific rule must win in both cases."""
+
+    assert classify_section("Related Work") is SectionKind.RELATED_WORK
+    assert classify_section("Results and discussion") is SectionKind.RESULTS
+
+
+def test_unclassified_subsections_inherit_the_enclosing_role() -> None:
+    sections = (
+        Section(title="Methodology", kind=SectionKind.METHOD, level=1),
+        Section(title="Preliminaries", kind=SectionKind.OTHER, level=2),
+        Section(title="Results", kind=SectionKind.RESULTS, level=1),
+        Section(title="Ablations", kind=SectionKind.OTHER, level=2),
+    )
+
+    resolved = inherit_section_kinds(sections)
+
+    assert [section.kind for section in resolved] == [
+        SectionKind.METHOD,
+        SectionKind.METHOD,
+        SectionKind.RESULTS,
+        SectionKind.RESULTS,
+    ]
+
+
+def test_inheritance_does_not_leak_across_siblings() -> None:
+    """A top-level section after a classified one keeps its own role."""
+
+    sections = (
+        Section(title="Methods", kind=SectionKind.METHOD, level=1),
+        Section(title="Something unlabelled", kind=SectionKind.OTHER, level=1),
+    )
+
+    assert inherit_section_kinds(sections)[1].kind is SectionKind.OTHER
+
+
+# --- arXiv LaTeXML ----------------------------------------------------------
+
+
+def test_arxiv_recovers_title_abstract_and_sections(arxiv_doc) -> None:
+    assert arxiv_doc.title is not None
+    assert arxiv_doc.abstract is not None
+    assert not arxiv_doc.abstract.lower().startswith("abstract")
+    assert arxiv_doc.has_structure
+    assert arxiv_doc.warnings == ()
+
+
+def test_arxiv_recovers_the_method_section(arxiv_doc) -> None:
+    """Explain requires mechanism, so the method section is load-bearing."""
+
+    assert arxiv_doc.has_method_section
+    method_words = sum(
+        section.word_count
+        for section in arxiv_doc.sections_of_kind(SectionKind.METHOD)
+    )
+    assert method_words > 500
+
+
+def test_arxiv_recovers_limitations_prose(arxiv_doc) -> None:
+    limitations = arxiv_doc.sections_of_kind(SectionKind.LIMITATIONS)
+
+    assert limitations
+    assert limitations[0].word_count > 50
+
+
+def test_arxiv_keeps_prose_nested_below_subsections(arxiv_doc) -> None:
+    """LaTeXML nests \\paragraph units in their own <section>; that prose must
+    be attributed to the enclosing section rather than dropped."""
+
+    assert arxiv_doc.word_count > 4000
+
+
+def test_arxiv_attributes_prose_to_exactly_one_section(arxiv_doc) -> None:
+    """A subsection owns its prose; the parent must not repeat it."""
+
+    body = arxiv_doc.body_text
+    sample = arxiv_doc.sections_of_kind(SectionKind.LIMITATIONS)[0].paragraphs[-1]
+
+    assert body.count(sample) == 1
+
+
+def test_arxiv_math_is_not_duplicated(arxiv_doc) -> None:
+    """LaTeXML nests a rendered form and the TeX inside <math>; reading both
+    yields "α \\alpha". Only the TeX should survive."""
+
+    assert "α \\alpha" not in arxiv_doc.text
+    assert "\\alpha" in arxiv_doc.text or "\\downarrow" in arxiv_doc.text
+
+
+def test_arxiv_keeps_figure_captions(arxiv_doc) -> None:
+    assert arxiv_doc.figures
+    first = arxiv_doc.figures[0]
+    assert first.label is not None
+    assert first.label.lower().startswith("figure")
+    assert len(first.caption.split()) > 5
+
+
+def test_arxiv_keeps_table_captions(arxiv_doc) -> None:
+    assert arxiv_doc.tables
+    assert any(table.caption for table in arxiv_doc.tables)
+
+
+def test_arxiv_excludes_references_from_body_text(arxiv_doc) -> None:
+    body = arxiv_doc.body_text
+
+    assert "bibliography" not in body.lower()
+
+
+def test_malformed_arxiv_html_yields_a_warning_not_a_crash() -> None:
+    document = extract_arxiv_html("<html><body><p>no sections here</p></body></html>")
+
+    assert document.sections == ()
+    assert "no LaTeXML sections found" in document.warnings
+
+
+# --- JATS -------------------------------------------------------------------
+
+
+def test_jats_recovers_title_abstract_and_sections(jats_doc) -> None:
+    assert jats_doc.title is not None
+    assert jats_doc.abstract is not None
+    assert jats_doc.has_structure
+    assert jats_doc.warnings == ()
+
+
+def test_jats_recovers_the_method_section(jats_doc) -> None:
+    assert jats_doc.has_method_section
+    titles = [
+        section.title
+        for section in jats_doc.sections_of_kind(SectionKind.METHOD)
+    ]
+    assert "Materials and methods" in titles
+    # Nested analysis subsections are method content by inheritance.
+    assert "Statistical analyses" in titles
+
+
+def test_jats_keeps_table_labels_and_captions(jats_doc) -> None:
+    assert jats_doc.tables
+    labelled = [table for table in jats_doc.tables if table.label]
+    assert labelled
+    assert labelled[0].label.lower().startswith("table")
+    assert labelled[0].caption
+
+
+def test_jats_attributes_prose_to_exactly_one_section(jats_doc) -> None:
+    body = jats_doc.body_text
+    sample = jats_doc.sections_of_kind(SectionKind.RESULTS)[0].paragraphs[0]
+
+    assert body.count(sample) == 1
+
+
+def test_jats_without_a_body_warns_instead_of_failing() -> None:
+    document = extract_jats(
+        "<article><front><article-meta>"
+        "<title-group><article-title>Only front matter</article-title></title-group>"
+        "</article-meta></front></article>"
+    )
+
+    assert document.title == "Only front matter"
+    assert document.sections == ()
+    assert "no <body> element; front matter only" in document.warnings
+
+
+def test_both_extractors_produce_enough_text_for_the_deep_layers(
+    arxiv_doc,
+    jats_doc,
+) -> None:
+    """Structured sources should clear the Technical word floor comfortably."""
+
+    for document in (arxiv_doc, jats_doc):
+        assert document.word_count > 2000
+        assert document.has_structure

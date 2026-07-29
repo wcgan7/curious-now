@@ -3,18 +3,50 @@
 Retrieval fetches the text that grounds every generated presentation. A story
 that cannot be explained is never published, so this layer decides what the
 reader ever sees.
+
+Extraction preserves structure rather than flattening to a blob: Technical is
+required to cite the sections, figures, and tables it draws on, and Explain is
+eligible only when the sources carry a mechanism to explain.
 """
 
+from curious_now_v2.retrieval.document import (
+    Document,
+    Figure,
+    Section,
+    SectionKind,
+    Table,
+    classify_section,
+    inherit_section_kinds,
+)
+from curious_now_v2.retrieval.extract_arxiv import extract_arxiv_html
+from curious_now_v2.retrieval.extract_jats import extract_jats
 from curious_now_v2.retrieval.fetch import (
     Fetcher,
     FetchOutcome,
     FetchResult,
     RobotsCache,
 )
+from curious_now_v2.retrieval.quality import (
+    TextAssessment,
+    TextVerdict,
+    assess_text,
+)
 
 __all__ = [
+    "Document",
     "FetchOutcome",
     "FetchResult",
     "Fetcher",
+    "Figure",
     "RobotsCache",
+    "Section",
+    "SectionKind",
+    "Table",
+    "TextAssessment",
+    "TextVerdict",
+    "assess_text",
+    "classify_section",
+    "extract_arxiv_html",
+    "extract_jats",
+    "inherit_section_kinds",
 ]
