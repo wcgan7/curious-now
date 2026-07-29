@@ -10,6 +10,7 @@ from curious_now_v2.core.source_registry import load_source_registry
 from curious_now_v2.db.hydration import run_hydration
 from curious_now_v2.db.ingestion import sync_source_registry
 from curious_now_v2.db.migrations import apply_migrations
+from curious_now_v2.db.publication import run_publication_gate
 from curious_now_v2.db.ranking import run_ranking
 from curious_now_v2.db.retrieval import run_retrieval
 from curious_now_v2.pipeline.run_ingestion import run_ingestion_once
@@ -75,6 +76,18 @@ def build_parser() -> argparse.ArgumentParser:
     retrieve.add_argument("--limit", type=int, default=50)
     retrieve.add_argument("--timeout-seconds", type=float, default=30)
     _add_database_url_argument(retrieve)
+
+    gate = commands.add_parser(
+        "gate",
+        help="decide which stories have evidence worth opening",
+    )
+    gate.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="evaluate only the least recently gated N stories",
+    )
+    _add_database_url_argument(gate)
 
     rank = commands.add_parser(
         "rank",
@@ -171,6 +184,24 @@ def main() -> None:
             f"{retrieval.abstract_only} abstract only); "
             f"{retrieval.paywalled} paywalled, {retrieval.blocked} blocked, "
             f"{retrieval.failed} unavailable"
+        )
+        return
+
+    if args.command == "gate":
+        if args.limit is not None and args.limit < 1:
+            raise SystemExit("--limit must be positive")
+        gate_result = run_publication_gate(
+            _database_url(args.database_url),
+            limit=args.limit,
+        )
+        depths = ", ".join(
+            f"{name} {count}" for name, count in sorted(gate_result.by_depth.items())
+        )
+        print(  # noqa: T201
+            f"gated {gate_result.evaluated} stories: "
+            f"{gate_result.published} publishable, "
+            f"{gate_result.withheld} withheld"
+            + (f" ({depths})" if depths else "")
         )
         return
 
