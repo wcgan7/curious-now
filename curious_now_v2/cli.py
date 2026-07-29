@@ -7,6 +7,7 @@ from pathlib import Path
 import psycopg
 
 from curious_now_v2.core.source_registry import load_source_registry
+from curious_now_v2.db.hydration import run_hydration
 from curious_now_v2.db.ingestion import sync_source_registry
 from curious_now_v2.db.migrations import apply_migrations
 from curious_now_v2.db.ranking import run_ranking
@@ -57,6 +58,14 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--limit", type=int, default=25)
     ingest.add_argument("--timeout-seconds", type=float, default=20)
     _add_database_url_argument(ingest)
+
+    hydrate = commands.add_parser(
+        "hydrate",
+        help="fetch abstracts for papers that have an identifier but no text",
+    )
+    hydrate.add_argument("--limit", type=int, default=100)
+    hydrate.add_argument("--timeout-seconds", type=float, default=30)
+    _add_database_url_argument(hydrate)
 
     rank = commands.add_parser(
         "rank",
@@ -119,6 +128,23 @@ def main() -> None:
             f"{ingestion_result.feeds_attempted} feeds; "
             f"{ingestion_result.items_inserted} new items; "
             f"{ingestion_result.stories_created} new stories"
+        )
+        return
+
+    if args.command == "hydrate":
+        if args.limit < 1:
+            raise SystemExit("--limit must be positive")
+        hydration_result = run_hydration(
+            _database_url(args.database_url),
+            limit=args.limit,
+            timeout_seconds=args.timeout_seconds,
+        )
+        print(  # noqa: T201
+            f"hydrated {hydration_result.papers_hydrated}/"
+            f"{hydration_result.papers_attempted} papers; "
+            f"{hydration_result.items_upgraded} items upgraded; "
+            f"{hydration_result.papers_without_abstract} publish no abstract; "
+            f"{hydration_result.papers_failed} failed"
         )
         return
 

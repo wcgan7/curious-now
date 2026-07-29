@@ -92,6 +92,16 @@ Postgres queries are sufficient until observed load demonstrates otherwise.
   reference.
 - Extraction failure does not block the item or its story.
 
+Abstracts come from the arXiv API for arXiv identifiers and Crossref for other
+DOIs. Identifier types are selected in separate pools so a large single-source
+ingestion cannot starve the other provider. Hydration only ever raises an item's
+access class to what was actually fetched. Many DOIs — news and editorial items
+in particular — publish no abstract at all; those are recorded as attempted and
+retried later rather than refetched on every run.
+
+Open-access full text is not yet extracted, so no story currently reaches the
+`open_full_text` sufficiency that Technical requires.
+
 ### 3. Cluster
 
 Clustering uses a confidence ladder:
