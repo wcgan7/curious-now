@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -92,6 +93,15 @@ SOURCE TEXT:
 # Published per-million rates, July 2026. Cached input bills at a fraction of
 # the fresh rate, so it is tracked separately: token totals alone say nothing
 # about cost when the tiers are priced 2.5x apart.
+# The shapes the contract treats differently: a dense paper, a lab release
+# with no mechanism, ordinary journalism, and evidence too thin to explain.
+DEFAULT_SOURCES = [
+    "arXiv AI",
+    "Google DeepMind",
+    "BBC Science & Environment",
+    "medRxiv",
+]
+
 PRICING = {
     "gpt-5.6-sol": {"input": 5.00, "output": 30.00},
     "gpt-5.6-terra": {"input": 2.50, "output": 15.00},
@@ -133,6 +143,7 @@ class Result:
     error: str | None = None
     checks: dict[str, bool] = field(default_factory=dict)
     usage: Usage = field(default_factory=Usage)
+    separation: dict[str, float] = field(default_factory=dict)
 
 
 def run_model(model: str, effort: str, prompt: str, tag: str) -> Result:
@@ -192,6 +203,48 @@ def words(value: object) -> int:
     return len(str(value or "").split())
 
 
+_STOPWORDS = frozenset(
+    """the a an and or but of to in on for with by from as at is are was were be
+    been it its this that these those which who whom what when where how why not
+    no can could may might will would should has have had do does did than then
+    so such more most other some any each both all one two into over under""".split()
+)
+
+
+def _content_words(text: str) -> set[str]:
+    return {
+        word
+        for word in re.findall(r"[a-z][a-z-]{2,}", text.casefold())
+        if word not in _STOPWORDS
+    }
+
+
+def _sentences(text: str) -> list[str]:
+    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if len(s.split()) > 5]
+
+
+def ladder_separation(glance: str, explain: str) -> dict[str, float]:
+    """Whether Explain adds resolution or just restates Glance at length.
+
+    The ladder only works if each layer answers its own question. An Explain
+    that reuses Glance's sentences is the "expanded abstract" the contract
+    prohibits, and it is invisible unless measured.
+    """
+
+    if not glance.strip() or not explain.strip():
+        return {}
+    glance_sentences = set(_sentences(glance))
+    reused = sum(1 for s in _sentences(explain) if s in glance_sentences)
+    glance_vocab = _content_words(glance)
+    explain_vocab = _content_words(explain)
+    new = explain_vocab - glance_vocab
+    return {
+        "verbatim_sentences_reused": float(reused),
+        "new_vocabulary_ratio": round(len(new) / max(len(explain_vocab), 1), 3),
+        "length_multiple": round(words(explain) / max(words(glance), 1), 2),
+    }
+
+
 def check(result: Result, *, expect_mechanism: bool) -> None:
     """Score one result against the parts of the contract a machine can judge."""
 
@@ -213,6 +266,21 @@ def check(result: Result, *, expect_mechanism: bool) -> None:
             != bool(str(explain.get("declined_reason") or "").strip())
         ),
     }
+    if explain.get("mechanism_supported"):
+        separation = ladder_separation(
+            str(glance.get("text") or ""), str(explain.get("text") or "")
+        )
+        result.separation = separation
+        if separation:
+            # Explain must go deeper, not longer: no lifted sentences, and a
+            # majority of its vocabulary should be new.
+            result.checks["explain_reuses_no_glance_sentences"] = (
+                separation["verbatim_sentences_reused"] == 0
+            )
+            result.checks["explain_adds_new_vocabulary"] = (
+                separation["new_vocabulary_ratio"] >= 0.5
+            )
+
     if expect_mechanism:
         # The gate judges whether there is enough *text* for Explain; only the
         # model can see whether the text describes a mechanism. A funding
@@ -239,6 +307,11 @@ def main() -> int:
     parser.add_argument("--effort", default="high")
     parser.add_argument("--stories", type=int, default=4)
     parser.add_argument(
+        "--sources",
+        default="",
+        help="pipe-separated source names to evaluate, in order",
+    )
+    parser.add_argument(
         "--input",
         type=Path,
         default=Path("/tmp/claude-1000/-home-gan-Documents-curious-now")
@@ -252,7 +325,7 @@ def main() -> int:
     corpus = json.loads(args.input.read_text())
     # Cover the shapes the contract treats differently: a dense paper, a lab
     # release, ordinary journalism, and something too thin to explain.
-    wanted = ["arXiv AI", "Google DeepMind", "BBC Science & Environment", "medRxiv"]
+    wanted = args.sources.split("|") if args.sources else DEFAULT_SOURCES
     chosen = [
         story
         for name in wanted[: args.stories]
@@ -320,6 +393,7 @@ def main() -> int:
                     "reasoning_tokens": r.usage.reasoning_tokens,
                     "cost_usd": round(r.usage.cost(r.model), 5),
                     "checks": r.checks,
+                    "separation": r.separation,
                     "error": r.error,
                     "payload": r.payload,
                 }
