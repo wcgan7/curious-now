@@ -211,7 +211,7 @@ def main() -> int:
         # The structure map presents floats as "Figure 3: caption", so a model
         # told to quote labels exactly returns that whole string. Match on the
         # label part rather than calling a correct citation invented.
-        def matches(label: str) -> bool:
+        def matches(label: str, known: set[str] = known) -> bool:
             probe = label.strip().casefold()
             head = probe.split(":", 1)[0].strip()
             return any(
