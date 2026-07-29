@@ -11,7 +11,10 @@ from curious_now_v2.retrieval.document import (
 )
 from curious_now_v2.retrieval.extract_arxiv import extract_arxiv_html
 from curious_now_v2.retrieval.extract_jats import extract_jats
-from tests.fixtures.loader import fixture_text
+from tests.fixtures.loader import fixture_text, fixtures_of_kind
+
+ARXIV_FIXTURES = fixtures_of_kind("arxiv_html")
+JATS_FIXTURES = fixtures_of_kind("jats_xml")
 
 
 @pytest.fixture(scope="module")
@@ -22,6 +25,98 @@ def arxiv_doc():
 @pytest.fixture(scope="module")
 def jats_doc():
     return extract_jats(fixture_text("pmc_jats_xml"))
+
+
+# --- run across every captured paper, not just one --------------------------
+
+
+@pytest.mark.parametrize("name", ARXIV_FIXTURES)
+def test_every_arxiv_paper_recovers_all_citable_floats(name: str) -> None:
+    """A single sample hid two real losses; every captured paper is counted."""
+
+    raw = fixture_text(name)
+    document = extract_arxiv_html(raw)
+    soup = BeautifulSoup(raw, "html.parser")
+    citable = [
+        node
+        for node in soup.select("figure.ltx_figure, figure.ltx_table")
+        if node.find_parent("figure") is None
+    ]
+
+    assert len(document.figures) + len(document.tables) == len(citable)
+
+
+@pytest.mark.parametrize("name", JATS_FIXTURES)
+def test_every_jats_article_recovers_all_floats(name: str) -> None:
+    """Publishers place floats in <body> or in a sibling <floats-group>."""
+
+    raw = fixture_text(name)
+    document = extract_jats(raw)
+    soup = BeautifulSoup(raw, "xml")
+
+    assert len(document.figures) == len(soup.find_all("fig"))
+    assert len(document.tables) == len(soup.find_all("table-wrap"))
+
+
+@pytest.mark.parametrize("name", [*ARXIV_FIXTURES, *JATS_FIXTURES])
+def test_every_structured_paper_extracts_cleanly(name: str) -> None:
+    extract = extract_arxiv_html if name in ARXIV_FIXTURES else extract_jats
+    document = extract(fixture_text(name))
+
+    assert document.warnings == ()
+    assert document.title
+    assert document.sections
+    assert document.has_structure
+    assert document.word_count > 500
+
+
+@pytest.mark.parametrize("name", [*ARXIV_FIXTURES, *JATS_FIXTURES])
+def test_a_section_never_repeats_its_own_prose(name: str) -> None:
+    """List items wrap their own paragraph, so both match the block selector
+    and the text would otherwise be collected twice."""
+
+    extract = extract_arxiv_html if name in ARXIV_FIXTURES else extract_jats
+    document = extract(fixture_text(name))
+
+    for section in document.sections:
+        substantial = [
+            paragraph
+            for paragraph in section.paragraphs
+            if len(paragraph.split()) > 10
+        ]
+        assert len(substantial) == len(set(substantial))
+
+
+@pytest.mark.parametrize("name", [*ARXIV_FIXTURES, *JATS_FIXTURES])
+def test_a_parent_section_never_repeats_a_child_section(name: str) -> None:
+    """Ownership must resolve to the nearest section.
+
+    Papers do legitimately repeat themselves between distant sections — a
+    data-availability statement restated in an appendix, for instance — so this
+    checks the ancestor chain rather than the whole document.
+    """
+
+    extract = extract_arxiv_html if name in ARXIV_FIXTURES else extract_jats
+    document = extract(fixture_text(name))
+
+    ancestors: dict[int, Section] = {}
+    for section in document.sections:
+        for level in [key for key in ancestors if key >= section.level]:
+            del ancestors[level]
+        for ancestor in ancestors.values():
+            overlap = set(section.paragraphs) & set(ancestor.paragraphs)
+            assert not overlap, (
+                f"{section.title!r} repeats prose from {ancestor.title!r}"
+            )
+        ancestors[section.level] = section
+
+
+@pytest.mark.parametrize("name", ARXIV_FIXTURES)
+def test_no_paper_leaks_duplicated_math(name: str) -> None:
+    text = extract_arxiv_html(fixture_text(name)).text
+
+    for rendered, tex in (("α", "\\alpha"), ("β", "\\beta"), ("↓", "\\downarrow")):
+        assert f"{rendered} {tex}" not in text
 
 
 # --- section classification -------------------------------------------------

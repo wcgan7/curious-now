@@ -94,6 +94,64 @@ class Section:
         return sum(len(paragraph.split()) for paragraph in self.paragraphs)
 
 
+_PRE_METHOD = frozenset({SectionKind.INTRODUCTION, SectionKind.RELATED_WORK})
+_POST_METHOD = frozenset(
+    {
+        SectionKind.RESULTS,
+        SectionKind.DISCUSSION,
+        SectionKind.CONCLUSION,
+        SectionKind.LIMITATIONS,
+        SectionKind.APPENDIX,
+        SectionKind.REFERENCES,
+        SectionKind.ACKNOWLEDGEMENTS,
+    }
+)
+
+
+def infer_method_sections(sections: tuple[Section, ...]) -> tuple[Section, ...]:
+    """Treat unlabelled sections between the introduction and the results as
+    method content.
+
+    Papers routinely name the methods section after the method itself —
+    "Probabilistic Surrogate for RAMBO", "Acquisition Functions" — so no
+    keyword matches. Position is the reliable signal: whatever sits between the
+    background and the experiments is where the work is described.
+    """
+
+    top_level = [
+        (index, section)
+        for index, section in enumerate(sections)
+        if section.level == 1
+    ]
+    start = next(
+        (index for index, section in top_level if section.kind in _PRE_METHOD),
+        None,
+    )
+    if start is None:
+        return sections
+    end = next(
+        (
+            index
+            for index, section in top_level
+            if index > start and section.kind in _POST_METHOD
+        ),
+        None,
+    )
+    if end is None:
+        return sections
+
+    return tuple(
+        replace(section, kind=SectionKind.METHOD)
+        if (
+            start < index < end
+            and section.level == 1
+            and section.kind is SectionKind.OTHER
+        )
+        else section
+        for index, section in enumerate(sections)
+    )
+
+
 def inherit_section_kinds(sections: tuple[Section, ...]) -> tuple[Section, ...]:
     """Give an unclassified subsection the role of the section containing it.
 
@@ -186,6 +244,12 @@ class Document:
 
     @property
     def has_method_section(self) -> bool:
-        """Explain requires mechanism, which is what a method section carries."""
+        """Whether the document describes its own methodology.
+
+        This is a signal for packet construction, not Explain's eligibility
+        gate. A review or editorial explains mechanisms at length while having
+        no methods section of its own, so mechanism support is decided from the
+        claims a packet actually carries, not from this property.
+        """
 
         return bool(self.sections_of_kind(SectionKind.METHOD))

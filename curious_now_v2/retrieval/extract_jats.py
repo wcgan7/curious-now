@@ -10,6 +10,7 @@ from curious_now_v2.retrieval.document import (
     Section,
     Table,
     classify_section,
+    infer_method_sections,
     inherit_section_kinds,
 )
 
@@ -124,7 +125,10 @@ def extract_jats(xml: str) -> Document:
                 )
             )
 
-    figures, tables = _figures_and_tables(body or soup)
+    # Publishers place floats differently: some inline them in <body>, others
+    # (MDPI among them) collect them in a <floats-group> beside it. Searching
+    # the whole article catches both, plus any in back matter.
+    figures, tables = _figures_and_tables(soup)
 
     warnings: list[str] = []
     if body is None:
@@ -136,7 +140,7 @@ def extract_jats(xml: str) -> Document:
         extraction_method="jats_xml",
         title=title,
         abstract=abstract,
-        sections=inherit_section_kinds(tuple(sections)),
+        sections=inherit_section_kinds(infer_method_sections(tuple(sections))),
         figures=figures,
         tables=tables,
         warnings=tuple(warnings),

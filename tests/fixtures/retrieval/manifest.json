@@ -102,6 +102,48 @@
       "url": "https://www.esa.int/Science_Exploration/Space_Science/Watch_the_total_solar_eclipse_with_ESA_in_Leon",
       "kind": "institutional_html",
       "note": "Short institutional item, older CMS markup"
+    },
+    {
+      "name": "arxiv_latexml_2017",
+      "url": "https://arxiv.org/html/1706.03762",
+      "kind": "arxiv_html",
+      "note": "2017 paper with retroactively generated LaTeXML; older conversion conventions"
+    },
+    {
+      "name": "arxiv_latexml_long",
+      "url": "https://arxiv.org/html/2601.20043",
+      "kind": "arxiv_html",
+      "note": "Long figure-heavy paper"
+    },
+    {
+      "name": "arxiv_latexml_alt",
+      "url": "https://arxiv.org/html/2505.14366",
+      "kind": "arxiv_html",
+      "note": "Second-format check, different authoring style"
+    },
+    {
+      "name": "arxiv_latexml_recent",
+      "url": "https://arxiv.org/html/2607.24814",
+      "kind": "arxiv_html",
+      "note": "Recent paper from the live corpus"
+    },
+    {
+      "name": "jats_nat_commun",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13172076/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Nature Communications via PMC; different publisher pipeline"
+    },
+    {
+      "name": "jats_mol_ecol",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13261541/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Molecular Ecology; Wiley-sourced JATS"
+    },
+    {
+      "name": "jats_ijms",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13207440/fullTextXML",
+      "kind": "jats_xml",
+      "note": "MDPI-sourced JATS, different section conventions"
     }
   ]
 }

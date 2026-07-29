@@ -11,6 +11,7 @@ from curious_now_v2.retrieval.document import (
     SectionKind,
     Table,
     classify_section,
+    infer_method_sections,
     inherit_section_kinds,
 )
 
@@ -88,12 +89,21 @@ def _heading_of(node: Tag) -> str | None:
 def _paragraphs_of(node: Tag) -> tuple[str, ...]:
     """Direct prose of a section, excluding text owned by nested subsections."""
 
+    # Keep a block only when this node is its nearest *emitted* section, so a
+    # subsection owns its prose, the parent does not repeat it, and
+    # ltx_paragraph wrappers do not swallow it.
+    owned = [
+        block
+        for block in node.select(_BLOCK_SELECTOR)
+        if block.find_parent(_is_emitted_section) is node
+    ]
+    # List items wrap their own <p>, so both match the selector and the text
+    # would be collected twice. Keep only the outermost of any nested pair.
+    owned_ids = {id(block) for block in owned}
+
     collected: list[str] = []
-    for block in node.select(_BLOCK_SELECTOR):
-        # Keep a block only when this node is its nearest *emitted* section,
-        # so a subsection owns its prose, the parent does not repeat it, and
-        # ltx_paragraph wrappers do not swallow it.
-        if block.find_parent(_is_emitted_section) is not node:
+    for block in owned:
+        if any(id(ancestor) in owned_ids for ancestor in block.parents):
             continue
         text = _compact(block.get_text(" "))
         if len(text) > 1:
@@ -209,7 +219,7 @@ def extract_arxiv_html(html: str) -> Document:
         extraction_method="arxiv_latexml_html",
         title=title,
         abstract=abstract,
-        sections=inherit_section_kinds(tuple(sections)),
+        sections=inherit_section_kinds(infer_method_sections(tuple(sections))),
         figures=figures,
         tables=tables,
         warnings=tuple(warnings),
