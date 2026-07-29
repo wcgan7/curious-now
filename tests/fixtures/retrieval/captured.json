@@ -149,6 +149,16 @@
     "stored_bytes": 272670,
     "url": "https://arxiv.org/pdf/2607.24758"
   },
+  "arxiv_pdf_twin_html": {
+    "bytes": 372050,
+    "captured_at": "2026-07-29T09:03:06.798665+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://arxiv.org/html/2607.24758",
+    "kind": "arxiv_html",
+    "sha256": "aa0b23bfd08fbf7cfa2723b8c9e8ae010463dc3154a71161bc96465629bac1a8",
+    "stored_bytes": 47674,
+    "url": "https://arxiv.org/html/2607.24758"
+  },
   "arxiv_qbio": {
     "bytes": 653175,
     "captured_at": "2026-07-29T08:30:35.217963+00:00",

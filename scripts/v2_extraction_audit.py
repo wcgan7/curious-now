@@ -22,9 +22,12 @@ from dataclasses import dataclass
 from bs4 import BeautifulSoup
 
 from curious_now_v2.retrieval.document import Document
+from curious_now_v2.retrieval.extract_article import extract_article
 from curious_now_v2.retrieval.extract_arxiv import extract_arxiv_html
 from curious_now_v2.retrieval.extract_jats import extract_jats
-from tests.fixtures.loader import fixture_text, fixtures_of_kind
+from curious_now_v2.retrieval.extract_pdf import extract_pdf
+from curious_now_v2.retrieval.quality import TextVerdict, assess_text
+from tests.fixtures.loader import fixture_bytes, fixture_text, fixtures_of_kind
 
 PASS, WARN, FAIL = "pass", "warn", "fail"
 
@@ -69,7 +72,7 @@ def check_title(doc: Document, raw: str, kind: str) -> Finding:
 
 
 def check_abstract(doc: Document, raw: str, kind: str) -> Finding:
-    if doc.abstract:
+    if doc.abstract or kind == "article_html":
         return ok()
     return Finding(WARN, "no abstract recovered")
 
@@ -82,8 +85,16 @@ SHORT_DOC_WORDS = 500
 
 def check_structure(doc: Document, raw: str, kind: str) -> Finding:
     if not doc.sections:
+        # A preprint landing page serves an abstract and nothing else. That is
+        # a real access class, not a failure to read the page.
+        if doc.abstract:
+            return Finding(WARN, "abstract only; no body served")
         return Finding(FAIL, "no sections")
     if not doc.has_structure:
+        # News and blog posts use headings for narrative beats, not the
+        # method/results roles a paper marks out; unclassified is correct.
+        if kind == "article_html":
+            return ok()
         # Book reviews, correspondence, and short notes carry little or no
         # sectioning. Failing to classify a *substantial, sectioned* document
         # is a bug; an article that simply has no sections is its shape.
@@ -97,6 +108,10 @@ def check_structure(doc: Document, raw: str, kind: str) -> Finding:
 
 def check_word_floor(doc: Document, raw: str, kind: str) -> Finding:
     if doc.word_count < GROUNDABLE_WORDS:
+        # A publisher serving a teaser under HTTP 200 is correctly extracted;
+        # the page is walled, the extractor is not broken.
+        if assess_text(doc.text).verdict is TextVerdict.SOFT_PAYWALL:
+            return Finding(WARN, f"soft paywall: {doc.word_count} words served")
         return Finding(FAIL, f"only {doc.word_count} words")
     if doc.word_count < SHORT_DOC_WORDS:
         return Finding(WARN, f"short document: {doc.word_count} words")
@@ -104,6 +119,10 @@ def check_word_floor(doc: Document, raw: str, kind: str) -> Finding:
 
 
 def check_floats_complete(doc: Document, raw: str, kind: str) -> Finding:
+    # Only markup declares its floats. A PDF's are inferred from captions and
+    # an article rarely has any, so there is nothing to count against.
+    if kind not in {"arxiv_html", "jats_xml"}:
+        return ok()
     got = len(doc.figures) + len(doc.tables)
     if kind == "arxiv_html":
         # Count captions a reader could cite. Top-level <figure> nodes are the
@@ -141,7 +160,7 @@ def check_empty_section_ratio(doc: Document, raw: str, kind: str) -> Finding:
     """A high share of wordless sections points at broken prose attribution."""
 
     if not doc.sections:
-        return Finding(FAIL, "no sections")
+        return ok() if doc.abstract else Finding(FAIL, "no sections")
     empty = sum(1 for section in doc.sections if section.word_count == 0)
     ratio = empty / len(doc.sections)
     if ratio > 0.6:
@@ -154,8 +173,13 @@ def check_empty_section_ratio(doc: Document, raw: str, kind: str) -> Finding:
 def check_intra_section_duplication(doc: Document, raw: str, kind: str) -> Finding:
     for section in doc.sections:
         substantial = [p for p in section.paragraphs if len(p.split()) > 10]
-        if len(substantial) != len(set(substantial)):
-            return Finding(FAIL, f"{section.title!r} repeats its own prose")
+        if len(substantial) == len(set(substantial)):
+            continue
+        # Markup nests a paragraph inside its list item, so a repeat there is
+        # the extractor's doing. A PDF's blocks are physical and disjoint, so a
+        # repeat is the paper reprinting something — a prompt template, say.
+        detail = f"{section.title!r} repeats its own prose"
+        return Finding(WARN if kind == "pdf" else FAIL, detail)
     return ok()
 
 
@@ -278,9 +302,11 @@ def check_paragraph_fragmentation(doc: Document, raw: str, kind: str) -> Finding
 
 
 def check_method_present(doc: Document, raw: str, kind: str) -> Finding:
-    """Not a failure: reviews and editorials have no methodology of their own."""
+    """Not a failure: reviews, editorials, and news carry no methodology."""
 
-    return ok() if doc.has_method_section else Finding(WARN, "no method section")
+    if kind == "article_html" or doc.has_method_section:
+        return ok()
+    return Finding(WARN, "no method section")
 
 
 CHECKS: tuple[tuple[str, Check], ...] = (
@@ -311,17 +337,41 @@ def main() -> int:
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
+    kinds = (
+        ("arxiv_html", ("arxiv_html",)),
+        ("jats_xml", ("jats_xml",)),
+        ("pdf", ("pdf",)),
+        (
+            "article_html",
+            (
+                "news_html",
+                "blog_html",
+                "institutional_html",
+                "publisher_html",
+                "biorxiv_html",
+            ),
+        ),
+    )
     targets = [
-        (name, "arxiv_html") for name in fixtures_of_kind("arxiv_html")
-    ] + [(name, "jats_xml") for name in fixtures_of_kind("jats_xml")]
+        (name, label)
+        for label, wanted in kinds
+        for name in fixtures_of_kind(*wanted)
+    ]
 
     failures = 0
     warnings = 0
     for name, kind in targets:
-        raw = fixture_text(name)
-        extract = extract_arxiv_html if kind == "arxiv_html" else extract_jats
         try:
-            document = extract(raw)
+            if kind == "pdf":
+                raw = ""
+                document = extract_pdf(fixture_bytes(name))
+            else:
+                raw = fixture_text(name)
+                document = {
+                    "arxiv_html": extract_arxiv_html,
+                    "jats_xml": extract_jats,
+                    "article_html": extract_article,
+                }[kind](raw)
         except Exception as exc:  # noqa: BLE001 - the audit reports, never raises
             print(f"FAIL {name}: extractor raised {type(exc).__name__}: {exc}")
             failures += 1

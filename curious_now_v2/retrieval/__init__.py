@@ -18,8 +18,10 @@ from curious_now_v2.retrieval.document import (
     classify_section,
     inherit_section_kinds,
 )
+from curious_now_v2.retrieval.extract_article import extract_article
 from curious_now_v2.retrieval.extract_arxiv import extract_arxiv_html
 from curious_now_v2.retrieval.extract_jats import extract_jats
+from curious_now_v2.retrieval.extract_pdf import extract_pdf
 from curious_now_v2.retrieval.fetch import (
     Fetcher,
     FetchOutcome,
@@ -46,7 +48,9 @@ __all__ = [
     "TextVerdict",
     "assess_text",
     "classify_section",
+    "extract_article",
     "extract_arxiv_html",
     "extract_jats",
+    "extract_pdf",
     "inherit_section_kinds",
 ]

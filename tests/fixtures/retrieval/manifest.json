@@ -288,6 +288,12 @@
       "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13293645/fullTextXML",
       "kind": "jats_xml",
       "note": "Cureus case report; distinct JATS pipeline"
+    },
+    {
+      "name": "arxiv_pdf_twin_html",
+      "url": "https://arxiv.org/html/2607.24758",
+      "kind": "arxiv_html",
+      "note": "LaTeXML HTML of the same paper as arxiv_paper_pdf, for cross-path comparison"
     }
   ]
 }
