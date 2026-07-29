@@ -33,6 +33,13 @@ from curious_now_v2.retrieval.quality import (
     TextVerdict,
     assess_text,
 )
+from curious_now_v2.retrieval.resolve import (
+    Resolution,
+    ResolutionStatus,
+    TextKind,
+    resolve_item_text,
+)
+from curious_now_v2.retrieval.select import score_document
 
 __all__ = [
     "Document",
@@ -46,6 +53,9 @@ __all__ = [
     "Table",
     "TextAssessment",
     "TextVerdict",
+    "Resolution",
+    "ResolutionStatus",
+    "TextKind",
     "assess_text",
     "classify_section",
     "extract_article",
@@ -53,4 +63,6 @@ __all__ = [
     "extract_jats",
     "extract_pdf",
     "inherit_section_kinds",
+    "resolve_item_text",
+    "score_document",
 ]

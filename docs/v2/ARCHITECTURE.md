@@ -92,6 +92,21 @@ Postgres queries are sufficient until observed load demonstrates otherwise.
   reference.
 - Extraction failure does not block the item or its story.
 
+Full text is resolved by trying every route an item offers, richest first:
+arXiv LaTeXML HTML, PubMed Central JATS, the open-access copies OpenAlex knows
+about, then the item's own page, with PDF last. Markup states its own sections,
+figures, and tables; a PDF's have to be reconstructed from glyph geometry, so
+every earlier option avoids that reconstruction.
+
+Each candidate is fetched, extracted, and scored, and the richest result wins.
+The walk stops early once a candidate is clearly good enough, so a paper whose
+LaTeXML renders well never has its PDF pulled — a courtesy to the host as much
+as a saving. Every attempt is recorded with its outcome, so an operator can see
+why a source lost rather than only that it did.
+
+Retrieval draws from every source in turn rather than in discovery order, since
+a single large feed would otherwise fill batch after batch.
+
 Abstracts come from the arXiv API for arXiv identifiers and Crossref for other
 DOIs. Identifier types are selected in separate pools so a large single-source
 ingestion cannot starve the other provider. Hydration only ever raises an item's

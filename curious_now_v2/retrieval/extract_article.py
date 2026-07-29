@@ -62,6 +62,18 @@ def extract_article(html: str) -> Document:
         )
 
     title = _compact(parsed.title) if parsed.title else None
+    # Publishers append their own name to the page title. Strip it only when it
+    # matches the site's declared name, so a headline that genuinely contains a
+    # dash or pipe survives.
+    sitename = _compact(parsed.sitename) if parsed.sitename else None
+    if title and sitename:
+        for separator in (" | ", " : ", " — ", " – ", " - "):
+            head, found, tail = title.rpartition(separator)
+            # Some sites append their tagline after the name, so match the
+            # start of the trailing segment rather than the whole title.
+            if found and head and tail.casefold().startswith(sitename.casefold()):
+                title = head.strip()
+                break
 
     sections: list[Section] = []
     heading: str | None = None

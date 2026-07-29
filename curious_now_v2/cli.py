@@ -11,6 +11,7 @@ from curious_now_v2.db.hydration import run_hydration
 from curious_now_v2.db.ingestion import sync_source_registry
 from curious_now_v2.db.migrations import apply_migrations
 from curious_now_v2.db.ranking import run_ranking
+from curious_now_v2.db.retrieval import run_retrieval
 from curious_now_v2.pipeline.run_ingestion import run_ingestion_once
 
 
@@ -66,6 +67,14 @@ def build_parser() -> argparse.ArgumentParser:
     hydrate.add_argument("--limit", type=int, default=100)
     hydrate.add_argument("--timeout-seconds", type=float, default=30)
     _add_database_url_argument(hydrate)
+
+    retrieve = commands.add_parser(
+        "retrieve",
+        help="resolve full text for items that do not have any yet",
+    )
+    retrieve.add_argument("--limit", type=int, default=50)
+    retrieve.add_argument("--timeout-seconds", type=float, default=30)
+    _add_database_url_argument(retrieve)
 
     rank = commands.add_parser(
         "rank",
@@ -145,6 +154,23 @@ def main() -> None:
             f"{hydration_result.items_upgraded} items upgraded; "
             f"{hydration_result.papers_without_abstract} publish no abstract; "
             f"{hydration_result.papers_failed} failed"
+        )
+        return
+
+    if args.command == "retrieve":
+        if args.limit < 1:
+            raise SystemExit("--limit must be positive")
+        retrieval = run_retrieval(
+            _database_url(args.database_url),
+            limit=args.limit,
+            timeout_seconds=args.timeout_seconds,
+        )
+        print(  # noqa: T201
+            f"resolved {retrieval.retrieved}/{retrieval.attempted} items "
+            f"({retrieval.full_text} full text, "
+            f"{retrieval.abstract_only} abstract only); "
+            f"{retrieval.paywalled} paywalled, {retrieval.blocked} blocked, "
+            f"{retrieval.failed} unavailable"
         )
         return
 

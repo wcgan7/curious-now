@@ -94,12 +94,18 @@ def test_article_headings_become_sections() -> None:
     assert any(section.title for section in document.sections)
 
 
-def test_article_body_never_repeats_the_headline() -> None:
+def test_no_section_is_titled_the_headline() -> None:
+    """Publishers repeat the headline as a heading. A page <title> may still be
+    a prefix of the body's H1 — ScienceAlert's differ — so this checks for a
+    section carrying the headline, not for the words appearing anywhere."""
+
     for name in ARTICLE_FIXTURES:
         document = extract_article(fixture_text(name))
         if not document.title:
             continue
-        assert document.title not in document.body_text
+        assert all(
+            section.title != document.title for section in document.sections
+        )
 
 
 def test_unparseable_html_warns_rather_than_raising() -> None:
