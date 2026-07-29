@@ -1,4 +1,4 @@
-.PHONY: venv install dev-up dev-down migrate api test lint typecheck check sync-once sync-loop v2-sources v2-migrate v2-sync-sources v2-ingest v2-test v2-lint v2-typecheck reader-install reader-dev reader-typecheck reader-build v2-check
+.PHONY: venv install dev-up dev-down migrate api test lint typecheck check sync-once sync-loop v2-sources v2-migrate v2-sync-sources v2-ingest v2-rank v2-test v2-lint v2-typecheck reader-install reader-dev reader-typecheck reader-build v2-check
 
 venv:
 	python -m venv .venv
@@ -46,6 +46,9 @@ v2-sync-sources:
 
 v2-ingest:
 	.venv/bin/python -m curious_now_v2.cli ingest-once config/v2/sources.json
+
+v2-rank:
+	.venv/bin/python -m curious_now_v2.cli rank
 
 v2-test:
 	.venv/bin/python -m pytest tests/test_v2_*.py

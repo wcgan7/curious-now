@@ -9,6 +9,7 @@ import psycopg
 from curious_now_v2.core.source_registry import load_source_registry
 from curious_now_v2.db.ingestion import sync_source_registry
 from curious_now_v2.db.migrations import apply_migrations
+from curious_now_v2.db.ranking import run_ranking
 from curious_now_v2.pipeline.run_ingestion import run_ingestion_once
 
 
@@ -56,6 +57,18 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--limit", type=int, default=25)
     ingest.add_argument("--timeout-seconds", type=float, default=20)
     _add_database_url_argument(ingest)
+
+    rank = commands.add_parser(
+        "rank",
+        help="score published stories and store inspectable reasons",
+    )
+    rank.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="score only the newest N stories",
+    )
+    _add_database_url_argument(rank)
     return parser
 
 
@@ -106,6 +119,19 @@ def main() -> None:
             f"{ingestion_result.feeds_attempted} feeds; "
             f"{ingestion_result.items_inserted} new items; "
             f"{ingestion_result.stories_created} new stories"
+        )
+        return
+
+    if args.command == "rank":
+        if args.limit is not None and args.limit < 1:
+            raise SystemExit("--limit must be positive")
+        ranking_result = run_ranking(
+            _database_url(args.database_url),
+            limit=args.limit,
+        )
+        print(  # noqa: T201
+            f"scored {ranking_result.stories_scored} stories; "
+            f"top score {ranking_result.top_score:.3f}"
         )
         return
 

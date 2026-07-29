@@ -12,6 +12,7 @@ import type {
 } from "@/lib/types";
 
 interface Cursor {
+  score: number;
   sortAt: string;
   id: string;
 }
@@ -23,6 +24,7 @@ interface FeedRow {
   id: string;
   reader_title: string;
   sort_at: Date;
+  feed_score: number;
   sources: SourceLink[];
 }
 
@@ -46,12 +48,14 @@ export function decodeCursor(value: string | null): Cursor | null {
     if (
       typeof decoded.sortAt !== "string" ||
       typeof decoded.id !== "string" ||
+      typeof decoded.score !== "number" ||
+      !Number.isFinite(decoded.score) ||
       !UUID_PATTERN.test(decoded.id) ||
       Number.isNaN(Date.parse(decoded.sortAt))
     ) {
       return null;
     }
-    return { sortAt: decoded.sortAt, id: decoded.id };
+    return { score: decoded.score, sortAt: decoded.sortAt, id: decoded.id };
   } catch {
     return null;
   }
@@ -71,10 +75,12 @@ export async function getFeedPage(
   pageSize = 20,
 ): Promise<FeedPage> {
   const sql = database();
+  // Ranked order, with reverse chronological as the tiebreak so an unranked
+  // or failed ranking pass degrades to newest-first rather than a broken feed.
   const cursorFilter = cursor
     ? sql`
-        AND (COALESCE(s.published_at, s.created_at), s.id)
-          < (${cursor.sortAt}::timestamptz, ${cursor.id}::uuid)
+        AND (s.feed_score, COALESCE(s.published_at, s.created_at), s.id)
+          < (${cursor.score}::double precision, ${cursor.sortAt}::timestamptz, ${cursor.id}::uuid)
       `
     : sql``;
 
@@ -83,14 +89,18 @@ export async function getFeedPage(
       SELECT
         s.id,
         COALESCE(dt.text, s.working_title) AS reader_title,
-        COALESCE(s.published_at, s.created_at) AS sort_at
+        COALESCE(s.published_at, s.created_at) AS sort_at,
+        s.feed_score
       FROM stories s
       LEFT JOIN display_titles dt
         ON dt.id = s.current_display_title_id
        AND dt.status = 'valid'
       WHERE s.status = 'published'
       ${cursorFilter}
-      ORDER BY COALESCE(s.published_at, s.created_at) DESC, s.id DESC
+      ORDER BY
+        s.feed_score DESC,
+        COALESCE(s.published_at, s.created_at) DESC,
+        s.id DESC
       LIMIT ${pageSize}
     )
     SELECT
@@ -119,17 +129,22 @@ export async function getFeedPage(
     GROUP BY
       p.id,
       p.reader_title,
-      p.sort_at
-    ORDER BY p.sort_at DESC, p.id DESC;
+      p.sort_at,
+      p.feed_score
+    ORDER BY p.feed_score DESC, p.sort_at DESC, p.id DESC;
   `;
 
   const stories = rows.map(mapFeedRow);
-  const last = stories.at(-1);
+  const lastRow = rows.at(-1);
   return {
     stories,
     nextCursor:
-      rows.length === pageSize && last
-        ? encodeCursor({ sortAt: last.publishedAt, id: last.id })
+      rows.length === pageSize && lastRow
+        ? encodeCursor({
+            score: lastRow.feed_score,
+            sortAt: lastRow.sort_at.toISOString(),
+            id: lastRow.id,
+          })
         : null,
   };
 }
@@ -145,6 +160,7 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
       s.id,
       COALESCE(dt.text, s.working_title) AS reader_title,
       COALESCE(s.published_at, s.created_at) AS sort_at,
+      s.feed_score,
       CASE WHEN dp.packet_id IS NOT NULL
         THEN 'enriched' ELSE 'evidence_only' END AS mode,
       COALESCE(

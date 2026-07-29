@@ -162,6 +162,17 @@ reasons. Initial signals include:
 
 Ranking does not use per-user engagement.
 
+A weighted base score combines freshness, evidence quality, primary-material
+availability, independent corroboration, and text sufficiency. A variety damper
+then demotes each repeated principal source within a pass, so one bulk feed drop
+cannot occupy the whole shelf. Every stored score records the reason for each
+signal and any damping applied. Ranking is deterministic: the same stories and
+clock produce the same order.
+
+Source-level variety is the initial approximation of topical variety; a topic
+signal replaces it once stories carry topic assignments. Significance and
+duplicate penalties are not yet implemented.
+
 ## Publication rules
 
 A story can be published when it has:

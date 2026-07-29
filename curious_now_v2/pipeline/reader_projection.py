@@ -55,14 +55,25 @@ def project_story(
     # Claims come from the packet whose explanations are displayed, so one
     # reader session never mixes evidence-packet versions. Without a display
     # set, the newest packet supplies the evidence-only view.
-    packets_by_id = {packet.packet_id: packet for packet in packets}
-    claims_packet = packets_by_id.get(decision.display_packet_id) if (
-        decision.display_packet_id is not None
-    ) else max(
-        (packet for packet in packets if packet.story_id == story.story_id),
-        key=lambda packet: packet.version,
-        default=None,
-    )
+    claims_packet: EvidencePacket | None
+    if decision.display_packet_id is not None:
+        claims_packet = next(
+            (
+                packet
+                for packet in packets
+                if packet.packet_id == decision.display_packet_id
+            ),
+            None,
+        )
+    else:
+        story_packets = [
+            packet for packet in packets if packet.story_id == story.story_id
+        ]
+        claims_packet = (
+            max(story_packets, key=lambda packet: packet.version)
+            if story_packets
+            else None
+        )
 
     claims: tuple[ClaimView, ...] = ()
     if claims_packet is not None:
