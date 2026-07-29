@@ -32,3 +32,4 @@ apps/reader/.next/
 apps/reader/node_modules/
 apps/reader/.env.local
 apps/reader/tsconfig.tsbuildinfo
+.eval/
