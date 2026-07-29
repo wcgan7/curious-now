@@ -5,15 +5,21 @@ from curious_now_v2.pipeline.explanation_plan import (
     plan_explanations,
 )
 from curious_now_v2.pipeline.publication import (
+    PresentationSet,
     PublicationDecision,
     PublicationMode,
     evaluate_publication,
+    resolve_reader_title,
+    select_presentation_set,
 )
 
 __all__ = [
     "ExplanationPlan",
+    "PresentationSet",
     "PublicationDecision",
     "PublicationMode",
     "evaluate_publication",
     "plan_explanations",
+    "resolve_reader_title",
+    "select_presentation_set",
 ]

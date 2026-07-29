@@ -11,6 +11,7 @@ from curious_now_v2.core.enums import (
     ClaimKind,
     ContentType,
     ExplanationDepth,
+    ReaderTitleKind,
     SourceRole,
     StoryItemRole,
 )
@@ -65,6 +66,8 @@ class StoryReadModel(BaseModel):
 
     story_id: UUID
     title: str
+    title_kind: ReaderTitleKind
+    title_attribution: str | None
     mode: Literal["evidence_only", "enriched"]
     sources: tuple[SourceLinkView, ...]
     claims: tuple[ClaimView, ...]

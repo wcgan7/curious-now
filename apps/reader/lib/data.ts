@@ -21,7 +21,7 @@ const UUID_PATTERN =
 
 interface FeedRow {
   id: string;
-  canonical_title: string;
+  reader_title: string;
   sort_at: Date;
   mode: "evidence_only" | "enriched";
   glance: string | null;
@@ -58,7 +58,7 @@ export function decodeCursor(value: string | null): Cursor | null {
 function mapFeedRow(row: FeedRow): FeedStory {
   return {
     id: row.id,
-    title: row.canonical_title,
+    title: row.reader_title,
     publishedAt: row.sort_at.toISOString(),
     mode: row.mode,
     glance: row.glance,
@@ -83,46 +83,59 @@ export async function getFeedPage(
     WITH page AS (
       SELECT
         s.id,
-        s.canonical_title,
+        COALESCE(dt.text, s.working_title) AS reader_title,
         COALESCE(s.published_at, s.created_at) AS sort_at,
-        CASE WHEN EXISTS (
-          SELECT 1
-          FROM explanations e
-          WHERE e.story_id = s.id
-            AND e.evidence_packet_id = s.current_evidence_packet_id
-            AND e.status = 'valid'
-        ) THEN 'enriched' ELSE 'evidence_only' END AS mode,
+        CASE WHEN dp.packet_id IS NOT NULL
+          THEN 'enriched' ELSE 'evidence_only' END AS mode,
         (
           SELECT e.plain_text
           FROM explanations e
           WHERE e.story_id = s.id
-            AND e.evidence_packet_id = s.current_evidence_packet_id
+            AND e.evidence_packet_id = dp.packet_id
+            AND e.conceptual_spine_id IS NOT DISTINCT FROM dp.spine_id
             AND e.status = 'valid'
             AND e.depth = 'glance'
           ORDER BY e.created_at DESC
           LIMIT 1
         ) AS glance,
-        ARRAY_REMOVE(ARRAY[
-          CASE WHEN EXISTS (
-            SELECT 1 FROM explanations e
-            WHERE e.story_id = s.id
-              AND e.evidence_packet_id = s.current_evidence_packet_id
-              AND e.status = 'valid' AND e.depth = 'glance'
-          ) THEN 'glance' END,
-          CASE WHEN EXISTS (
-            SELECT 1 FROM explanations e
-            WHERE e.story_id = s.id
-              AND e.evidence_packet_id = s.current_evidence_packet_id
-              AND e.status = 'valid' AND e.depth = 'explain'
-          ) THEN 'explain' END,
-          CASE WHEN EXISTS (
-            SELECT 1 FROM explanations e
-            WHERE e.story_id = s.id
-              AND e.evidence_packet_id = s.current_evidence_packet_id
-              AND e.status = 'valid' AND e.depth = 'technical'
-          ) THEN 'technical' END
-        ], NULL) AS available_depths
+        COALESCE(
+          (
+            SELECT ARRAY_AGG(d.depth ORDER BY d.ord)
+            FROM (
+              SELECT DISTINCT
+                e.depth,
+                CASE e.depth
+                  WHEN 'glance' THEN 1
+                  WHEN 'explain' THEN 2
+                  ELSE 3
+                END AS ord
+              FROM explanations e
+              WHERE e.story_id = s.id
+                AND e.evidence_packet_id = dp.packet_id
+                AND e.conceptual_spine_id IS NOT DISTINCT FROM dp.spine_id
+                AND e.status = 'valid'
+            ) d
+          ),
+          '{}'
+        ) AS available_depths
       FROM stories s
+      LEFT JOIN display_titles dt
+        ON dt.id = s.current_display_title_id
+       AND dt.status = 'valid'
+      LEFT JOIN LATERAL (
+        -- Newest packet version with a validated explanation, and that
+        -- explanation's spine; a newer packet without validated output
+        -- does not withdraw the previous valid set.
+        SELECT
+          e.evidence_packet_id AS packet_id,
+          e.conceptual_spine_id AS spine_id
+        FROM explanations e
+        JOIN evidence_packets ep ON ep.id = e.evidence_packet_id
+        WHERE e.story_id = s.id
+          AND e.status = 'valid'
+        ORDER BY ep.version DESC, e.created_at DESC
+        LIMIT 1
+      ) dp ON TRUE
       WHERE s.status = 'published'
       ${cursorFilter}
       ORDER BY COALESCE(s.published_at, s.created_at) DESC, s.id DESC
@@ -153,7 +166,7 @@ export async function getFeedPage(
     JOIN sources src ON src.id = i.source_id
     GROUP BY
       p.id,
-      p.canonical_title,
+      p.reader_title,
       p.sort_at,
       p.mode,
       p.glance,
@@ -183,41 +196,41 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
   const storyRows = await sql<StoryRow[]>`
     SELECT
       s.id,
-      s.canonical_title,
+      COALESCE(dt.text, s.working_title) AS reader_title,
       COALESCE(s.published_at, s.created_at) AS sort_at,
-      CASE WHEN EXISTS (
-        SELECT 1 FROM explanations e
-        WHERE e.story_id = s.id
-          AND e.evidence_packet_id = s.current_evidence_packet_id
-          AND e.status = 'valid'
-      ) THEN 'enriched' ELSE 'evidence_only' END AS mode,
+      CASE WHEN dp.packet_id IS NOT NULL
+        THEN 'enriched' ELSE 'evidence_only' END AS mode,
       (
-        SELECT e.plain_text FROM explanations e
+        SELECT e.plain_text
+        FROM explanations e
         WHERE e.story_id = s.id
-          AND e.evidence_packet_id = s.current_evidence_packet_id
-          AND e.status = 'valid' AND e.depth = 'glance'
-        ORDER BY e.created_at DESC LIMIT 1
+          AND e.evidence_packet_id = dp.packet_id
+          AND e.conceptual_spine_id IS NOT DISTINCT FROM dp.spine_id
+          AND e.status = 'valid'
+          AND e.depth = 'glance'
+        ORDER BY e.created_at DESC
+        LIMIT 1
       ) AS glance,
-      ARRAY_REMOVE(ARRAY[
-        CASE WHEN EXISTS (
-          SELECT 1 FROM explanations e
-          WHERE e.story_id = s.id
-            AND e.evidence_packet_id = s.current_evidence_packet_id
-            AND e.status = 'valid' AND e.depth = 'glance'
-        ) THEN 'glance' END,
-        CASE WHEN EXISTS (
-          SELECT 1 FROM explanations e
-          WHERE e.story_id = s.id
-            AND e.evidence_packet_id = s.current_evidence_packet_id
-            AND e.status = 'valid' AND e.depth = 'explain'
-        ) THEN 'explain' END,
-        CASE WHEN EXISTS (
-          SELECT 1 FROM explanations e
-          WHERE e.story_id = s.id
-            AND e.evidence_packet_id = s.current_evidence_packet_id
-            AND e.status = 'valid' AND e.depth = 'technical'
-        ) THEN 'technical' END
-      ], NULL) AS available_depths,
+      COALESCE(
+        (
+          SELECT ARRAY_AGG(d.depth ORDER BY d.ord)
+          FROM (
+            SELECT DISTINCT
+              e.depth,
+              CASE e.depth
+                WHEN 'glance' THEN 1
+                WHEN 'explain' THEN 2
+                ELSE 3
+              END AS ord
+            FROM explanations e
+            WHERE e.story_id = s.id
+              AND e.evidence_packet_id = dp.packet_id
+              AND e.conceptual_spine_id IS NOT DISTINCT FROM dp.spine_id
+              AND e.status = 'valid'
+          ) d
+        ),
+        '{}'
+      ) AS available_depths,
       (
         SELECT COALESCE(
           jsonb_agg(
@@ -242,6 +255,20 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
         WHERE si.story_id = s.id
       ) AS sources
     FROM stories s
+    LEFT JOIN display_titles dt
+      ON dt.id = s.current_display_title_id
+     AND dt.status = 'valid'
+    LEFT JOIN LATERAL (
+      SELECT
+        e.evidence_packet_id AS packet_id,
+        e.conceptual_spine_id AS spine_id
+      FROM explanations e
+      JOIN evidence_packets ep ON ep.id = e.evidence_packet_id
+      WHERE e.story_id = s.id
+        AND e.status = 'valid'
+      ORDER BY ep.version DESC, e.created_at DESC
+      LIMIT 1
+    ) dp ON TRUE
     WHERE s.id = ${id}::uuid
       AND s.status = 'published'
     LIMIT 1;
@@ -258,14 +285,25 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
       content: Record<string, unknown>;
     }>
   >`
+    WITH dp AS (
+      SELECT
+        e.evidence_packet_id AS packet_id,
+        e.conceptual_spine_id AS spine_id
+      FROM explanations e
+      JOIN evidence_packets ep ON ep.id = e.evidence_packet_id
+      WHERE e.story_id = ${id}::uuid
+        AND e.status = 'valid'
+      ORDER BY ep.version DESC, e.created_at DESC
+      LIMIT 1
+    )
     SELECT DISTINCT ON (e.depth)
       e.depth,
       e.plain_text,
       e.content
-    FROM explanations e
-    JOIN stories s ON s.id = e.story_id
+    FROM explanations e, dp
     WHERE e.story_id = ${id}::uuid
-      AND e.evidence_packet_id = s.current_evidence_packet_id
+      AND e.evidence_packet_id = dp.packet_id
+      AND e.conceptual_spine_id IS NOT DISTINCT FROM dp.spine_id
       AND e.status = 'valid'
     ORDER BY
       e.depth,
@@ -306,7 +344,20 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
       ) AS citations
     FROM stories s
     JOIN evidence_claims ec
-      ON ec.evidence_packet_id = s.current_evidence_packet_id
+      ON ec.evidence_packet_id = COALESCE(
+        (
+          -- Claims follow the displayed explanation set so one reader
+          -- session never mixes evidence-packet versions.
+          SELECT e.evidence_packet_id
+          FROM explanations e
+          JOIN evidence_packets ep ON ep.id = e.evidence_packet_id
+          WHERE e.story_id = s.id
+            AND e.status = 'valid'
+          ORDER BY ep.version DESC, e.created_at DESC
+          LIMIT 1
+        ),
+        s.current_evidence_packet_id
+      )
     LEFT JOIN claim_evidence ce ON ce.claim_id = ec.id
     LEFT JOIN items i ON i.id = ce.item_id
     LEFT JOIN sources src ON src.id = i.source_id

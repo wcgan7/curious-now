@@ -319,16 +319,16 @@ currently:
 
 - renders Glance or evidence-only text inside feed cards;
 - exposes depth pills in the feed;
-- treats Technical as an equal story-page tab;
-- reads `stories.canonical_title` directly as the display title.
+- treats Technical as an equal story-page tab.
 
-The next implementation pass must:
+The data layer already separates source, working, and display titles and keeps
+showing the newest fully validated presentation set. The next implementation
+pass must:
 
 1. make feed cards title-only;
-2. separate source, working, and display titles;
-3. default opened stories to Glance;
-4. limit the orientation selector to Glance and Explain with familiarity labels;
-5. move Technical into a progressive continuation;
-6. retain evidence-only behavior without empty controls.
+2. default opened stories to Glance;
+3. limit the orientation selector to Glance and Explain with familiarity labels;
+4. move Technical into a progressive continuation;
+5. retain evidence-only behavior without empty controls.
 
 These are known prototype differences, not alternative product behavior.

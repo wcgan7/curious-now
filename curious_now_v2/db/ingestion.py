@@ -446,7 +446,7 @@ def _attach_story(
         cursor.execute(
             """
             INSERT INTO stories (
-              canonical_title,
+              working_title,
               status,
               published_at,
               last_evidence_at

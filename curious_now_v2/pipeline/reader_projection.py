@@ -21,18 +21,20 @@ class StoryNotPublishableError(ValueError):
 def project_story(
     story: StoryDraft,
     *,
-    packet: EvidencePacket | None = None,
+    packets: tuple[EvidencePacket, ...] = (),
     explanations: tuple[Explanation, ...] = (),
 ) -> StoryReadModel:
     """Build the stable reader contract from validated pipeline records."""
 
     decision = evaluate_publication(
         story,
-        packet=packet,
+        packets=packets,
         explanations=explanations,
     )
     if not decision.publish:
         raise StoryNotPublishableError("; ".join(decision.reasons))
+    if decision.reader_title is None:
+        raise StoryNotPublishableError("story has no usable title")
 
     items_by_id = {item.item_id: item for item in story.items}
     sources = tuple(
@@ -50,8 +52,20 @@ def project_story(
         for item in story.items
     )
 
+    # Claims come from the packet whose explanations are displayed, so one
+    # reader session never mixes evidence-packet versions. Without a display
+    # set, the newest packet supplies the evidence-only view.
+    packets_by_id = {packet.packet_id: packet for packet in packets}
+    claims_packet = packets_by_id.get(decision.display_packet_id) if (
+        decision.display_packet_id is not None
+    ) else max(
+        (packet for packet in packets if packet.story_id == story.story_id),
+        key=lambda packet: packet.version,
+        default=None,
+    )
+
     claims: tuple[ClaimView, ...] = ()
-    if packet is not None:
+    if claims_packet is not None:
         claims = tuple(
             ClaimView(
                 claim_id=claim.claim_id,
@@ -69,7 +83,7 @@ def project_story(
                     for support in claim.supports
                 ),
             )
-            for claim in packet.claims
+            for claim in claims_packet.claims
         )
 
     current_explanations = {
@@ -77,7 +91,8 @@ def project_story(
         for explanation in sorted(explanations, key=lambda value: value.created_at)
         if explanation.status is ExplanationStatus.VALID
         and explanation.story_id == story.story_id
-        and explanation.evidence_packet_id == story.current_evidence_packet_id
+        and explanation.evidence_packet_id == decision.display_packet_id
+        and explanation.conceptual_spine_id == decision.display_spine_id
         and explanation.depth in decision.available_depths
     }
     explanation_views = tuple(
@@ -96,7 +111,9 @@ def project_story(
 
     return StoryReadModel(
         story_id=story.story_id,
-        title=story.canonical_title,
+        title=decision.reader_title.text,
+        title_kind=decision.reader_title.kind,
+        title_attribution=decision.reader_title.attribution,
         mode=mode,
         sources=sources,
         claims=claims,

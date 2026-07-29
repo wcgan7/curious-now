@@ -68,3 +68,16 @@ class ExplanationStatus(StrEnum):
     INVALID = "invalid"
     FAILED = "failed"
     SUPERSEDED = "superseded"
+
+
+class SpineStatus(StrEnum):
+    DRAFT = "draft"
+    VALID = "valid"
+    INVALID = "invalid"
+    SUPERSEDED = "superseded"
+
+
+class ReaderTitleKind(StrEnum):
+    DISPLAY = "display"
+    SOURCE = "source"
+    WORKING = "working"

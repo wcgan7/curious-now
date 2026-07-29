@@ -6,13 +6,18 @@ from curious_now_v2.core.enums import (
     ContentType,
     ExplanationDepth,
     ExplanationStatus,
+    ReaderTitleKind,
     SourceRole,
+    SpineStatus,
     StoryItemRole,
 )
 from curious_now_v2.core.models import (
+    ConceptualSpine,
+    DisplayTitle,
     EvidenceClaim,
     EvidencePacket,
     Explanation,
+    ReaderTitle,
     SourceItem,
     StoryDraft,
 )
@@ -20,14 +25,19 @@ from curious_now_v2.core.models import (
 __all__ = [
     "AccessClass",
     "ClaimKind",
+    "ConceptualSpine",
     "ContentType",
+    "DisplayTitle",
     "EvidenceClaim",
     "EvidencePacket",
     "Explanation",
     "ExplanationDepth",
     "ExplanationStatus",
+    "ReaderTitle",
+    "ReaderTitleKind",
     "SourceItem",
     "SourceRole",
+    "SpineStatus",
     "StoryDraft",
     "StoryItemRole",
 ]

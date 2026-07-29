@@ -50,10 +50,10 @@ def plan_explanations(
     else:
         skipped[ExplanationDepth.EXPLAIN] = "metadata-only evidence is insufficient"
 
-    if story.has_primary_research and packet.text_sufficiency is AccessClass.OPEN_FULL_TEXT:
+    if story.has_primary_material and packet.text_sufficiency is AccessClass.OPEN_FULL_TEXT:
         depths.append(ExplanationDepth.TECHNICAL)
-    elif not story.has_primary_research:
-        skipped[ExplanationDepth.TECHNICAL] = "story has no primary research"
+    elif not story.has_primary_material:
+        skipped[ExplanationDepth.TECHNICAL] = "story has no primary material"
     else:
         skipped[ExplanationDepth.TECHNICAL] = "open primary text is unavailable"
 

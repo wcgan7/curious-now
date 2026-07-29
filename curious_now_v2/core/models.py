@@ -11,7 +11,9 @@ from curious_now_v2.core.enums import (
     ContentType,
     ExplanationDepth,
     ExplanationStatus,
+    ReaderTitleKind,
     SourceRole,
+    SpineStatus,
     StoryItemRole,
 )
 
@@ -34,10 +36,14 @@ class SourceItem(BaseModel):
     paper_id: UUID | None = None
 
     @property
-    def is_primary_research(self) -> bool:
+    def is_primary_material(self) -> bool:
+        """Primary documentation suitable for investigation: a paper, preprint,
+        technical report, or dataset — not coverage of one."""
         return self.content_type in {
             ContentType.PREPRINT,
             ContentType.PEER_REVIEWED,
+            ContentType.REPORT,
+            ContentType.DATASET,
         } or self.source_role is SourceRole.PRIMARY_RESEARCH
 
 
@@ -102,15 +108,83 @@ class EvidencePacket(BaseModel):
         )
 
 
+class ConceptualSpine(BaseModel):
+    """The shared semantic plan all presentation layers render from.
+
+    A spine derives from exactly one evidence-packet version. Regenerating a
+    spine for an unchanged packet produces a new version, never an in-place
+    rewrite.
+    """
+
+    model_config = ConfigDict(frozen=True, protected_namespaces=())
+
+    spine_id: UUID = Field(default_factory=uuid4)
+    story_id: UUID
+    evidence_packet_id: UUID
+    version: int = Field(ge=1)
+    status: SpineStatus = SpineStatus.DRAFT
+    central_claim: str = Field(min_length=1)
+    novelty: str | None = None
+    core_intuition: str | None = None
+    why_it_matters: tuple[str, ...] = ()
+    strongest_evidence_claim_ids: tuple[UUID, ...] = ()
+    essential_qualification: str | None = None
+    prerequisite_concepts: tuple[str, ...] = ()
+    prompt_version: str = Field(min_length=1)
+    model_provider: str | None = None
+    model_name: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DisplayTitle(BaseModel):
+    """A versioned reader-facing title derived from one evidence-packet version.
+
+    Display titles never overwrite source titles; the reader falls back to
+    source or working titles when no valid display title exists.
+    """
+
+    model_config = ConfigDict(frozen=True, protected_namespaces=())
+
+    title_id: UUID = Field(default_factory=uuid4)
+    story_id: UUID
+    evidence_packet_id: UUID
+    conceptual_spine_id: UUID | None = None
+    version: int = Field(ge=1)
+    text: str = Field(min_length=1)
+    status: ExplanationStatus
+    prompt_version: str = Field(min_length=1)
+    model_provider: str | None = None
+    model_name: str | None = None
+    failure_reason: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @model_validator(mode="after")
+    def failed_titles_need_a_reason(self) -> DisplayTitle:
+        if self.status is ExplanationStatus.FAILED and not self.failure_reason:
+            raise ValueError("a failed display title must include a failure reason")
+        return self
+
+
+class ReaderTitle(BaseModel):
+    """The resolved title a reader sees, with its provenance."""
+
+    model_config = ConfigDict(frozen=True)
+
+    text: str = Field(min_length=1)
+    kind: ReaderTitleKind
+    attribution: str | None = None
+
+
 class StoryDraft(BaseModel):
     """The pipeline representation of a candidate or published story."""
 
     model_config = ConfigDict(frozen=True)
 
     story_id: UUID
-    canonical_title: str = Field(min_length=1)
+    working_title: str = Field(min_length=1)
     items: tuple[SourceItem, ...] = Field(min_length=1)
     current_evidence_packet_id: UUID | None = None
+    current_display_title: DisplayTitle | None = None
 
     @model_validator(mode="after")
     def item_ids_must_be_unique(self) -> StoryDraft:
@@ -124,8 +198,8 @@ class StoryDraft(BaseModel):
         return frozenset(item.item_id for item in self.items)
 
     @property
-    def has_primary_research(self) -> bool:
-        return any(item.is_primary_research for item in self.items)
+    def has_primary_material(self) -> bool:
+        return any(item.is_primary_material for item in self.items)
 
     @property
     def best_access_class(self) -> AccessClass:
@@ -149,6 +223,7 @@ class Explanation(BaseModel):
     explanation_id: UUID = Field(default_factory=uuid4)
     story_id: UUID
     evidence_packet_id: UUID
+    conceptual_spine_id: UUID | None = None
     depth: ExplanationDepth
     status: ExplanationStatus
     plain_text: str | None = None
