@@ -191,11 +191,14 @@ A story can be published when it has:
   [`PRESENTATION_CONTRACT.md`](PRESENTATION_CONTRACT.md), which may be a validated
   display title or an attributed source-title fallback;
 - at least one visible evidence item;
-- a canonical source link.
+- a canonical source link;
+- a validated presentation set for the layers its evidence supports.
 
-Generated display titles and explanations are optional. Source titles remain
-available as publication fallbacks. If no valid explanation exists, the reader
-presents evidence-only mode without empty orientation controls.
+Stories that never reach sufficient text stay `draft`: collected, clustered, and
+available as evidence for stories that do publish, but never displayed. This
+distinguishes two cases the reader must treat differently — a story that can
+never be explained is withheld, while a published story whose newest enrichment
+run failed or is still pending keeps showing its last valid explanations.
 
 An explanation is eligible for display only when:
 
@@ -212,8 +215,10 @@ reader session.
 ## Failure model
 
 - Source failure: retain prior content and record the feed error.
-- Hydration failure: publish metadata/evidence when otherwise eligible.
-- LLM failure: publish evidence-only or retain the previous valid explanation.
+- Retrieval failure: keep the item as unpublished evidence and retry later; a
+  story already published is unaffected.
+- LLM failure: retain the previous valid explanation; withhold a story that has
+  never had one.
 - Display-title failure: use the safest eligible source title.
 - Concept failure: omit the link; never block the story.
 - Ranking failure: fall back to reverse chronological order.

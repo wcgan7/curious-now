@@ -144,12 +144,22 @@ sources into an unattributed synthetic article.
 
 ## Evidence and trust
 
-Every published story must have at least one visible source. AI enrichment is
-additive and must never be required for publication.
+Every published story must have at least one visible source.
 
-A story with limited accessible text is published in evidence-only mode. It may
-show a title, source labels, available metadata, and links without generated
-explanations.
+A story is published only when its evidence supports the presentation layers it
+would offer. A story whose sources yield no accessible full text is collected,
+clustered, and retained, but never shown: opening a title must always lead to an
+explanation, not to a dead end pointing elsewhere.
+
+Retention without publication is deliberate. An unexplainable paywalled paper
+remains the primary source for the journalism that covers it, so discarding it
+would strip the peer-review status and primary-source link from a story that
+does publish. Text availability also changes over time.
+
+This constrains publication; it does not make AI a runtime dependency.
+Generation happens in the pipeline, never in a reader request, and a story that
+has already published keeps its last valid explanations when a later enrichment
+run fails or is still pending.
 
 Every generated factual claim must point to one or more supporting source items.
 The application distinguishes:
