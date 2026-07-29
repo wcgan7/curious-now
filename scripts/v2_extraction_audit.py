@@ -283,6 +283,24 @@ def check_title_not_body(doc: Document, raw: str, kind: str) -> Finding:
     return ok()
 
 
+def check_headings_name_something(doc: Document, raw: str, kind: str) -> Finding:
+    """A section title has to be words.
+
+    Inferring headings from a PDF's geometry picks up displayed equations and
+    axis tick rows — "4 6 8 10 12 14 16" matches a numbered heading and names
+    nothing. Those become citation targets a Technical walkthrough would offer
+    the reader, so they matter beyond tidiness.
+    """
+
+    titles = [section.title for section in doc.sections if section.title]
+    if not titles:
+        return ok()
+    junk = [title for title in titles if not re.search(r"[A-Za-z]{3,}", title)]
+    if junk:
+        return Finding(FAIL, f"{len(junk)}/{len(titles)} name nothing: {junk[:2]}")
+    return ok()
+
+
 def check_figure_numbering(doc: Document, raw: str, kind: str) -> Finding:
     numbers = [
         int(figure.label.split()[-1])
@@ -331,6 +349,7 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("mojibake", check_no_mojibake),
     ("merged-para", check_paragraph_not_merged),
     ("title-in-body", check_title_not_body),
+    ("headings", check_headings_name_something),
     ("fig-numbers", check_figure_numbering),
     ("fragments", check_paragraph_fragmentation),
     ("method", check_method_present),

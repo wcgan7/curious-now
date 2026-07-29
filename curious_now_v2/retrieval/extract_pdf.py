@@ -237,6 +237,27 @@ def _looks_like_affiliations(text: str) -> bool:
     return institutions >= 2 and text.count(",") / sentences > 3
 
 
+_REAL_WORD = re.compile(r"[A-Za-z]{3,}")
+# "1 Introduction 1" is a contents line; the trailing number is the page.
+_TRAILING_PAGE = re.compile(r"\s+\d{1,3}\s*$")
+
+
+def _reads_as_heading(text: str) -> bool:
+    """Whether a line could name a section at all.
+
+    A numbered line is not enough on its own. Axis ticks read as
+    "4 6 8 10 12 14 16", and a displayed equation reads as
+    "2 c1(V)2 -Tr(F2 ^F2) . (2.3)" — both match a numbered heading and neither
+    names anything.
+    """
+
+    if not _REAL_WORD.search(text):
+        return False
+    tokens = text.split()
+    numeric = sum(1 for token in tokens if not _REAL_WORD.search(token))
+    return numeric <= len(tokens) / 2
+
+
 def _heading_level(text: str) -> int:
     """Depth from the numbering: "4." is 1, "4.1." is 2, "3.2.1." is 3.
 
@@ -252,6 +273,8 @@ def _heading_level(text: str) -> int:
 
 def _is_heading(block: _Block, body_size: float) -> bool:
     if len(block.text) > 90 or "\n" in block.text:
+        return False
+    if not _reads_as_heading(block.text):
         return False
     words = len(block.text.split())
     larger = block.size > body_size + 0.6
@@ -369,13 +392,40 @@ def extract_pdf(data: bytes) -> Document:
             continue
         if _is_heading(block, body_size):
             flush()
-            heading, paragraphs = block.text, []
+            # A contents page repeats every heading with its page number
+            # appended, which would otherwise double the section list.
+            heading, paragraphs = _TRAILING_PAGE.sub("", block.text), []
             continue
         if len(block.text.split()) < 4:
             continue
         paragraphs.append(block.text)
 
     flush()
+
+    # A contents page lists every heading with no prose beneath it. Drop such a
+    # listing in favour of the real section, but only when it is clearly the
+    # listing: a structured abstract legitimately repeats "Methods" above a
+    # body section of the same name, and both carry content.
+    seen_titles: Counter[str] = Counter(
+        (section.title or "").casefold() for section in sections if section.title
+    )
+    richest: dict[str, int] = {}
+    for section in sections:
+        key = (section.title or "").casefold()
+        if key:
+            richest[key] = max(richest.get(key, 0), section.word_count)
+    sections = [
+        section
+        for section in sections
+        # Only a repeated title can be a contents listing. A parent section
+        # legitimately carries no prose of its own when its subsections hold
+        # it all, and must not be dropped for being short.
+        if not section.title
+        or seen_titles[(section.title or "").casefold()] < 2
+        or section.word_count >= max(
+            50, richest[(section.title or "").casefold()] // 4
+        )
+    ]
 
     # The abstract is a section in the text, but belongs in its own field.
     if abstract is None:

@@ -132,12 +132,18 @@ def test_pdf_extracts_structure(name: str) -> None:
 def test_pdf_headings_survive_body_size_faces(name: str) -> None:
     """AMS sets headings in small caps and REVTeX in bold-extended, both at
     body size — neither a larger face nor "bold" in the font name finds them,
-    so a single sample made heading detection look far better than it was."""
+    so a single sample made heading detection look far better than it was.
+
+    Three, not more: the physics and maths fixtures are trimmed to four pages
+    to stay versionable, and a four-page excerpt carries few real headings. An
+    earlier threshold of four passed only because equations and axis ticks
+    were being counted as sections.
+    """
 
     document = extract_pdf(fixture_bytes(name))
     titled = [section for section in document.sections if section.title]
 
-    assert len(titled) >= 4
+    assert len(titled) >= 3
 
 
 @pytest.mark.parametrize("name", PDF_FIXTURES)
