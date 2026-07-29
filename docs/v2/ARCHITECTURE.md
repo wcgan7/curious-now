@@ -273,3 +273,25 @@ Cutover occurs only after:
    evidence packet and conceptual spine;
 4. basic search and continuous pagination work;
 5. a legacy-content importer has either been run or deliberately rejected.
+
+### Legacy content: deliberately rejected
+
+No importer will be written. V1's content stays in v1, and v2 carries only what
+it collects itself.
+
+Three reasons. Imported items would arrive with no retrieved full text, no
+section structure, and no evidence packet, so the publication gate would hold
+every one of them as a draft; making them publishable would mean running v2
+retrieval across the lot, which is the same work as ingesting fresh material on
+staler news. V1's generated explanations predate this contract — they reference
+no evidence-packet version and no conceptual spine, and none of their claims are
+grounded at claim level — so they could not be displayed as they stand, and
+regenerating them costs what generating new stories costs. And volume was never
+the problem: one ingestion run collected 1,998 stories, of which 72% of those
+retrieved clear the gate.
+
+Source configuration is the exception worth carrying over: feed quirks and
+manual corrections v1 learned are cheap to port and touch no schema.
+
+V1 remains readable under the `legacy-v0` tag if anything is ever needed from
+it.
