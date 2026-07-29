@@ -294,6 +294,38 @@
       "url": "https://arxiv.org/html/2607.24758",
       "kind": "arxiv_html",
       "note": "LaTeXML HTML of the same paper as arxiv_paper_pdf, for cross-path comparison"
+    },
+    {
+      "name": "pdf_attention_2017",
+      "url": "https://arxiv.org/pdf/1706.03762",
+      "kind": "pdf",
+      "note": "2017 paper with vector diagrams; older LaTeX conventions"
+    },
+    {
+      "name": "pdf_math_topology",
+      "url": "https://arxiv.org/pdf/2607.25931",
+      "kind": "pdf",
+      "note": "math.AT: theorem-dense, often single-column; trimmed to 4 pages, dense vector art",
+      "pdf_pages": 4
+    },
+    {
+      "name": "pdf_econ",
+      "url": "https://arxiv.org/pdf/2607.25416",
+      "kind": "pdf",
+      "note": "econ.EM: different heading conventions"
+    },
+    {
+      "name": "pdf_condmat",
+      "url": "https://arxiv.org/pdf/2607.26029",
+      "kind": "pdf",
+      "note": "cond-mat: physics two-column with heavy notation; trimmed to 4 pages, dense vector art",
+      "pdf_pages": 4
+    },
+    {
+      "name": "pdf_medrxiv",
+      "url": "https://www.medrxiv.org/content/10.64898/2026.07.27.26359009v1.full.pdf",
+      "kind": "pdf",
+      "note": "medRxiv: non-arXiv generator, biomedical layout"
     }
   ]
 }

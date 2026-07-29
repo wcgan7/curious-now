@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import fitz
 
@@ -18,8 +18,18 @@ from curious_now_v2.retrieval.document import (
 )
 
 _WHITESPACE = re.compile(r"\s+")
+_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 # "3 Methodology", "3.1. Preliminaries", or a bare word like "Abstract".
 _NUMBERED_HEADING = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+\S")
+# Physics journals number sections with Roman numerals: "I. INTRODUCTION".
+_ROMAN_HEADING = re.compile(r"^\s*[IVXLC]{1,6}\.\s+\S")
+_ABSTRACT_LEAD = re.compile(r"^\s*abstract\s*[.:—-]?\s+(?=\S)", re.I)
+
+# TeX section headings are set in caps-and-small-caps (CMCSC) or bold-extended
+# (CMBX) at body size, so neither a larger face nor the word "bold" in the
+# font name identifies them.
+_HEADING_FONTS = ("csc", "smallcap", "sc-", "bx", "bold", "medi", "semib", "black")
+_BOLD_FLAG = 1 << 4
 _BARE_HEADING = re.compile(
     r"^\s*(abstract|introduction|background|related work|method\w*|materials"
     r"|results?|discussion|conclusions?|limitations?|references|acknowledg\w*"
@@ -36,6 +46,16 @@ _CAPTION = re.compile(r"^\s*((?:figure|fig\.?|table)\s*\d+)\s*[.:]\s+(\S.*)", re
 _LINE_HYPHEN = re.compile(r"(\w)-\n(\w)")
 _PAGE_NUMBER = re.compile(r"^\s*\d{1,3}\s*$")
 _ARXIV_STAMP = re.compile(r"^\s*arxiv:\s*\d", re.I)
+# Preprint servers stamp every page with licence and status furniture.
+_STAMP = re.compile(
+    r"cc-by|creative commons|international license|made available under"
+    r"|is the author/funder|medrxiv preprint|biorxiv preprint"
+    r"|not certified by peer review|doi:\s*https?://",
+    re.I,
+)
+# Minimum length for something to be an abstract rather than a cover-page note
+# such as "Abstract word count: 353 words".
+MIN_ABSTRACT_WORDS = 50
 
 MAX_PAGES = 60
 
@@ -48,7 +68,7 @@ class _Block:
     x_left: float
     width: float
     y_top: float
-    bold: bool
+    emphasised: bool
 
     @property
     def spans_page(self) -> bool:
@@ -65,7 +85,9 @@ class _Block:
 
 
 def _compact(value: str) -> str:
-    return _WHITESPACE.sub(" ", value).strip()
+    # PDF text layers carry stray control bytes that would otherwise travel
+    # into an explanation.
+    return _WHITESPACE.sub(" ", _CONTROL.sub("", value)).strip()
 
 
 def _reflow(text: str) -> str:
@@ -97,7 +119,12 @@ def _collect_blocks(document: fitz.Document) -> list[_Block]:
                     for line in block.get("lines", [])
                 )
             )
-            if not text or _PAGE_NUMBER.match(text) or _ARXIV_STAMP.match(text):
+            if (
+                not text
+                or _PAGE_NUMBER.match(text)
+                or _ARXIV_STAMP.match(text)
+                or _STAMP.search(text[:160])
+            ):
                 continue
             sizes = Counter(round(span["size"], 1) for span in spans)
             bbox = block.get("bbox", (0, 0, 0, 0))
@@ -109,8 +136,12 @@ def _collect_blocks(document: fitz.Document) -> list[_Block]:
                     x_left=bbox[0] / width,
                     width=(bbox[2] - bbox[0]) / width,
                     y_top=bbox[1],
-                    bold=any(
-                        "bold" in str(span.get("font", "")).casefold()
+                    emphasised=any(
+                        bool(int(span.get("flags", 0)) & _BOLD_FLAG)
+                        or any(
+                            marker in str(span.get("font", "")).casefold()
+                            for marker in _HEADING_FONTS
+                        )
                         for span in spans
                     ),
                 )
@@ -148,17 +179,39 @@ def _order_blocks(blocks: list[_Block]) -> list[_Block]:
     return ordered
 
 
+def _heading_level(text: str) -> int:
+    """Depth from the numbering: "4." is 1, "4.1." is 2, "3.2.1." is 3.
+
+    Without this every heading sits at level 1, and a subsection cannot inherit
+    its parent's role — "4.1 Goal language" would not be read as results.
+    """
+
+    match = re.match(r"^\s*(\d+(?:\.\d+)*)", text)
+    if not match:
+        return 1
+    return min(match.group(1).count(".") + 1, 4)
+
+
 def _is_heading(block: _Block, body_size: float) -> bool:
     if len(block.text) > 90 or "\n" in block.text:
         return False
+    words = len(block.text.split())
     larger = block.size > body_size + 0.6
-    if _NUMBERED_HEADING.match(block.text) and (larger or block.bold):
+    marked = larger or block.emphasised
+    numbered = _NUMBERED_HEADING.match(block.text) or _ROMAN_HEADING.match(block.text)
+
+    if numbered and marked:
         return True
-    if _BARE_HEADING.match(block.text) and (larger or block.bold):
+    # A short numbered line stands alone as a heading even when set at body
+    # size in an unremarkable face, as AMS styles do. Numbered affiliation
+    # lists look the same but always carry commas, which headings do not.
+    if numbered and words <= 8 and "," not in block.text:
         return True
-    if _LETTER_HEADING.match(block.text) and larger and len(block.text.split()) <= 8:
+    if _BARE_HEADING.match(block.text) and marked:
         return True
-    return larger and block.bold and len(block.text.split()) <= 8
+    if _LETTER_HEADING.match(block.text) and larger and words <= 8:
+        return True
+    return marked and words <= 8 and block.text.upper() == block.text
 
 
 def extract_pdf(data: bytes) -> Document:
@@ -198,6 +251,17 @@ def extract_pdf(data: bytes) -> Document:
     largest = max(blocks[:6], key=lambda b: b.size, default=None)
     if largest is not None and largest.size > body_size:
         title = largest.text
+    else:
+        # AMS styles set the title at body size, so nothing stands out by face.
+        # It is then the first short line on the opening page.
+        title = next(
+            (
+                block.text
+                for block in blocks[:4]
+                if block.page == 0 and 2 <= len(block.text.split()) <= 20
+            ),
+            None,
+        )
 
     figures: list[Figure] = []
     tables: list[Table] = []
@@ -206,6 +270,7 @@ def extract_pdf(data: bytes) -> Document:
     paragraphs: list[str] = []
     abstract: str | None = None
 
+
     def flush() -> None:
         if paragraphs or heading is not None:
             sections.append(
@@ -213,11 +278,22 @@ def extract_pdf(data: bytes) -> Document:
                     title=heading,
                     kind=classify_section(heading),
                     paragraphs=tuple(paragraphs),
+                    level=_heading_level(heading) if heading else 1,
                 )
             )
 
     for block in blocks:
         if block.text == title:
+            continue
+        # Many styles run the abstract straight on from the word "Abstract"
+        # rather than giving it a heading of its own.
+        lead = _ABSTRACT_LEAD.match(block.text)
+        if (
+            lead
+            and abstract is None
+            and len(block.text.split()) >= MIN_ABSTRACT_WORDS
+        ):
+            abstract = block.text[lead.end() :]
             continue
         caption = _CAPTION.match(block.text)
         if caption:
@@ -239,11 +315,34 @@ def extract_pdf(data: bytes) -> Document:
     flush()
 
     # The abstract is a section in the text, but belongs in its own field.
-    for index, section in enumerate(sections):
-        if section.kind is SectionKind.ABSTRACT:
-            abstract = section.text or None
-            sections.pop(index)
-            break
+    if abstract is None:
+        for index, section in enumerate(sections):
+            if section.kind is SectionKind.ABSTRACT:
+                if len(section.text.split()) < MIN_ABSTRACT_WORDS:
+                    # "Abstract word count: 353 words" is a cover-page note.
+                    break
+                abstract = section.text
+                sections.pop(index)
+                break
+
+    if abstract is None and sections and sections[0].title is None:
+        # Physics styles print the abstract with no label at all, between the
+        # affiliations and the first numbered section. It is the substantial
+        # paragraph in that unheaded run.
+        candidate = max(
+            (p for p in sections[0].paragraphs if len(p.split()) > 50),
+            key=lambda p: len(p.split()),
+            default=None,
+        )
+        if candidate is not None:
+            abstract = candidate
+            remaining = tuple(
+                p for p in sections[0].paragraphs if p != candidate
+            )
+            if remaining:
+                sections[0] = replace(sections[0], paragraphs=remaining)
+            else:
+                sections.pop(0)
 
     warnings: list[str] = []
     if not sections:

@@ -62,6 +62,9 @@ def test_the_corpus_covers_the_formats_extraction_must_handle() -> None:
 
 
 def test_fixtures_stay_small_enough_to_version() -> None:
+    """PDFs dominate: they compress poorly and are stored image-stripped and
+    page-limited already. Markup fixtures are a small fraction of the total."""
+
     total = sum(fixture_path(name).stat().st_size for name in FIXTURE_NAMES)
 
-    assert total < 4_000_000, f"fixture corpus grew to {total:,} bytes"
+    assert total < 6_000_000, f"fixture corpus grew to {total:,} bytes"

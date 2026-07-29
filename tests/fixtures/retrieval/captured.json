@@ -449,6 +449,66 @@
     "stored_bytes": 33100,
     "url": "https://blogs.nvidia.com/blog/nemotron-langchain-agents-open-stack/"
   },
+  "pdf_attention_2017": {
+    "bytes": 303638,
+    "captured_at": "2026-07-29T09:16:50.753119+00:00",
+    "content_type": "application/pdf",
+    "fetched_bytes": 2215244,
+    "final_url": "https://arxiv.org/pdf/1706.03762",
+    "kind": "pdf",
+    "normalised": true,
+    "sha256": "763e672e95e5ef396d7a71112d3269a2e8b33187664b0166b08b89a595d4fb93",
+    "stored_bytes": 273932,
+    "url": "https://arxiv.org/pdf/1706.03762"
+  },
+  "pdf_condmat": {
+    "bytes": 1161656,
+    "captured_at": "2026-07-29T09:18:03.477724+00:00",
+    "content_type": "application/pdf",
+    "fetched_bytes": 1324792,
+    "final_url": "https://arxiv.org/pdf/2607.26029",
+    "kind": "pdf",
+    "normalised": true,
+    "sha256": "23f39e1510b064d2b3ffd91afa2a7989792244cae90750260448e840090269fb",
+    "stored_bytes": 1121823,
+    "url": "https://arxiv.org/pdf/2607.26029"
+  },
+  "pdf_econ": {
+    "bytes": 214671,
+    "captured_at": "2026-07-29T09:17:22.561490+00:00",
+    "content_type": "application/pdf",
+    "fetched_bytes": 3105403,
+    "final_url": "https://arxiv.org/pdf/2607.25416",
+    "kind": "pdf",
+    "normalised": true,
+    "sha256": "948692b2551052b9ad2bf18ba5836b2ec34a5b0cc29edb3912d9eff1bd549dae",
+    "stored_bytes": 195343,
+    "url": "https://arxiv.org/pdf/2607.25416"
+  },
+  "pdf_math_topology": {
+    "bytes": 270468,
+    "captured_at": "2026-07-29T09:17:48.631147+00:00",
+    "content_type": "application/pdf",
+    "fetched_bytes": 7263445,
+    "final_url": "https://arxiv.org/pdf/2607.25931",
+    "kind": "pdf",
+    "normalised": true,
+    "sha256": "9dfd6e3f96de7f1e5f831ffd3b2601327718ecc25024253c3e65306eaa7403ae",
+    "stored_bytes": 250213,
+    "url": "https://arxiv.org/pdf/2607.25931"
+  },
+  "pdf_medrxiv": {
+    "bytes": 739929,
+    "captured_at": "2026-07-29T09:17:37.260229+00:00",
+    "content_type": "application/pdf",
+    "fetched_bytes": 3332011,
+    "final_url": "https://www.medrxiv.org/content/10.64898/2026.07.27.26359009v1.full.pdf",
+    "kind": "pdf",
+    "normalised": true,
+    "sha256": "7e3e93f85f1df99c5336ecbda417e112be5aaf64942f57b5438c881e93333d19",
+    "stored_bytes": 572091,
+    "url": "https://www.medrxiv.org/content/10.64898/2026.07.27.26359009v1.full.pdf"
+  },
   "pmc_jats_xml": {
     "bytes": 70499,
     "captured_at": "2026-07-29T07:27:59.554497+00:00",

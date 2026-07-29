@@ -36,6 +36,30 @@ def extension_for(kind: str) -> str:
     return EXTENSIONS.get(kind, "html")
 
 
+def normalise_pdf(data: bytes, pages: int) -> bytes:
+    """Shrink a PDF to a size worth versioning, without changing what the
+    extractor reads.
+
+    Extraction uses the text layer and block geometry only, so embedded images
+    can go. Keeping a leading page range preserves the column layout, heading
+    faces, and caption conventions that vary between publishers, which is what
+    these fixtures exist to exercise.
+    """
+
+    import fitz
+
+    with fitz.open(stream=data, filetype="pdf") as document:
+        if pages and document.page_count > pages:
+            document.select(list(range(pages)))
+        for page in document:
+            for image in page.get_images(full=True):
+                try:
+                    page.delete_image(image[0])
+                except Exception:  # noqa: BLE001 - best effort; size only
+                    continue
+        return document.tobytes(garbage=4, deflate=True, clean=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", help="capture a single fixture by name")
@@ -70,15 +94,23 @@ def main() -> None:
                 print(f"FAILED   {name}: {result.outcome.value} {result.error or ''}")
                 continue
 
-            path.write_bytes(gzip.compress(result.body, mtime=0))
+            body = result.body
+            normalised = False
+            if spec["kind"] == "pdf":
+                body = normalise_pdf(body, int(spec.get("pdf_pages", 8)))
+                normalised = True
+
+            path.write_bytes(gzip.compress(body, mtime=0))
             captured[name] = {
                 "url": spec["url"],
                 "final_url": result.final_url,
                 "kind": spec["kind"],
                 "content_type": result.content_type,
-                "bytes": len(result.body),
+                "bytes": len(body),
+                "fetched_bytes": len(result.body),
+                "normalised": normalised,
                 "stored_bytes": path.stat().st_size,
-                "sha256": hashlib.sha256(result.body).hexdigest(),
+                "sha256": hashlib.sha256(body).hexdigest(),
                 "captured_at": datetime.now(UTC).isoformat(),
             }
             print(

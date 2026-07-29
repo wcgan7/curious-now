@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from curious_now_v2.core.enums import ExplanationDepth
@@ -118,6 +120,57 @@ def test_pdf_extracts_structure(name: str) -> None:
     assert document.title
     assert document.has_structure
     assert document.word_count > 2000
+
+
+@pytest.mark.parametrize("name", PDF_FIXTURES)
+def test_pdf_headings_survive_body_size_faces(name: str) -> None:
+    """AMS sets headings in small caps and REVTeX in bold-extended, both at
+    body size — neither a larger face nor "bold" in the font name finds them,
+    so a single sample made heading detection look far better than it was."""
+
+    document = extract_pdf(fixture_bytes(name))
+    titled = [section for section in document.sections if section.title]
+
+    assert len(titled) >= 4
+
+
+@pytest.mark.parametrize("name", PDF_FIXTURES)
+def test_pdf_abstract_is_prose_or_absent(name: str) -> None:
+    """A cover page carries "Abstract word count: 353 words", which is a note
+    about the abstract rather than the abstract."""
+
+    document = extract_pdf(fixture_bytes(name))
+
+    if document.abstract:
+        assert len(document.abstract.split()) >= 50
+        assert "word count" not in document.abstract.casefold()
+
+
+@pytest.mark.parametrize("name", PDF_FIXTURES)
+def test_pdf_carries_no_control_characters(name: str) -> None:
+    document = extract_pdf(fixture_bytes(name))
+
+    assert not re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", document.text)
+
+
+@pytest.mark.parametrize("name", PDF_FIXTURES)
+def test_pdf_drops_preprint_server_stamps(name: str) -> None:
+    """Preprint servers stamp every page with licence furniture."""
+
+    lowered = extract_pdf(fixture_bytes(name)).text.casefold()
+
+    for stamp in ("cc-by", "international license", "made available under"):
+        assert stamp not in lowered
+
+
+def test_numbered_affiliations_are_not_read_as_headings() -> None:
+    """"7. Pathologie DNA, Nieuwegein, The Netherlands" is an affiliation.
+    Headings do not carry commas, which is what tells them apart."""
+
+    document = extract_pdf(fixture_bytes("pdf_medrxiv"))
+    titles = [section.title or "" for section in document.sections]
+
+    assert not any("," in title for title in titles)
 
 
 def test_pdf_recovers_sections_in_reading_order() -> None:
