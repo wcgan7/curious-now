@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -90,6 +89,40 @@ SOURCE TEXT:
 """
 
 
+# Published per-million rates, July 2026. Cached input bills at a fraction of
+# the fresh rate, so it is tracked separately: token totals alone say nothing
+# about cost when the tiers are priced 2.5x apart.
+PRICING = {
+    "gpt-5.6-sol": {"input": 5.00, "output": 30.00},
+    "gpt-5.6-terra": {"input": 2.50, "output": 15.00},
+    "gpt-5.6-luna": {"input": 1.00, "output": 6.00},
+}
+CACHED_INPUT_DISCOUNT = 0.10
+
+
+@dataclass
+class Usage:
+    input_tokens: int = 0
+    cached_input_tokens: int = 0
+    output_tokens: int = 0
+    reasoning_tokens: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+    def cost(self, model: str) -> float:
+        rates = PRICING.get(model)
+        if not rates:
+            return 0.0
+        fresh = max(self.input_tokens - self.cached_input_tokens, 0)
+        return (
+            fresh * rates["input"]
+            + self.cached_input_tokens * rates["input"] * CACHED_INPUT_DISCOUNT
+            + self.output_tokens * rates["output"]
+        ) / 1_000_000
+
+
 @dataclass
 class Result:
     model: str
@@ -99,6 +132,7 @@ class Result:
     payload: dict[str, object] | None
     error: str | None = None
     checks: dict[str, bool] = field(default_factory=dict)
+    usage: Usage = field(default_factory=Usage)
 
 
 def run_model(model: str, effort: str, prompt: str, tag: str) -> Result:
@@ -116,6 +150,7 @@ def run_model(model: str, effort: str, prompt: str, tag: str) -> Result:
                 "--skip-git-repo-check",
                 "--output-schema", str(SCHEMA_PATH),
                 "-o", str(out),
+                "--json",
                 "-",
             ],
             input=prompt,
@@ -127,18 +162,30 @@ def run_model(model: str, effort: str, prompt: str, tag: str) -> Result:
         return Result(model, tag, time.monotonic() - started, 0, None, "timed out")
 
     seconds = time.monotonic() - started
-    tokens = 0
-    match = re.search(r"tokens used[:\s]+([\d,]+)", completed.stdout + completed.stderr)
-    if match:
-        tokens = int(match.group(1).replace(",", ""))
+
+    usage = Usage()
+    for line in completed.stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict) or "usage" not in event:
+            continue
+        raw = event["usage"]
+        usage = Usage(
+            input_tokens=int(raw.get("input_tokens", 0)),
+            cached_input_tokens=int(raw.get("cached_input_tokens", 0)),
+            output_tokens=int(raw.get("output_tokens", 0)),
+            reasoning_tokens=int(raw.get("reasoning_output_tokens", 0)),
+        )
 
     if not out.exists():
-        return Result(model, tag, seconds, tokens, None, "no output written")
+        return Result(model, tag, seconds, usage.total, None, "no output written", usage=usage)
     try:
         payload = json.loads(out.read_text())
     except ValueError as exc:
-        return Result(model, tag, seconds, tokens, None, f"unparseable: {exc}")
-    return Result(model, tag, seconds, tokens, payload)
+        return Result(model, tag, seconds, usage.total, None, f"unparseable: {exc}", usage=usage)
+    return Result(model, tag, seconds, usage.total, payload, usage=usage)
 
 
 def words(value: object) -> int:
@@ -229,24 +276,32 @@ def main() -> int:
             check(result, expect_mechanism=expect)
             results.append(result)
 
-    print(f"\n{'model':16s} {'story':28s} {'sec':>6s} {'tok':>7s}  checks")
+    print(
+        f"\n{'model':16s} {'story':22s} {'sec':>6s} {'in':>7s} {'out':>6s} "
+        f"{'US$':>8s}  checks"
+    )
     for result in results:
         passed = sum(1 for value in result.checks.values() if value)
         total = len(result.checks)
         failed = [name for name, value in result.checks.items() if not value]
         note = result.error or (f"{passed}/{total}" + (f"  FAILED: {', '.join(failed)}" if failed else ""))
         print(
-            f"{result.model:16s} {result.story.split('-', 2)[-1][:28]:28s} "
-            f"{result.seconds:6.1f} {result.tokens:7,d}  {note}"
+            f"{result.model:16s} {result.story.split('-', 2)[-1][:22]:22s} "
+            f"{result.seconds:6.1f} {result.usage.input_tokens:7,d} "
+            f"{result.usage.output_tokens:6,d} "
+            f"{result.usage.cost(result.model):8.4f}  {note}"
         )
 
     for model in args.models.split(","):
         rows = [r for r in results if r.model == model and r.payload]
         if not rows:
             continue
+        total_cost = sum(r.usage.cost(model) for r in rows)
         print(
             f"\n{model}: mean {sum(r.seconds for r in rows)/len(rows):.1f}s, "
             f"mean {sum(r.tokens for r in rows)//len(rows):,} tokens, "
+            f"US${total_cost/len(rows):.4f}/story "
+            f"(US${total_cost/len(rows)*2000:.2f} per 2,000 stories), "
             f"{sum(sum(1 for v in r.checks.values() if v) for r in rows)}"
             f"/{sum(len(r.checks) for r in rows)} checks passed"
         )
@@ -259,6 +314,11 @@ def main() -> int:
                     "story": r.story,
                     "seconds": round(r.seconds, 2),
                     "tokens": r.tokens,
+                    "input_tokens": r.usage.input_tokens,
+                    "cached_input_tokens": r.usage.cached_input_tokens,
+                    "output_tokens": r.usage.output_tokens,
+                    "reasoning_tokens": r.usage.reasoning_tokens,
+                    "cost_usd": round(r.usage.cost(r.model), 5),
                     "checks": r.checks,
                     "error": r.error,
                     "payload": r.payload,
