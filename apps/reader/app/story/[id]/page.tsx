@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 interface StoryPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string | string[] }>;
 }
 
 export async function generateMetadata({
@@ -19,8 +20,9 @@ export async function generateMetadata({
   return story ? { title: story.title } : { title: "Story not found" };
 }
 
-export default async function StoryPage({ params }: StoryPageProps) {
+export default async function StoryPage({ params, searchParams }: StoryPageProps) {
   const { id } = await params;
+  const { view } = await searchParams;
   const story = await getStory(id);
   if (!story) {
     notFound();
@@ -31,7 +33,10 @@ export default async function StoryPage({ params }: StoryPageProps) {
       <Link className="backLink" href="/">
         <span aria-hidden="true">←</span> Back to the feed
       </Link>
-      <StoryReader story={story} />
+      <StoryReader
+        initialView={typeof view === "string" ? view : undefined}
+        story={story}
+      />
     </article>
   );
 }

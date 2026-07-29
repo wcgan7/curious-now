@@ -23,10 +23,12 @@ interface FeedRow {
   id: string;
   reader_title: string;
   sort_at: Date;
-  mode: "evidence_only" | "enriched";
-  glance: string | null;
-  available_depths: ExplanationDepth[];
   sources: SourceLink[];
+}
+
+interface StoryRow extends FeedRow {
+  mode: "evidence_only" | "enriched";
+  available_depths: ExplanationDepth[];
 }
 
 function encodeCursor(cursor: Cursor): string {
@@ -60,9 +62,6 @@ function mapFeedRow(row: FeedRow): FeedStory {
     id: row.id,
     title: row.reader_title,
     publishedAt: row.sort_at.toISOString(),
-    mode: row.mode,
-    glance: row.glance,
-    availableDepths: row.available_depths ?? [],
     sources: row.sources ?? [],
   };
 }
@@ -84,58 +83,11 @@ export async function getFeedPage(
       SELECT
         s.id,
         COALESCE(dt.text, s.working_title) AS reader_title,
-        COALESCE(s.published_at, s.created_at) AS sort_at,
-        CASE WHEN dp.packet_id IS NOT NULL
-          THEN 'enriched' ELSE 'evidence_only' END AS mode,
-        (
-          SELECT e.plain_text
-          FROM explanations e
-          WHERE e.story_id = s.id
-            AND e.evidence_packet_id = dp.packet_id
-            AND e.conceptual_spine_id IS NOT DISTINCT FROM dp.spine_id
-            AND e.status = 'valid'
-            AND e.depth = 'glance'
-          ORDER BY e.created_at DESC
-          LIMIT 1
-        ) AS glance,
-        COALESCE(
-          (
-            SELECT ARRAY_AGG(d.depth ORDER BY d.ord)
-            FROM (
-              SELECT DISTINCT
-                e.depth,
-                CASE e.depth
-                  WHEN 'glance' THEN 1
-                  WHEN 'explain' THEN 2
-                  ELSE 3
-                END AS ord
-              FROM explanations e
-              WHERE e.story_id = s.id
-                AND e.evidence_packet_id = dp.packet_id
-                AND e.conceptual_spine_id IS NOT DISTINCT FROM dp.spine_id
-                AND e.status = 'valid'
-            ) d
-          ),
-          '{}'
-        ) AS available_depths
+        COALESCE(s.published_at, s.created_at) AS sort_at
       FROM stories s
       LEFT JOIN display_titles dt
         ON dt.id = s.current_display_title_id
        AND dt.status = 'valid'
-      LEFT JOIN LATERAL (
-        -- Newest packet version with a validated explanation, and that
-        -- explanation's spine; a newer packet without validated output
-        -- does not withdraw the previous valid set.
-        SELECT
-          e.evidence_packet_id AS packet_id,
-          e.conceptual_spine_id AS spine_id
-        FROM explanations e
-        JOIN evidence_packets ep ON ep.id = e.evidence_packet_id
-        WHERE e.story_id = s.id
-          AND e.status = 'valid'
-        ORDER BY ep.version DESC, e.created_at DESC
-        LIMIT 1
-      ) dp ON TRUE
       WHERE s.status = 'published'
       ${cursorFilter}
       ORDER BY COALESCE(s.published_at, s.created_at) DESC, s.id DESC
@@ -167,10 +119,7 @@ export async function getFeedPage(
     GROUP BY
       p.id,
       p.reader_title,
-      p.sort_at,
-      p.mode,
-      p.glance,
-      p.available_depths
+      p.sort_at
     ORDER BY p.sort_at DESC, p.id DESC;
   `;
 
@@ -185,8 +134,6 @@ export async function getFeedPage(
   };
 }
 
-interface StoryRow extends FeedRow {}
-
 export async function getStory(id: string): Promise<StoryDetail | null> {
   if (!UUID_PATTERN.test(id)) {
     return null;
@@ -200,17 +147,6 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
       COALESCE(s.published_at, s.created_at) AS sort_at,
       CASE WHEN dp.packet_id IS NOT NULL
         THEN 'enriched' ELSE 'evidence_only' END AS mode,
-      (
-        SELECT e.plain_text
-        FROM explanations e
-        WHERE e.story_id = s.id
-          AND e.evidence_packet_id = dp.packet_id
-          AND e.conceptual_spine_id IS NOT DISTINCT FROM dp.spine_id
-          AND e.status = 'valid'
-          AND e.depth = 'glance'
-        ORDER BY e.created_at DESC
-        LIMIT 1
-      ) AS glance,
       COALESCE(
         (
           SELECT ARRAY_AGG(d.depth ORDER BY d.ord)
@@ -390,6 +326,8 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
 
   return {
     ...mapFeedRow(row),
+    mode: row.mode,
+    availableDepths: row.available_depths ?? [],
     claims,
     explanations,
     concepts: [...concepts],

@@ -314,21 +314,22 @@ Trust information uses plain labels, not opaque universal quality scores.
 
 ## Current prototype delta
 
-The checked-in `apps/reader/` application predates this approved contract. It
-currently:
+The checked-in `apps/reader/` application follows the approved reading flow:
+title-only feed cards that act as one story link, Glance as the opened default,
+a Glance/Explain orientation selector with familiarity labels, Technical as a
+progressive continuation with a shareable `?view=technical` route, and
+evidence-only stories without empty controls. The data layer separates source,
+working, and display titles and keeps showing the newest fully validated
+presentation set.
 
-- renders Glance or evidence-only text inside feed cards;
-- exposes depth pills in the feed;
-- treats Technical as an equal story-page tab.
+Remaining known deltas, pending later milestones:
 
-The data layer already separates source, working, and display titles and keeps
-showing the newest fully validated presentation set. The next implementation
-pass must:
-
-1. make feed cards title-only;
-2. default opened stories to Glance;
-3. limit the orientation selector to Glance and Explain with familiarity labels;
-4. move Technical into a progressive continuation;
-5. retain evidence-only behavior without empty controls.
+- concept chips are informational only; concept cards and tap-through
+  navigation are not built;
+- the Technical body renders one text column, not yet the structured
+  walkthrough sections with per-section evidence links;
+- topics, search, and highlighted-story explanations have no reader UI;
+- claim-level provenance appears in the claim ledger, not yet inline in
+  explanation text.
 
 These are known prototype differences, not alternative product behavior.

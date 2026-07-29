@@ -37,9 +37,6 @@ export interface FeedStory {
   id: string;
   title: string;
   publishedAt: string;
-  mode: ReaderMode;
-  glance: string | null;
-  availableDepths: ExplanationDepth[];
   sources: SourceLink[];
 }
 
@@ -77,6 +74,8 @@ export interface ConceptLink {
 }
 
 export interface StoryDetail extends FeedStory {
+  mode: ReaderMode;
+  availableDepths: ExplanationDepth[];
   claims: Claim[];
   explanations: Explanation[];
   concepts: ConceptLink[];

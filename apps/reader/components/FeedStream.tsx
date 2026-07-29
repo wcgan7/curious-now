@@ -15,19 +15,32 @@ const roleLabels: Record<SourceLink["sourceRole"], string> = {
   discovery: "Discovery",
 };
 
-const contentLabels: Record<SourceLink["contentType"], string> = {
-  news: "News",
-  lab_announcement: "Lab post",
-  press_release: "Press release",
-  preprint: "Preprint · not peer reviewed",
+const reviewLabels: Partial<Record<SourceLink["contentType"], string>> = {
+  preprint: "Preprint",
   peer_reviewed: "Peer reviewed",
   report: "Report",
-  blog: "Blog",
   dataset: "Dataset",
-  other: "Source",
 };
 
-function formatDate(value: string): string {
+const PAPER_TYPES: ReadonlyArray<SourceLink["contentType"]> = [
+  "preprint",
+  "peer_reviewed",
+];
+
+function formatRelativeTime(value: string): string {
+  const elapsedMs = Date.now() - new Date(value).getTime();
+  const minutes = Math.round(elapsedMs / 60_000);
+  if (minutes < 60) {
+    return minutes <= 1 ? "just now" : `${minutes} minutes ago`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+  }
+  const days = Math.round(hours / 24);
+  if (days < 8) {
+    return days === 1 ? "yesterday" : `${days} days ago`;
+  }
   return new Intl.DateTimeFormat("en", {
     day: "numeric",
     month: "short",
@@ -36,75 +49,44 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
-function SourceByline({ sources }: { sources: SourceLink[] }) {
-  const names = [...new Set(sources.map((source) => source.sourceName))];
-  const remaining = Math.max(0, names.length - 2);
-  return (
-    <p className="sourceByline">
-      {names.slice(0, 2).join(" · ")}
-      {remaining > 0 ? ` · +${remaining} more` : ""}
-    </p>
-  );
-}
-
 function StoryCard({ story, index }: { story: FeedStory; index: number }) {
   const leadSource = story.sources[0];
+  const badge = leadSource
+    ? (reviewLabels[leadSource.contentType] ?? roleLabels[leadSource.sourceRole])
+    : "Evidence";
+  const paperAttached =
+    leadSource !== undefined &&
+    !PAPER_TYPES.includes(leadSource.contentType) &&
+    story.sources.some((source) => PAPER_TYPES.includes(source.contentType));
+
   return (
-    <article className="storyCard">
+    <Link className="storyCard" href={`/story/${story.id}`}>
       <div className="cardRail" aria-hidden="true">
         {String(index + 1).padStart(2, "0")}
       </div>
       <div className="cardBody">
         <div className="cardMeta">
           <span className={`sourceRole sourceRole--${leadSource?.sourceRole}`}>
-            {leadSource ? roleLabels[leadSource.sourceRole] : "Evidence"}
+            {badge}
           </span>
-          <time dateTime={story.publishedAt}>
-            {formatDate(story.publishedAt)}
+          <time dateTime={story.publishedAt} suppressHydrationWarning>
+            {formatRelativeTime(story.publishedAt)}
           </time>
         </div>
 
-        <h3>
-          <Link href={`/story/${story.id}`}>{story.title}</Link>
-        </h3>
-
-        {story.glance ? (
-          <p className="glance">{story.glance}</p>
-        ) : (
-          <p className="evidenceOnly">
-            Collected from the source. A grounded explanation has not been
-            generated yet.
-          </p>
-        )}
+        <h3>{story.title}</h3>
 
         <div className="cardFooter">
-          <div>
-            <SourceByline sources={story.sources} />
-            {leadSource ? (
-              <p className="contentLabel">
-                {contentLabels[leadSource.contentType]}
-              </p>
-            ) : null}
-          </div>
-          <div className="depthPills" aria-label="Available reading depths">
-            {story.availableDepths.length ? (
-              story.availableDepths.map((depth) => (
-                <span key={depth}>{depth}</span>
-              ))
-            ) : (
-              <span className="mutedPill">sources</span>
-            )}
-            <Link
-              aria-label={`Read ${story.title}`}
-              className="cardArrow"
-              href={`/story/${story.id}`}
-            >
-              ↗
-            </Link>
-          </div>
+          <p className="sourceByline">
+            {leadSource?.sourceName ?? "Collected source"}
+            {paperAttached ? " · Paper attached" : ""}
+          </p>
+          <span className="cardArrow" aria-hidden="true">
+            →
+          </span>
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
 

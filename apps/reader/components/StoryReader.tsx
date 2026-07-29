@@ -8,10 +8,11 @@ import type {
   StoryDetail,
 } from "@/lib/types";
 
-const depthNames: Record<ExplanationDepth, string> = {
-  glance: "Glance",
-  explain: "Explain",
-  technical: "Technical",
+type Orientation = "glance" | "explain";
+
+const orientationMeta: Record<Orientation, { name: string; hint: string }> = {
+  glance: { name: "Glance", hint: "New to this" },
+  explain: { name: "Explain", hint: "Know the field" },
 };
 
 const roleNames: Record<SourceLink["sourceRole"], string> = {
@@ -36,14 +37,79 @@ function formatDate(value: string | null): string | null {
   }).format(new Date(value));
 }
 
-export function StoryReader({ story }: { story: StoryDetail }) {
-  const [depth, setDepth] = useState<ExplanationDepth | null>(
-    story.availableDepths[0] ?? null,
+function estimateMinutes(text: string | null | undefined): number | null {
+  if (!text) {
+    return null;
+  }
+  const words = text.trim().split(/\s+/).length;
+  return Math.max(1, Math.round(words / 220));
+}
+
+function ExplanationBody({ plainText }: { plainText: string | null | undefined }) {
+  if (!plainText) {
+    return (
+      <p>This explanation is structured but has no plain-text rendering yet.</p>
+    );
+  }
+  return (
+    <div className="explanationText">
+      {plainText
+        .split("\n")
+        .filter(Boolean)
+        .map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+    </div>
   );
+}
+
+export function StoryReader({
+  story,
+  initialView,
+}: {
+  story: StoryDetail;
+  initialView?: string;
+}) {
+  const orientations = story.availableDepths.filter(
+    (depth): depth is Orientation => depth !== "technical",
+  );
+  const hasTechnical = story.availableDepths.includes("technical");
+  const defaultOrientation: Orientation | null = orientations.includes("glance")
+    ? "glance"
+    : (orientations[0] ?? null);
+
+  const [view, setView] = useState<ExplanationDepth | null>(() => {
+    if (initialView === "technical" && hasTechnical) {
+      return "technical";
+    }
+    if (
+      (initialView === "glance" || initialView === "explain") &&
+      orientations.includes(initialView)
+    ) {
+      return initialView;
+    }
+    return defaultOrientation ?? (hasTechnical ? "technical" : null);
+  });
+
+  const selectView = (next: ExplanationDepth) => {
+    setView(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", next);
+    window.history.replaceState(null, "", url);
+  };
+
   const activeExplanation = useMemo(
-    () => story.explanations.find((value) => value.depth === depth),
-    [depth, story.explanations],
+    () => story.explanations.find((value) => value.depth === view),
+    [view, story.explanations],
   );
+  const technical = story.explanations.find(
+    (value) => value.depth === "technical",
+  );
+  const technicalMinutes = estimateMinutes(technical?.plainText);
+  const technicalLabel =
+    technicalMinutes === null
+      ? "Technical walkthrough"
+      : `Technical walkthrough · ${technicalMinutes} min`;
 
   return (
     <>
@@ -73,49 +139,82 @@ export function StoryReader({ story }: { story: StoryDetail }) {
 
       <div className="storyGrid">
         <div className="storyMain">
-          {story.availableDepths.length ? (
+          {view === "technical" && technical ? (
             <>
-              <div className="depthSelector" role="tablist" aria-label="Reading depth">
-                {story.availableDepths.map((value) => (
+              <div className="techBar">
+                {defaultOrientation ? (
                   <button
-                    aria-selected={depth === value}
-                    className={depth === value ? "active" : ""}
+                    onClick={() => selectView(defaultOrientation)}
+                    type="button"
+                  >
+                    <span aria-hidden="true">←</span> Back to{" "}
+                    {orientationMeta[defaultOrientation].name}
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <span className="techLabel">{technicalLabel}</span>
+              </div>
+              <section className="explanationPanel">
+                <p className="sectionKicker">Technical · Investigate the work</p>
+                <ExplanationBody plainText={technical.plainText} />
+              </section>
+            </>
+          ) : orientations.length ? (
+            <>
+              <div
+                aria-label="Orientation"
+                className="depthSelector"
+                role="tablist"
+              >
+                {orientations.map((value) => (
+                  <button
+                    aria-selected={view === value}
+                    className={view === value ? "active" : ""}
                     key={value}
-                    onClick={() => setDepth(value)}
+                    onClick={() => selectView(value)}
                     role="tab"
                     type="button"
                   >
-                    {depthNames[value]}
+                    <span>{orientationMeta[value].name}</span>
+                    <span className="tabHint">{orientationMeta[value].hint}</span>
                   </button>
                 ))}
               </div>
               <section className="explanationPanel">
-                <p className="sectionKicker">{depth ? depthNames[depth] : ""}</p>
-                {activeExplanation?.plainText ? (
-                  <div className="explanationText">
-                    {activeExplanation.plainText
-                      .split("\n")
-                      .filter(Boolean)
-                      .map((paragraph) => (
-                        <p key={paragraph}>{paragraph}</p>
-                      ))}
-                  </div>
-                ) : (
-                  <p>
-                    This explanation is structured but has no plain-text rendering
-                    yet.
-                  </p>
-                )}
+                <p className="sectionKicker">
+                  {view === "glance" || view === "explain"
+                    ? `${orientationMeta[view].name} · ${orientationMeta[view].hint}`
+                    : ""}
+                </p>
+                <ExplanationBody plainText={activeExplanation?.plainText} />
               </section>
+              {hasTechnical ? (
+                <aside className="goDeeper">
+                  <div>
+                    <p className="sectionKicker">
+                      Want to investigate the actual work?
+                    </p>
+                    <h2>{technicalLabel}</h2>
+                    <p>Methods, experiments, results, and limitations</p>
+                  </div>
+                  <button
+                    className="primaryButton"
+                    onClick={() => selectView("technical")}
+                    type="button"
+                  >
+                    Go deeper →
+                  </button>
+                </aside>
+              ) : null}
             </>
           ) : (
             <section className="pendingPanel">
-              <p className="sectionKicker">Evidence first</p>
-              <h2>The sources arrived before the summary.</h2>
+              <p className="sectionKicker">Sources available</p>
+              <h2>A grounded explanation is not available yet.</h2>
               <p>
-                Curious Now publishes useful links immediately. The explanation
-                will appear only after it can be tied to a versioned evidence
-                packet.
+                Read the original sources on the shelf, or return later once the
+                evidence has been processed.
               </p>
             </section>
           )}
