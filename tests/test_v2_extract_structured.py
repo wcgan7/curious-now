@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from bs4 import BeautifulSoup
 
 from curious_now_v2.retrieval.document import (
     Section,
@@ -150,6 +151,79 @@ def test_arxiv_keeps_table_captions(arxiv_doc) -> None:
     assert any(table.caption for table in arxiv_doc.tables)
 
 
+def test_arxiv_recovers_every_citable_figure_and_table(arxiv_doc) -> None:
+    """Count against the source, not against itself.
+
+    Asserting only that some captions were found hid two real losses: appendix
+    figures were being stripped, and multi-panel sub-figures were inflating the
+    count while their parent was still counted once.
+    """
+
+    soup = BeautifulSoup(fixture_text("arxiv_latexml_html"), "html.parser")
+    citable = [
+        node
+        for node in soup.select("figure.ltx_figure, figure.ltx_table")
+        if node.find_parent("figure") is None
+    ]
+    expected_tables = sum(
+        1 for node in citable if "ltx_table" in (node.get("class") or [])
+    )
+
+    assert len(arxiv_doc.figures) + len(arxiv_doc.tables) == len(citable)
+    assert len(arxiv_doc.tables) == expected_tables
+
+
+def test_arxiv_figure_numbering_has_no_gaps(arxiv_doc) -> None:
+    numbers = [
+        int(figure.label.split()[-1])
+        for figure in arxiv_doc.figures
+        if figure.label and figure.label.split()[-1].isdigit()
+    ]
+
+    assert numbers == list(range(1, len(numbers) + 1))
+
+
+def test_arxiv_folds_panel_captions_into_their_parent(arxiv_doc) -> None:
+    """A reader cites "Figure 4", never "(b)", so panels are not figures."""
+
+    panelled = [
+        figure for figure in arxiv_doc.figures if "Panels:" in figure.caption
+    ]
+
+    assert panelled
+    assert "(a)" in panelled[0].caption
+    assert not any(
+        figure.caption.startswith("(") for figure in arxiv_doc.figures
+    )
+
+
+def test_arxiv_keeps_appendix_content(arxiv_doc) -> None:
+    """Appendices carry notation tables, ablations, and architecture detail
+    that a Technical walkthrough may need to cite."""
+
+    appendix = arxiv_doc.sections_of_kind(SectionKind.APPENDIX)
+
+    assert appendix
+    assert sum(section.word_count for section in appendix) > 100
+    assert any(
+        table.caption and "notation" in table.caption.lower()
+        for table in arxiv_doc.tables
+    )
+
+
+def test_appendix_never_satisfies_the_mechanism_requirement(arxiv_doc) -> None:
+    """Appendix method detail is citable but is not the paper's own methods
+    section, so it must not stand in for the mechanism Explain requires."""
+
+    method_titles = [
+        section.title for section in arxiv_doc.sections_of_kind(SectionKind.METHOD)
+    ]
+
+    assert not any(
+        (title or "").lower().startswith("appendix") for title in method_titles
+    )
+
+
 def test_arxiv_excludes_references_from_body_text(arxiv_doc) -> None:
     body = arxiv_doc.body_text
 
@@ -190,6 +264,14 @@ def test_jats_keeps_table_labels_and_captions(jats_doc) -> None:
     assert labelled
     assert labelled[0].label.lower().startswith("table")
     assert labelled[0].caption
+
+
+def test_jats_recovers_every_figure_and_table(jats_doc) -> None:
+    soup = BeautifulSoup(fixture_text("pmc_jats_xml"), "xml")
+
+    # table-wrap-foot is a footnote block inside a table, not another table.
+    assert len(jats_doc.tables) == len(soup.find_all("table-wrap"))
+    assert len(jats_doc.figures) == len(soup.find_all("fig"))
 
 
 def test_jats_attributes_prose_to_exactly_one_section(jats_doc) -> None:

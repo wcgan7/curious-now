@@ -14,6 +14,7 @@ class SectionKind(StrEnum):
     DISCUSSION = "discussion"
     LIMITATIONS = "limitations"
     CONCLUSION = "conclusion"
+    APPENDIX = "appendix"
     REFERENCES = "references"
     ACKNOWLEDGEMENTS = "acknowledgements"
     OTHER = "other"

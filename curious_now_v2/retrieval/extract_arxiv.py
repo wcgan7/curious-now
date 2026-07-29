@@ -8,6 +8,7 @@ from curious_now_v2.retrieval.document import (
     Document,
     Figure,
     Section,
+    SectionKind,
     Table,
     classify_section,
     inherit_section_kinds,
@@ -23,7 +24,9 @@ _BLOCK_SELECTOR = (
     "p.ltx_p, li.ltx_item, blockquote.ltx_quote, div.ltx_theorem,"
     " [class~=ltx_title_paragraph]"
 )
-_EMITTED_SECTION_CLASSES = frozenset({"ltx_section", "ltx_subsection"})
+_EMITTED_SECTION_CLASSES = frozenset(
+    {"ltx_section", "ltx_subsection", "ltx_appendix"}
+)
 
 
 def _is_emitted_section(tag: Tag) -> bool:
@@ -56,11 +59,12 @@ def _resolve_math(soup: BeautifulSoup) -> None:
 
 
 def _strip_noise(soup: BeautifulSoup) -> None:
+    # Appendices are deliberately kept: they carry notation tables, ablations,
+    # and architecture detail that a Technical walkthrough may need to cite.
     for selector in (
         "script",
         "style",
         ".ltx_bibliography",
-        ".ltx_appendix",
         ".ltx_pagination",
         ".ltx_tag_section",
         ".ltx_tag_subsection",
@@ -106,17 +110,36 @@ def _split_label(caption: str) -> tuple[str | None, str]:
 
 
 def _captions(soup: BeautifulSoup) -> tuple[tuple[Figure, ...], tuple[Table, ...]]:
+    """Collect one entry per citable figure or table.
+
+    A multi-panel figure nests one <figure> per panel, each captioned "(a)",
+    "(b)" and so on. Those are not separate figures — a reader cites "Figure 4",
+    not "(b)" — so panel captions are folded into their parent.
+    """
+
     figures: list[Figure] = []
     tables: list[Table] = []
     for node in soup.select("figure.ltx_figure, figure.ltx_table"):
-        caption_node = node.select_one(".ltx_caption")
-        if caption_node is None:
+        if node.find_parent("figure") is not None:
             continue
-        label, caption = _split_label(_compact(caption_node.get_text(" ")))
+
+        captions = node.select(".ltx_caption")
+        own = [c for c in captions if c.find_parent("figure") is node]
+        if not own:
+            continue
+        label, caption = _split_label(_compact(own[0].get_text(" ")))
         if not caption:
             continue
-        classes = node.get("class") or []
-        if "ltx_table" in classes:
+
+        panels = [
+            _compact(c.get_text(" "))
+            for c in captions
+            if c.find_parent("figure") is not node
+        ]
+        if panels:
+            caption = f"{caption} Panels: {'; '.join(panels)}"
+
+        if "ltx_table" in (node.get("class") or []):
             grid = node.find("table")
             tables.append(
                 Table(
@@ -153,16 +176,25 @@ def extract_arxiv_html(html: str) -> Document:
         abstract = _compact(abstract_node.get_text(" ")) or None
 
     sections: list[Section] = []
-    for node in soup.select("section.ltx_section, section.ltx_subsection"):
+    for node in soup.select(
+        "section.ltx_section, section.ltx_subsection, section.ltx_appendix"
+    ):
         heading = _heading_of(node)
         paragraphs = _paragraphs_of(node)
         if not paragraphs and not heading:
             continue
         classes = node.get("class") or []
+        # Appendix material is citable but is not the paper's own methods
+        # section, so it never satisfies the mechanism Explain requires.
+        kind = (
+            SectionKind.APPENDIX
+            if "ltx_appendix" in classes
+            else classify_section(heading)
+        )
         sections.append(
             Section(
                 title=heading,
-                kind=classify_section(heading),
+                kind=kind,
                 paragraphs=paragraphs,
                 level=2 if "ltx_subsection" in classes else 1,
             )
