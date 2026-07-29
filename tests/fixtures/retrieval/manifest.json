@@ -1,0 +1,107 @@
+{
+  "description": "Real documents captured from configured sources, used to regression-test extraction against what publishers actually serve. Refresh with scripts/v2_capture_fixtures.py.",
+  "fixtures": [
+    {
+      "name": "arxiv_latexml_html",
+      "url": "https://arxiv.org/html/2607.07395",
+      "kind": "arxiv_html",
+      "note": "LaTeXML HTML: real TeX in annotation tags, ltx_ class structure"
+    },
+    {
+      "name": "arxiv_abs_html",
+      "url": "https://arxiv.org/abs/2607.07395",
+      "kind": "arxiv_abs",
+      "note": "Abstract landing page, not full text"
+    },
+    {
+      "name": "arxiv_paper_pdf",
+      "url": "https://arxiv.org/pdf/2607.24758",
+      "kind": "pdf",
+      "note": "Academic PDF, the fallback path. Chosen for typical size; figure-heavy papers run to several MB and are not worth versioning."
+    },
+    {
+      "name": "pmc_jats_xml",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12967033/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Europe PMC JATS: sections, figure captions, and refs already marked up"
+    },
+    {
+      "name": "medrxiv_article_html",
+      "url": "https://www.medrxiv.org/content/10.64898/2026.07.27.26359009v1",
+      "kind": "biorxiv_html",
+      "note": "bioRxiv/medRxiv preprint landing page"
+    },
+    {
+      "name": "nature_article_html",
+      "url": "https://www.nature.com/articles/d41586-026-02333-7",
+      "kind": "publisher_html",
+      "note": "Nature news item; publisher HTML with heavy boilerplate"
+    },
+    {
+      "name": "bbc_news_html",
+      "url": "https://www.bbc.co.uk/news/articles/c3w0d7yeqlxo",
+      "kind": "news_html",
+      "note": "Large page, navigation and related-links boilerplate"
+    },
+    {
+      "name": "quanta_news_html",
+      "url": "https://www.quantamagazine.org/a-new-way-that-a-cows-inner-world-shapes-earths-atmosphere-20260727/",
+      "kind": "news_html",
+      "note": "Long-form science journalism"
+    },
+    {
+      "name": "sciencenews_html",
+      "url": "https://www.sciencenews.org/article/forever-chemicals-aging-dolphins",
+      "kind": "news_html",
+      "note": "Very large page; tests boilerplate rejection at scale"
+    },
+    {
+      "name": "statnews_html",
+      "url": "https://www.statnews.com/2026/07/28/american-diabetes-association-fallout-researchers-expulsion/",
+      "kind": "news_html",
+      "note": "Soft paywall: serves 200 with truncated body"
+    },
+    {
+      "name": "carbonbrief_html",
+      "url": "https://www.carbonbrief.org/analysis-wind-and-solar-power-overtake-fossil-fuels-in-germany-for-first-time-ever",
+      "kind": "news_html",
+      "note": "Data-heavy article with charts and tables"
+    },
+    {
+      "name": "deepmind_blog_html",
+      "url": "https://deepmind.google/blog/accelerating-the-frontiers-of-scientific-discovery-googles-40m-commitment-to-the-genesis-mission/",
+      "kind": "blog_html",
+      "note": "JS-heavy lab blog"
+    },
+    {
+      "name": "google_research_blog_html",
+      "url": "https://research.google/blog/symptomai-towards-a-conversational-ai-agent-for-everyday-symptom-assessment/",
+      "kind": "blog_html",
+      "note": "Lab blog with figures"
+    },
+    {
+      "name": "microsoft_research_blog_html",
+      "url": "https://www.microsoft.com/en-us/research/blog/verifying-rust-cryptography-in-symcrypt-from-standards-to-code/",
+      "kind": "blog_html",
+      "note": "Lab blog with code blocks"
+    },
+    {
+      "name": "nvidia_blog_html",
+      "url": "https://blogs.nvidia.com/blog/nemotron-langchain-agents-open-stack/",
+      "kind": "blog_html",
+      "note": "Marketing-adjacent lab blog"
+    },
+    {
+      "name": "nasa_press_html",
+      "url": "https://science.nasa.gov/earth/natural-disasters/wildfires/smoke-blankets-oregon/",
+      "kind": "institutional_html",
+      "note": "Short institutional item; tests the minimum-length gate"
+    },
+    {
+      "name": "esa_press_html",
+      "url": "https://www.esa.int/Science_Exploration/Space_Science/Watch_the_total_solar_eclipse_with_ESA_in_Leon",
+      "kind": "institutional_html",
+      "note": "Short institutional item, older CMS markup"
+    }
+  ]
+}

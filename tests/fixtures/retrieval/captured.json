@@ -1,0 +1,172 @@
+{
+  "arxiv_abs_html": {
+    "bytes": 42125,
+    "captured_at": "2026-07-29T07:27:34.181404+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://arxiv.org/abs/2607.07395",
+    "kind": "arxiv_abs",
+    "sha256": "d36931549237ffb42bf5853127cfd60b005a57246f6edb05e854725ce82db61e",
+    "stored_bytes": 9061,
+    "url": "https://arxiv.org/abs/2607.07395"
+  },
+  "arxiv_latexml_html": {
+    "bytes": 351344,
+    "captured_at": "2026-07-29T07:27:19.937768+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://arxiv.org/html/2607.07395",
+    "kind": "arxiv_html",
+    "sha256": "a57620a0c78b574d97ca07b53eb5511ccd116f1fa930a2cec1a06ba6c627aa5f",
+    "stored_bytes": 51916,
+    "url": "https://arxiv.org/html/2607.07395"
+  },
+  "arxiv_paper_pdf": {
+    "bytes": 306385,
+    "captured_at": "2026-07-29T07:28:49.959286+00:00",
+    "content_type": "application/pdf",
+    "final_url": "https://arxiv.org/pdf/2607.24758",
+    "kind": "pdf",
+    "sha256": "3b90a71ec8e1d86dafffc5a38f24c417606892980064e29f29b084a6d046b215",
+    "stored_bytes": 272670,
+    "url": "https://arxiv.org/pdf/2607.24758"
+  },
+  "bbc_news_html": {
+    "bytes": 404924,
+    "captured_at": "2026-07-29T07:28:02.366481+00:00",
+    "content_type": "text/html",
+    "final_url": "https://www.bbc.co.uk/news/articles/c3w0d7yeqlxo",
+    "kind": "news_html",
+    "sha256": "75f66196a6d517dc59bb8f7b7cec77c87315317313b4261266cf2e93fba789f3",
+    "stored_bytes": 60465,
+    "url": "https://www.bbc.co.uk/news/articles/c3w0d7yeqlxo"
+  },
+  "carbonbrief_html": {
+    "bytes": 97753,
+    "captured_at": "2026-07-29T07:28:04.599000+00:00",
+    "content_type": "text/html; charset=UTF-8",
+    "final_url": "https://www.carbonbrief.org/analysis-wind-and-solar-power-overtake-fossil-fuels-in-germany-for-first-time-ever",
+    "kind": "news_html",
+    "sha256": "38a255205b47459da5c4be27ba6c5521f3804190487f79fe064f4e4c84ce5f89",
+    "stored_bytes": 26010,
+    "url": "https://www.carbonbrief.org/analysis-wind-and-solar-power-overtake-fossil-fuels-in-germany-for-first-time-ever"
+  },
+  "deepmind_blog_html": {
+    "bytes": 232012,
+    "captured_at": "2026-07-29T07:28:06.621208+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://cloud.google.com/blog/topics/public-sector/accelerating-frontiers-of-scientific-discovery-40-million-dollar-commitment-genesis-mission",
+    "kind": "blog_html",
+    "sha256": "e78c3f4b65277c7b52e3cb09d91c6b099f94b99b65dcc2e2d515e4922b9801b3",
+    "stored_bytes": 43843,
+    "url": "https://deepmind.google/blog/accelerating-the-frontiers-of-scientific-discovery-googles-40m-commitment-to-the-genesis-mission/"
+  },
+  "esa_press_html": {
+    "bytes": 31082,
+    "captured_at": "2026-07-29T07:28:09.134799+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://www.esa.int/Science_Exploration/Space_Science/Watch_the_total_solar_eclipse_with_ESA_in_Leon",
+    "kind": "institutional_html",
+    "sha256": "44f98c55c58f66e86475a2504b316ebc365826393deb6e5f55f5cd191b365bc5",
+    "stored_bytes": 6977,
+    "url": "https://www.esa.int/Science_Exploration/Space_Science/Watch_the_total_solar_eclipse_with_ESA_in_Leon"
+  },
+  "google_research_blog_html": {
+    "bytes": 188092,
+    "captured_at": "2026-07-29T07:28:07.170270+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://research.google/blog/symptomai-towards-a-conversational-ai-agent-for-everyday-symptom-assessment/",
+    "kind": "blog_html",
+    "sha256": "1dc7cd428dd866329c2a6b7de9e3311682038f80c563fe31a224ae5f83b1f49c",
+    "stored_bytes": 20525,
+    "url": "https://research.google/blog/symptomai-towards-a-conversational-ai-agent-for-everyday-symptom-assessment/"
+  },
+  "medrxiv_article_html": {
+    "bytes": 140122,
+    "captured_at": "2026-07-29T07:27:59.657380+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://www.medrxiv.org/content/10.64898/2026.07.27.26359009v1",
+    "kind": "biorxiv_html",
+    "sha256": "0972ea51e37623230ad9b683344a9595dc31adc4dce1592751b4c13f61a0da20",
+    "stored_bytes": 27213,
+    "url": "https://www.medrxiv.org/content/10.64898/2026.07.27.26359009v1"
+  },
+  "microsoft_research_blog_html": {
+    "bytes": 231012,
+    "captured_at": "2026-07-29T07:28:08.013704+00:00",
+    "content_type": "text/html; charset=UTF-8",
+    "final_url": "https://www.microsoft.com/en-us/research/blog/verifying-rust-cryptography-in-symcrypt-from-standards-to-code/",
+    "kind": "blog_html",
+    "sha256": "b69e5ae6454ebe908f3bb916998cff3d541f389b79e0f18883c69d693ff73653",
+    "stored_bytes": 40987,
+    "url": "https://www.microsoft.com/en-us/research/blog/verifying-rust-cryptography-in-symcrypt-from-standards-to-code/"
+  },
+  "nasa_press_html": {
+    "bytes": 305496,
+    "captured_at": "2026-07-29T07:28:08.159019+00:00",
+    "content_type": "text/html; charset=UTF-8",
+    "final_url": "https://science.nasa.gov/earth/natural-disasters/wildfires/smoke-blankets-oregon/",
+    "kind": "institutional_html",
+    "sha256": "ae48e95b3b9d6ad0636c50c3504cbe07da8b1714e7609665d4a3dc4ff229677b",
+    "stored_bytes": 45727,
+    "url": "https://science.nasa.gov/earth/natural-disasters/wildfires/smoke-blankets-oregon/"
+  },
+  "nature_article_html": {
+    "bytes": 224479,
+    "captured_at": "2026-07-29T07:28:02.302464+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://www.nature.com/articles/d41586-026-02333-7",
+    "kind": "publisher_html",
+    "sha256": "49986e6de6d24eefe6165381dab1e260dde0782f9cdf5d796cf82baa06ae89ce",
+    "stored_bytes": 46294,
+    "url": "https://www.nature.com/articles/d41586-026-02333-7"
+  },
+  "nvidia_blog_html": {
+    "bytes": 113536,
+    "captured_at": "2026-07-29T07:28:08.102619+00:00",
+    "content_type": "text/html; charset=UTF-8",
+    "final_url": "https://blogs.nvidia.com/blog/nemotron-langchain-agents-open-stack/",
+    "kind": "blog_html",
+    "sha256": "6c0a9b79a32452876faa811af53d1faf4fd9b07f4c1bdc75a1c8ee8449102635",
+    "stored_bytes": 33100,
+    "url": "https://blogs.nvidia.com/blog/nemotron-langchain-agents-open-stack/"
+  },
+  "pmc_jats_xml": {
+    "bytes": 70499,
+    "captured_at": "2026-07-29T07:27:59.554497+00:00",
+    "content_type": "application/xml",
+    "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12967033/fullTextXML",
+    "kind": "jats_xml",
+    "sha256": "1c280e386541d351264491ea27c5774503e5bfb845a767df0a10c87630bc7d6b",
+    "stored_bytes": 16175,
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12967033/fullTextXML"
+  },
+  "quanta_news_html": {
+    "bytes": 228728,
+    "captured_at": "2026-07-29T07:28:03.445027+00:00",
+    "content_type": "text/html; charset=UTF-8",
+    "final_url": "https://www.quantamagazine.org/a-new-way-that-a-cows-inner-world-shapes-earths-atmosphere-20260727/",
+    "kind": "news_html",
+    "sha256": "16f35e87cddea69122f684c9dd889346f5fc8a314522617ef59ec2f09f4195ad",
+    "stored_bytes": 47791,
+    "url": "https://www.quantamagazine.org/a-new-way-that-a-cows-inner-world-shapes-earths-atmosphere-20260727/"
+  },
+  "sciencenews_html": {
+    "bytes": 800766,
+    "captured_at": "2026-07-29T07:28:03.985261+00:00",
+    "content_type": "text/html; charset=UTF-8",
+    "final_url": "https://www.sciencenews.org/article/forever-chemicals-aging-dolphins",
+    "kind": "news_html",
+    "sha256": "c80bc0da1dce7f0e69569012d329d479e01a913a69e3b84ccf83bad37cb70ca9",
+    "stored_bytes": 189363,
+    "url": "https://www.sciencenews.org/article/forever-chemicals-aging-dolphins"
+  },
+  "statnews_html": {
+    "bytes": 178645,
+    "captured_at": "2026-07-29T07:28:04.133837+00:00",
+    "content_type": "text/html; charset=UTF-8",
+    "final_url": "https://www.statnews.com/2026/07/28/american-diabetes-association-fallout-researchers-expulsion/",
+    "kind": "news_html",
+    "sha256": "57ff3476b19f87c10de55d29d1f7c6d7c06fe7ebdb7c9e6c65fa821e202523aa",
+    "stored_bytes": 35227,
+    "url": "https://www.statnews.com/2026/07/28/american-diabetes-association-fallout-researchers-expulsion/"
+  }
+}
