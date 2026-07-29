@@ -9,6 +9,16 @@
     "stored_bytes": 9061,
     "url": "https://arxiv.org/abs/2607.07395"
   },
+  "arxiv_algorithms": {
+    "bytes": 874689,
+    "captured_at": "2026-07-29T08:49:43.410737+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://arxiv.org/html/2607.25973",
+    "kind": "arxiv_html",
+    "sha256": "cdb126aaec7354cef7ab74e3ed714de30233834ab3783e0859fe4e2d33f75390",
+    "stored_bytes": 115517,
+    "url": "https://arxiv.org/html/2607.25973"
+  },
   "arxiv_astro": {
     "bytes": 761529,
     "captured_at": "2026-07-29T08:30:20.230137+00:00",
@@ -119,6 +129,16 @@
     "stored_bytes": 88078,
     "url": "https://arxiv.org/html/2607.25931"
   },
+  "arxiv_nlp_tables": {
+    "bytes": 414711,
+    "captured_at": "2026-07-29T08:49:58.407910+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://arxiv.org/html/2607.26057",
+    "kind": "arxiv_html",
+    "sha256": "08ae52611aa03e18577e1a881e504aa2d5b1e27d213772d912892a7801353233",
+    "stored_bytes": 60844,
+    "url": "https://arxiv.org/html/2607.26057"
+  },
   "arxiv_paper_pdf": {
     "bytes": 306385,
     "captured_at": "2026-07-29T07:28:49.959286+00:00",
@@ -158,6 +178,16 @@
     "sha256": "cdacc4814b6d1a0ef1bba0706eb1e61ca5fe3b09748165bb8fddc843f2be0603",
     "stored_bytes": 10573,
     "url": "https://arxiv.org/html/2607.25928"
+  },
+  "arxiv_survey": {
+    "bytes": 295264,
+    "captured_at": "2026-07-29T08:50:13.412367+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "final_url": "https://arxiv.org/html/2607.21475",
+    "kind": "arxiv_html",
+    "sha256": "359400b358ddb2a5b6f2d61193e2251e7a3f30ad9caf7b52f1a74a9c791f37ea",
+    "stored_bytes": 55407,
+    "url": "https://arxiv.org/html/2607.21475"
   },
   "bbc_news_html": {
     "bytes": 404924,
@@ -218,6 +248,26 @@
     "sha256": "0a2c93fbef534433dd30439aeb17420c4b82e093a267c075b95bd5a4c9029d0a",
     "stored_bytes": 20998,
     "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13155791/fullTextXML"
+  },
+  "jats_case_report": {
+    "bytes": 72366,
+    "captured_at": "2026-07-29T08:50:25.273630+00:00",
+    "content_type": "application/xml",
+    "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13294281/fullTextXML",
+    "kind": "jats_xml",
+    "sha256": "12a3271742262ad08188cc6427ec8939705b443a528aa90aafc702ffdfc1926b",
+    "stored_bytes": 16205,
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13294281/fullTextXML"
+  },
+  "jats_cureus": {
+    "bytes": 52344,
+    "captured_at": "2026-07-29T08:50:35.308179+00:00",
+    "content_type": "application/xml",
+    "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13293645/fullTextXML",
+    "kind": "jats_xml",
+    "sha256": "c95127990acc5d596ff504c7eb65e4d05cbc3355ed2269a2fe7f028b0da47a03",
+    "stored_bytes": 13676,
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13293645/fullTextXML"
   },
   "jats_ijms": {
     "bytes": 197330,
@@ -318,6 +368,16 @@
     "sha256": "c74e51c8dd9a5c8ba59ce980874ad3e6eebbda71bfaaf314d7c4864ed8129716",
     "stored_bytes": 7039,
     "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13224953/fullTextXML"
+  },
+  "jats_rct": {
+    "bytes": 28389,
+    "captured_at": "2026-07-29T08:50:14.474802+00:00",
+    "content_type": "application/xml",
+    "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13215628/fullTextXML",
+    "kind": "jats_xml",
+    "sha256": "2bfb20a94f416c532c1f403c8bc478186f9c7cf097dc79ae24cb7933ca7d5f1d",
+    "stored_bytes": 8257,
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13215628/fullTextXML"
   },
   "jats_spanish": {
     "bytes": 118372,

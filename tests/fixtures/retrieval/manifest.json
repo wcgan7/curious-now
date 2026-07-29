@@ -252,6 +252,42 @@
       "url": "https://arxiv.org/html/2607.25928",
       "kind": "arxiv_html",
       "note": "math.CO, further structural variation"
+    },
+    {
+      "name": "arxiv_algorithms",
+      "url": "https://arxiv.org/html/2607.25973",
+      "kind": "arxiv_html",
+      "note": "cs.DS: algorithm environments and pseudocode listings"
+    },
+    {
+      "name": "arxiv_nlp_tables",
+      "url": "https://arxiv.org/html/2607.26057",
+      "kind": "arxiv_html",
+      "note": "cs.CL: benchmark-table heavy"
+    },
+    {
+      "name": "arxiv_survey",
+      "url": "https://arxiv.org/html/2607.21475",
+      "kind": "arxiv_html",
+      "note": "Survey paper: many sections, long reference list"
+    },
+    {
+      "name": "jats_rct",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13215628/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Randomised controlled trial; structured abstract"
+    },
+    {
+      "name": "jats_case_report",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13294281/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Case report: Case Presentation/Discussion structure"
+    },
+    {
+      "name": "jats_cureus",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13293645/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Cureus case report; distinct JATS pipeline"
     }
   ]
 }

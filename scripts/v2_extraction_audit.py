@@ -43,6 +43,8 @@ BOILERPLATE = (
 _HTML_TAG = re.compile(r"<\s*/?\s*(?:div|span|p|a|img|script|table|tr|td|br)\b", re.I)
 _ENTITY = re.compile(r"&(?:amp|lt|gt|quot|nbsp|#\d+);")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_MOJIBAKE = re.compile(r"â€[™œ\x9d“”]|Ã[©¨¡³±¼\x83]|ï»¿|Â[\xa0§°]")
+_CITABLE_LABEL = re.compile(r"^\s*(?:figure|fig\.?|table)\s*\d+", re.I)
 
 
 @dataclass
@@ -104,12 +106,19 @@ def check_word_floor(doc: Document, raw: str, kind: str) -> Finding:
 def check_floats_complete(doc: Document, raw: str, kind: str) -> Finding:
     got = len(doc.figures) + len(doc.tables)
     if kind == "arxiv_html":
+        # Count captions a reader could cite. Top-level <figure> nodes are the
+        # wrong unit: LaTeX places two numbered floats in one side-by-side
+        # wrapper, and panels of one figure each get their own <figure>.
         soup = BeautifulSoup(raw, "html.parser")
         expected = len(
             [
                 node
-                for node in soup.select("figure.ltx_figure, figure.ltx_table")
-                if node.find_parent("figure") is None
+                for node in soup.select(".ltx_caption")
+                if node.find_parent("figure") is not None
+                and (
+                    _CITABLE_LABEL.match(node.get_text(" ", strip=True))
+                    or node.find_parent("figure").find_parent("figure") is None
+                )
             ]
         )
     else:
@@ -206,6 +215,45 @@ def check_abstract_not_repeated(doc: Document, raw: str, kind: str) -> Finding:
     return ok()
 
 
+def check_no_mojibake(doc: Document, raw: str, kind: str) -> Finding:
+    """UTF-8 read as Latin-1 leaves telltale sequences that would otherwise
+    travel all the way into a generated explanation."""
+
+    hit = _MOJIBAKE.search(doc.text)
+    if hit:
+        return Finding(FAIL, f"encoding damage near {hit.group()!r}")
+    return ok()
+
+
+def check_paragraph_not_merged(doc: Document, raw: str, kind: str) -> Finding:
+    """One enormous paragraph means block boundaries were lost."""
+
+    longest = max(
+        (
+            len(paragraph.split())
+            for section in doc.sections
+            for paragraph in section.paragraphs
+        ),
+        default=0,
+    )
+    if longest > 2000:
+        return Finding(FAIL, f"single paragraph of {longest} words")
+    if longest > 800:
+        return Finding(WARN, f"long paragraph: {longest} words")
+    return ok()
+
+
+def check_title_not_body(doc: Document, raw: str, kind: str) -> Finding:
+    """Front matter must not be collected as prose."""
+
+    if not doc.title:
+        return ok()
+    for section in doc.sections:
+        if any(paragraph == doc.title for paragraph in section.paragraphs):
+            return Finding(FAIL, "title collected as body prose")
+    return ok()
+
+
 def check_figure_numbering(doc: Document, raw: str, kind: str) -> Finding:
     numbers = [
         int(figure.label.split()[-1])
@@ -249,6 +297,9 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("markup", check_no_markup_leakage),
     ("boilerplate", check_no_boilerplate),
     ("abstract-dup", check_abstract_not_repeated),
+    ("mojibake", check_no_mojibake),
+    ("merged-para", check_paragraph_not_merged),
+    ("title-in-body", check_title_not_body),
     ("fig-numbers", check_figure_numbering),
     ("fragments", check_paragraph_fragmentation),
     ("method", check_method_present),

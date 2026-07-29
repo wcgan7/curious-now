@@ -122,35 +122,55 @@ def _split_label(caption: str) -> tuple[str | None, str]:
 def _captions(soup: BeautifulSoup) -> tuple[tuple[Figure, ...], tuple[Table, ...]]:
     """Collect one entry per citable figure or table.
 
-    A multi-panel figure nests one <figure> per panel, each captioned "(a)",
-    "(b)" and so on. Those are not separate figures — a reader cites "Figure 4",
-    not "(b)" — so panel captions are folded into their parent.
+    Nesting means two different things in LaTeXML, and the caption's label
+    tells them apart. A multi-panel figure nests one <figure> per panel,
+    captioned "(a)", "(b)" — a reader cites "Figure 4", not "(b)", so those
+    fold into the parent. But LaTeX also places two independently numbered
+    floats side by side in one wrapper, and "Figure 4" and "Figure 5" nested
+    that way are two separate figures, not panels of anything.
+
+    The label also decides figure versus table: a side-by-side wrapper marks
+    its children as ltx_figure even when their captions read "Table 3".
     """
+
+    labelled: list[tuple[Tag, str | None, str]] = []
+    unlabelled: list[tuple[Tag, str]] = []
+    for caption_node in soup.select(".ltx_caption"):
+        owner = caption_node.find_parent("figure")
+        if owner is None:
+            continue
+        text = _compact(caption_node.get_text(" "))
+        label, caption = _split_label(text)
+        if label and caption:
+            labelled.append((owner, label, caption))
+        elif text and owner.find_parent("figure") is None:
+            # An unnumbered caption on a standalone float is still that
+            # float's caption, not a panel of anything.
+            labelled.append((owner, None, text))
+        elif text:
+            unlabelled.append((owner, text))
+
+    owners = {id(owner): index for index, (owner, _, _) in enumerate(labelled)}
+    panels: dict[int, list[str]] = {}
+    for owner, text in unlabelled:
+        # Attach a panel to the nearest enclosing float that is itself numbered.
+        for ancestor in (owner, *owner.parents):
+            if id(ancestor) in owners:
+                panels.setdefault(owners[id(ancestor)], []).append(text)
+                break
 
     figures: list[Figure] = []
     tables: list[Table] = []
-    for node in soup.select("figure.ltx_figure, figure.ltx_table"):
-        if node.find_parent("figure") is not None:
-            continue
-
-        captions = node.select(".ltx_caption")
-        own = [c for c in captions if c.find_parent("figure") is node]
-        if not own:
-            continue
-        label, caption = _split_label(_compact(own[0].get_text(" ")))
-        if not caption:
-            continue
-
-        panels = [
-            _compact(c.get_text(" "))
-            for c in captions
-            if c.find_parent("figure") is not node
-        ]
-        if panels:
-            caption = f"{caption} Panels: {'; '.join(panels)}"
-
-        if "ltx_table" in (node.get("class") or []):
-            grid = node.find("table")
+    for index, (owner, label, caption) in enumerate(labelled):
+        if index in panels:
+            caption = f"{caption} Panels: {'; '.join(panels[index])}"
+        is_table = (
+            label.casefold().startswith("table")
+            if label
+            else "ltx_table" in (owner.get("class") or [])
+        )
+        if is_table:
+            grid = owner.find("table")
             tables.append(
                 Table(
                     label=label,

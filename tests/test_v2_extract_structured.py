@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 from bs4 import BeautifulSoup
 
@@ -30,20 +32,48 @@ def jats_doc():
 # --- run across every captured paper, not just one --------------------------
 
 
+CITABLE_LABEL = re.compile(r"^\s*(?:figure|fig\.?|table)\s*\d+", re.I)
+
+
 @pytest.mark.parametrize("name", ARXIV_FIXTURES)
 def test_every_arxiv_paper_recovers_all_citable_floats(name: str) -> None:
-    """A single sample hid two real losses; every captured paper is counted."""
+    """Count captions a reader could cite.
+
+    Top-level <figure> nodes are the wrong unit in both directions: LaTeX puts
+    two numbered floats in one side-by-side wrapper, and each panel of a
+    multi-panel figure also gets its own <figure>.
+    """
 
     raw = fixture_text(name)
     document = extract_arxiv_html(raw)
     soup = BeautifulSoup(raw, "html.parser")
     citable = [
         node
-        for node in soup.select("figure.ltx_figure, figure.ltx_table")
-        if node.find_parent("figure") is None
+        for node in soup.select(".ltx_caption")
+        if node.find_parent("figure") is not None
+        and (
+            CITABLE_LABEL.match(node.get_text(" ", strip=True))
+            or node.find_parent("figure").find_parent("figure") is None
+        )
     ]
 
     assert len(document.figures) + len(document.tables) == len(citable)
+
+
+@pytest.mark.parametrize("name", ARXIV_FIXTURES)
+def test_float_numbering_has_no_gaps(name: str) -> None:
+    """Gaps mean a numbered float was dropped or mistaken for a panel."""
+
+    document = extract_arxiv_html(fixture_text(name))
+
+    for floats in (document.figures, document.tables):
+        numbers = [
+            int(item.label.split()[-1])
+            for item in floats
+            if item.label and item.label.split()[-1].isdigit()
+        ]
+        assert numbers == sorted(numbers)
+        assert len(numbers) == len(set(numbers))
 
 
 @pytest.mark.parametrize("name", JATS_FIXTURES)
