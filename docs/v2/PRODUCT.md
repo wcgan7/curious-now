@@ -87,9 +87,15 @@ Explain is the internal equivalent of ELI20.
 - assumes foundational familiarity with the field;
 - takes approximately 3–6 minutes to read;
 - may use established terminology and useful jargon;
-- explains what is new, how it works, how it differs from the normal approach,
-  the key evidence, and the important limitations;
+- answers how it works: the mechanism, and why that produces the claimed effect;
+- carries the qualification that keeps the mechanism honest;
+- adds what is new, the key evidence, and the comparison with the normal
+  approach when the evidence supports them;
 - remains intuitive rather than reproducing academic prose.
+
+Glance answers what happened, Explain answers how it works, and Technical
+answers whether it holds up. A reader who knows the field does not need the
+problem restated; they need the mechanism.
 
 Explain must stand alone for a reader who skips Glance, while feeling like a
 natural expansion for a reader who uses both.

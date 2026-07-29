@@ -60,7 +60,8 @@ def make_item(
     )
 
 
-# The elements Explain requires: mechanism, comparison, and a qualification.
+# A well-evidenced story: mechanism plus the supporting elements each layer
+# covers when they are available.
 COMPLETE_KINDS = (
     ClaimKind.RESULT,
     ClaimKind.METHOD,
@@ -549,29 +550,43 @@ def test_full_text_technical_report_is_eligible_for_technical() -> None:
     assert ExplanationDepth.TECHNICAL in plan.depths
 
 
+def test_explain_is_declined_when_the_mechanism_is_unsupported() -> None:
+    """Explain answers how it works, so no mechanism means nothing to answer."""
+
+    item = make_item()
+    story_id = uuid4()
+    packet_id = uuid4()
+    story = StoryDraft(
+        story_id=story_id,
+        working_title=item.title,
+        items=(item,),
+        current_evidence_packet_id=packet_id,
+    )
+    packet = make_packet(
+        story_id=story_id,
+        item_id=item.item_id,
+        packet_id=packet_id,
+        kinds=(ClaimKind.RESULT, ClaimKind.COMPARISON, ClaimKind.LIMITATION),
+    )
+
+    plan = plan_explanations(story, packet)
+
+    assert ExplanationDepth.EXPLAIN not in plan.depths
+    assert "mechanism" in plan.skipped_reasons[ExplanationDepth.EXPLAIN]
+
+
 @pytest.mark.parametrize(
-    ("missing", "kinds"),
+    "kinds",
     [
-        (
-            "mechanism",
-            (ClaimKind.RESULT, ClaimKind.COMPARISON, ClaimKind.LIMITATION),
-        ),
-        (
-            "comparison",
-            (ClaimKind.RESULT, ClaimKind.METHOD, ClaimKind.LIMITATION),
-        ),
-        (
-            "limitation or uncertainty",
-            (ClaimKind.RESULT, ClaimKind.METHOD, ClaimKind.COMPARISON),
-        ),
+        # Evidence and comparison are covered when supported, not required.
+        (ClaimKind.METHOD,),
+        (ClaimKind.METHOD, ClaimKind.RESULT),
+        (ClaimKind.METHOD, ClaimKind.LIMITATION),
     ],
 )
-def test_explain_is_declined_and_names_the_missing_element(
-    missing: str,
+def test_mechanism_alone_is_enough_for_explain(
     kinds: tuple[ClaimKind, ...],
 ) -> None:
-    """A layer is declined for a named element rather than padded out."""
-
     item = make_item()
     story_id = uuid4()
     packet_id = uuid4()
@@ -588,10 +603,7 @@ def test_explain_is_declined_and_names_the_missing_element(
         kinds=kinds,
     )
 
-    plan = plan_explanations(story, packet)
-
-    assert ExplanationDepth.EXPLAIN not in plan.depths
-    assert missing in plan.skipped_reasons[ExplanationDepth.EXPLAIN]
+    assert ExplanationDepth.EXPLAIN in plan_explanations(story, packet).depths
 
 
 def test_declining_explain_leaves_glance_available() -> None:

@@ -13,7 +13,6 @@ from curious_now_v2.core.models import EvidencePacket, StoryDraft
 SUBSTANTIVE_KINDS = frozenset(
     {ClaimKind.RESULT, ClaimKind.OBSERVATION, ClaimKind.METHOD}
 )
-QUALIFYING_KINDS = frozenset({ClaimKind.LIMITATION, ClaimKind.UNCERTAINTY})
 
 
 class ExplanationPlan(BaseModel):
@@ -61,24 +60,17 @@ def plan_explanations(
             "no result, observation, or method claim to explain"
         )
 
-    # Explain must cover mechanism, comparison, and limitations. Mechanism and
-    # limitations are the elements abstracts systematically lack.
-    explain_missing = [
-        name
-        for name, present in (
-            ("mechanism", ClaimKind.METHOD in kinds),
-            ("comparison", ClaimKind.COMPARISON in kinds),
-            ("limitation or uncertainty", bool(kinds & QUALIFYING_KINDS)),
-        )
-        if not present
-    ]
+    # Explain answers how it works, so mechanism is the one hard requirement.
+    # Evidence and comparison are covered when supported and omitted otherwise.
+    # The qualification Explain must carry may come from source metadata, so it
+    # constrains the text without gating whether Explain exists.
     if ExplanationDepth.GLANCE not in depths:
         skipped[ExplanationDepth.EXPLAIN] = "no orientation to expand"
     elif packet.text_sufficiency is AccessClass.METADATA_ONLY:
         skipped[ExplanationDepth.EXPLAIN] = "metadata-only evidence is insufficient"
-    elif explain_missing:
+    elif ClaimKind.METHOD not in kinds:
         skipped[ExplanationDepth.EXPLAIN] = (
-            f"evidence lacks {', '.join(explain_missing)}"
+            "evidence lacks mechanism; nothing to explain how it works"
         )
     else:
         depths.append(ExplanationDepth.EXPLAIN)

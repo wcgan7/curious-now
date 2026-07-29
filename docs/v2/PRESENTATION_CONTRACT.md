@@ -65,11 +65,14 @@ from any science source — not only research papers. The layer contracts below
 apply to every kind: their required-content lists name roles a presentation must
 fill, not a paper-shaped template.
 
-- For a result, “what is new” is the finding, and the comparison is the prior
-  state of evidence or the relevant baseline.
-- For a release, they are the new capability and what was previously available.
-- For a correction, they are what changed and what was previously believed.
-- For a debate, they are the competing positions and the evidence each cites.
+- For a result, the mechanism is what produces the finding, and the comparison
+  is the prior state of evidence or the relevant baseline.
+- For a release, they are how the new capability works and what was previously
+  available.
+- For a correction, they are why the original conclusion failed and what was
+  previously believed.
+- For a debate, they are what each position claims follows from the evidence,
+  and where the positions actually diverge.
 
 A required element that is genuinely inapplicable to a story kind MAY be omitted;
 it MUST NOT be satisfied with invented material.
@@ -190,14 +193,39 @@ Simple language MUST NOT become stronger certainty.
 
 ### Required content
 
-Explain MUST cover:
+Explain answers one question: **how does it work?**
 
-1. the problem or prior approach;
-2. what is new;
-3. how the approach works at an intuitive but field-aware level;
-4. the key evidence or experimental result;
-5. how it compares with the relevant baseline or prior state of understanding;
-6. the important limitation and uncertainty.
+Each layer owes the reader a different question. Glance answers what happened
+and why it might matter. Explain answers how. Technical answers whether it holds
+up. A reader who already knows the field does not need the problem restated;
+what they lack is the mechanism of this particular development.
+
+Explain MUST:
+
+1. explain the mechanism at an intuitive but field-aware level — what the
+   approach actually does, and why that produces the claimed effect;
+2. carry the qualification that keeps the mechanism honest.
+
+Explain SHOULD, when the evidence supports it:
+
+- frame the problem or prior approach, only as far as the mechanism needs;
+- state what is genuinely new about it;
+- give the key evidence that the mechanism works;
+- compare with the relevant baseline or prior state of understanding.
+
+An unsupported SHOULD element is omitted. It is never filled with invented
+material or generic restatement.
+
+The qualification is required because a vivid mechanical account reads as
+truth: explaining precisely how something works, while saying nothing about
+what is uncertain, produces confidence that the evidence has not earned. Since
+Technical is often unavailable, Explain is frequently the deepest layer a reader
+sees.
+
+The qualification MAY be satisfied from source metadata rather than an extracted
+claim — preprint status, a single source, or interested-party-only reporting all
+qualify a mechanism — so it constrains what Explain says without gating whether
+Explain exists.
 
 It MAY use established field terminology without defining every basic term. It
 SHOULD explain new, ambiguous, or paper-specific terminology.
