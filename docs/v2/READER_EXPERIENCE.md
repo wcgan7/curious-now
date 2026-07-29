@@ -328,7 +328,8 @@ Remaining known deltas, pending later milestones:
   navigation are not built;
 - the Technical body renders one text column, not yet the structured
   walkthrough sections with per-section evidence links;
-- topics, search, and highlighted-story explanations have no reader UI;
+- topics and highlighted-story explanations have no reader UI; search covers
+  story, display, and source titles but has no topic or date filters;
 - claim-level provenance appears in the claim ledger, not yet inline in
   explanation text.
 

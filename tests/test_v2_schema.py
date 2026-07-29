@@ -6,6 +6,7 @@ from pathlib import Path
 MIGRATIONS_DIR = Path(__file__).parents[1] / "db" / "v2"
 INITIAL_PATH = MIGRATIONS_DIR / "0001_initial.sql"
 PRESENTATION_PATH = MIGRATIONS_DIR / "0002_presentation_model.sql"
+SEARCH_PATH = MIGRATIONS_DIR / "0003_search.sql"
 
 
 def combined_sql() -> str:
@@ -78,6 +79,18 @@ def test_v2_schema_records_the_conceptual_spine_per_presentation() -> None:
     assert "UNIQUE (evidence_packet_id, version)" in sql
     assert "conceptual_spine_id UUID NULL" in sql
     assert "UNIQUE NULLS NOT DISTINCT" in sql
+
+
+def test_v2_search_indexes_every_reader_visible_title() -> None:
+    sql = SEARCH_PATH.read_text()
+
+    # Story titles are already indexed by 0001; search must also reach the
+    # generated display title and the retained source titles.
+    assert "ALTER TABLE items" in sql
+    assert "ALTER TABLE display_titles" in sql
+    assert "CREATE INDEX idx_items_search" in sql
+    assert "CREATE INDEX idx_display_titles_search" in sql
+    assert sql.count("USING GIN") == 2
 
 
 def test_v2_schema_has_no_vector_or_redis_dependency() -> None:

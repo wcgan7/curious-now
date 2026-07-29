@@ -25,6 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <p className="headerPromise">science worth understanding</p>
             <nav aria-label="Primary navigation">
               <Link href="/">Latest</Link>
+              <Link href="/search">Search</Link>
             </nav>
           </div>
         </header>

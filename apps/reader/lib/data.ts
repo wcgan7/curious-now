@@ -149,6 +149,92 @@ export async function getFeedPage(
   };
 }
 
+export async function searchStories(
+  query: string,
+  limit = 30,
+): Promise<FeedStory[]> {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const sql = database();
+  // Search reaches every title a reader can see: the story's own title, the
+  // generated display title, and the retained source titles. Text relevance
+  // leads; feed score breaks ties so a strong match still surfaces good
+  // evidence first.
+  const rows = await sql<FeedRow[]>`
+    WITH q AS (SELECT plainto_tsquery('english', ${trimmed}) AS query),
+    matches AS (
+      SELECT
+        s.id,
+        max(
+          GREATEST(
+            ts_rank(s.search_document, q.query),
+            COALESCE(ts_rank(dt.search_document, q.query), 0),
+            COALESCE(ts_rank(i.search_document, q.query), 0)
+          )
+        ) AS relevance
+      FROM stories s
+      CROSS JOIN q
+      LEFT JOIN display_titles dt
+        ON dt.id = s.current_display_title_id
+       AND dt.status = 'valid'
+      LEFT JOIN story_items si ON si.story_id = s.id
+      LEFT JOIN items i ON i.id = si.item_id
+      WHERE s.status = 'published'
+        AND (
+          s.search_document @@ q.query
+          OR dt.search_document @@ q.query
+          OR i.search_document @@ q.query
+        )
+      GROUP BY s.id
+    ),
+    page AS (
+      SELECT
+        s.id,
+        COALESCE(dt.text, s.working_title) AS reader_title,
+        COALESCE(s.published_at, s.created_at) AS sort_at,
+        s.feed_score,
+        m.relevance
+      FROM matches m
+      JOIN stories s ON s.id = m.id
+      LEFT JOIN display_titles dt
+        ON dt.id = s.current_display_title_id
+       AND dt.status = 'valid'
+      ORDER BY m.relevance DESC, s.feed_score DESC, s.id DESC
+      LIMIT ${limit}
+    )
+    SELECT
+      p.*,
+      COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'itemId', i.id,
+            'sourceName', src.name,
+            'sourceRole', src.role,
+            'storyRole', si.role,
+            'title', i.title,
+            'url', i.url,
+            'contentType', i.content_type,
+            'accessClass', i.access_class,
+            'publishedAt', i.published_at
+          )
+          ORDER BY i.published_at DESC NULLS LAST, i.id
+        ),
+        '[]'::jsonb
+      ) AS sources
+    FROM page p
+    JOIN story_items si ON si.story_id = p.id
+    JOIN items i ON i.id = si.item_id
+    JOIN sources src ON src.id = i.source_id
+    GROUP BY p.id, p.reader_title, p.sort_at, p.feed_score, p.relevance
+    ORDER BY p.relevance DESC, p.feed_score DESC, p.id DESC;
+  `;
+
+  return rows.map(mapFeedRow);
+}
+
 export async function getStory(id: string): Promise<StoryDetail | null> {
   if (!UUID_PATTERN.test(id)) {
     return null;
