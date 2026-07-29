@@ -163,6 +163,58 @@ def test_pdf_drops_preprint_server_stamps(name: str) -> None:
         assert stamp not in lowered
 
 
+@pytest.mark.parametrize("name", PDF_FIXTURES)
+def test_pdf_title_is_the_paper_not_the_journal(name: str) -> None:
+    """Journals print a masthead above the title and repeat it as a running
+    head, set larger than anything else — so size alone picks "PLOS ONE"."""
+
+    document = extract_pdf(fixture_bytes(name))
+
+    assert document.title
+    assert len(document.title.split()) >= 4
+    assert document.title.casefold() not in {"plos one", "nature", "science"}
+
+
+@pytest.mark.parametrize("name", PDF_FIXTURES)
+def test_pdf_drops_repeated_page_furniture(name: str) -> None:
+    """A line printed on most pages is a running head, not prose."""
+
+    document = extract_pdf(fixture_bytes(name))
+    short_lines = [
+        paragraph
+        for section in document.sections
+        for paragraph in section.paragraphs
+        if len(paragraph) <= 120
+    ]
+    repeats = {
+        line for line in short_lines if short_lines.count(line) >= 3
+    }
+
+    assert not repeats
+
+
+def test_pdf_title_drops_the_article_type_label() -> None:
+    document = extract_pdf(fixture_bytes("pdf_plos_typeset"))
+
+    assert document.title
+    assert not document.title.upper().startswith("RESEARCH ARTICLE")
+
+
+def test_pdf_abstract_is_never_an_affiliation_list() -> None:
+    """Affiliations sit exactly where an unlabelled abstract does."""
+
+    for name in PDF_FIXTURES:
+        document = extract_pdf(fixture_bytes(name))
+        if not document.abstract:
+            continue
+        lowered = document.abstract.casefold()
+        institutions = sum(
+            lowered.count(word)
+            for word in ("department", "university", "faculty")
+        )
+        assert institutions < 2
+
+
 def test_numbered_affiliations_are_not_read_as_headings() -> None:
     """"7. Pathologie DNA, Nieuwegein, The Netherlands" is an affiliation.
     Headings do not carry commas, which is what tells them apart."""

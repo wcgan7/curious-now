@@ -189,6 +189,30 @@
     "stored_bytes": 10573,
     "url": "https://arxiv.org/html/2607.25928"
   },
+  "arxiv_signal": {
+    "bytes": 274166,
+    "captured_at": "2026-07-29T09:27:08.841855+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "fetched_bytes": 274166,
+    "final_url": "https://arxiv.org/html/2607.26027",
+    "kind": "arxiv_html",
+    "normalised": false,
+    "sha256": "c7067f565c02a5e93b6a03abbd1def0d06f964b39379ca212ca4ff1f055e35a2",
+    "stored_bytes": 45940,
+    "url": "https://arxiv.org/html/2607.26027"
+  },
+  "arxiv_stats": {
+    "bytes": 1076508,
+    "captured_at": "2026-07-29T09:27:23.885574+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "fetched_bytes": 1076508,
+    "final_url": "https://arxiv.org/html/2607.26022",
+    "kind": "arxiv_html",
+    "normalised": false,
+    "sha256": "e11c8af6ea1063dfe37fdcb82b45ae9ca69f9d3b538fa938bba8fbdd10b5e4ae",
+    "stored_bytes": 108585,
+    "url": "https://arxiv.org/html/2607.26022"
+  },
   "arxiv_survey": {
     "bytes": 295264,
     "captured_at": "2026-07-29T08:50:13.412367+00:00",
@@ -198,6 +222,18 @@
     "sha256": "359400b358ddb2a5b6f2d61193e2251e7a3f30ad9caf7b52f1a74a9c791f37ea",
     "stored_bytes": 55407,
     "url": "https://arxiv.org/html/2607.21475"
+  },
+  "arxiv_vision": {
+    "bytes": 97361,
+    "captured_at": "2026-07-29T09:26:53.802073+00:00",
+    "content_type": "text/html; charset=utf-8",
+    "fetched_bytes": 97361,
+    "final_url": "https://arxiv.org/html/2607.26042",
+    "kind": "arxiv_html",
+    "normalised": false,
+    "sha256": "e39d425166f9bad2087921957528da8fbc1f323674f796558575b0c5151e5c6b",
+    "stored_bytes": 24093,
+    "url": "https://arxiv.org/html/2607.26042"
   },
   "bbc_news_html": {
     "bytes": 404924,
@@ -278,6 +314,30 @@
     "sha256": "c95127990acc5d596ff504c7eb65e4d05cbc3355ed2269a2fe7f028b0da47a03",
     "stored_bytes": 13676,
     "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13293645/fullTextXML"
+  },
+  "jats_elife_a": {
+    "bytes": 232142,
+    "captured_at": "2026-07-29T09:27:25.987903+00:00",
+    "content_type": "application/xml",
+    "fetched_bytes": 232142,
+    "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13299592/fullTextXML",
+    "kind": "jats_xml",
+    "normalised": false,
+    "sha256": "a02ac007126f1ebab899bfef570e86883d055ea69201ecbde757786f003ac3f0",
+    "stored_bytes": 54335,
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13299592/fullTextXML"
+  },
+  "jats_elife_b": {
+    "bytes": 215454,
+    "captured_at": "2026-07-29T09:27:36.377844+00:00",
+    "content_type": "application/xml",
+    "fetched_bytes": 215454,
+    "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13299615/fullTextXML",
+    "kind": "jats_xml",
+    "normalised": false,
+    "sha256": "02eb5ff046cbf7cf08c327810430dd2b6c2bb9cd3dfb59f28bb7c62fcc5c90a8",
+    "stored_bytes": 48853,
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13299615/fullTextXML"
   },
   "jats_ijms": {
     "bytes": 197330,
@@ -485,6 +545,18 @@
     "stored_bytes": 195343,
     "url": "https://arxiv.org/pdf/2607.25416"
   },
+  "pdf_ipcc_report": {
+    "bytes": 3416025,
+    "captured_at": "2026-07-29T09:28:22.046711+00:00",
+    "content_type": "application/pdf",
+    "fetched_bytes": 3361797,
+    "final_url": "https://www.ipcc.ch/report/ar6/wg1/downloads/report/IPCC_AR6_WGI_SPM.pdf",
+    "kind": "pdf",
+    "normalised": true,
+    "sha256": "d3c648787277dc362fcf27a53dc6bff2c6af04822995c8c74784e90a60697e59",
+    "stored_bytes": 2902360,
+    "url": "https://www.ipcc.ch/report/ar6/wg1/downloads/report/IPCC_AR6_WGI_SPM.pdf"
+  },
   "pdf_math_topology": {
     "bytes": 270468,
     "captured_at": "2026-07-29T09:17:48.631147+00:00",
@@ -509,6 +581,18 @@
     "stored_bytes": 572091,
     "url": "https://www.medrxiv.org/content/10.64898/2026.07.27.26359009v1.full.pdf"
   },
+  "pdf_plos_typeset": {
+    "bytes": 341432,
+    "captured_at": "2026-07-29T09:28:55.353107+00:00",
+    "content_type": "application/pdf",
+    "fetched_bytes": 1559253,
+    "final_url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0300001&type=printable",
+    "kind": "pdf",
+    "normalised": true,
+    "sha256": "6301aeb0354c451bfacc8851bbc607056c5eaf90fb30074d201f86e89ecda2f4",
+    "stored_bytes": 313550,
+    "url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0300001&type=printable"
+  },
   "pmc_jats_xml": {
     "bytes": 70499,
     "captured_at": "2026-07-29T07:27:59.554497+00:00",
@@ -528,6 +612,18 @@
     "sha256": "16f35e87cddea69122f684c9dd889346f5fc8a314522617ef59ec2f09f4195ad",
     "stored_bytes": 47791,
     "url": "https://www.quantamagazine.org/a-new-way-that-a-cows-inner-world-shapes-earths-atmosphere-20260727/"
+  },
+  "sciencealert_html": {
+    "bytes": 186112,
+    "captured_at": "2026-07-29T09:27:37.374138+00:00",
+    "content_type": "text/html; charset=UTF-8",
+    "fetched_bytes": 186112,
+    "final_url": "https://www.sciencealert.com/this-week-in-science",
+    "kind": "news_html",
+    "normalised": false,
+    "sha256": "4beeb20f40360bdc2228cc21fa7a7f016a3fb75783990a596dc96969b064ff51",
+    "stored_bytes": 37831,
+    "url": "https://www.sciencealert.com/this-week-in-science"
   },
   "sciencenews_html": {
     "bytes": 800766,

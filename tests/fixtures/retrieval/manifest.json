@@ -326,6 +326,49 @@
       "url": "https://www.medrxiv.org/content/10.64898/2026.07.27.26359009v1.full.pdf",
       "kind": "pdf",
       "note": "medRxiv: non-arXiv generator, biomedical layout"
+    },
+    {
+      "name": "arxiv_vision",
+      "url": "https://arxiv.org/html/2607.26042",
+      "kind": "arxiv_html",
+      "note": "cs.CV: vision paper, figure-dense"
+    },
+    {
+      "name": "arxiv_signal",
+      "url": "https://arxiv.org/html/2607.26027",
+      "kind": "arxiv_html",
+      "note": "eess.SP: signal processing conventions"
+    },
+    {
+      "name": "arxiv_stats",
+      "url": "https://arxiv.org/html/2607.26022",
+      "kind": "arxiv_html",
+      "note": "stat.ME: statistics methodology"
+    },
+    {
+      "name": "jats_elife_a",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13299592/fullTextXML",
+      "kind": "jats_xml",
+      "note": "eLife: distinct JATS pipeline with assessments"
+    },
+    {
+      "name": "jats_elife_b",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13299615/fullTextXML",
+      "kind": "jats_xml",
+      "note": "eLife second sample"
+    },
+    {
+      "name": "sciencealert_html",
+      "url": "https://www.sciencealert.com/this-week-in-science",
+      "kind": "news_html",
+      "note": "Source outside the configured registry"
+    },
+    {
+      "name": "pdf_plos_typeset",
+      "url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0300001&type=printable",
+      "kind": "pdf",
+      "pdf_pages": 8,
+      "note": "PLOS ONE publisher-typeset PDF: not LaTeX, single-column, journal furniture"
     }
   ]
 }

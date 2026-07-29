@@ -43,7 +43,12 @@ BOILERPLATE = (
     "enable javascript",
 )
 
-_HTML_TAG = re.compile(r"<\s*/?\s*(?:div|span|p|a|img|script|table|tr|td|br)\b", re.I)
+# The closing bracket is required: mathematical prose says "0<a<b<1", which
+# otherwise reads as an anchor tag.
+_HTML_TAG = re.compile(
+    r"<\s*/?\s*(?:div|span|p|a|img|script|table|tr|td|br)(?:\s[^<>]*)?\s*/?>",
+    re.I,
+)
 _ENTITY = re.compile(r"&(?:amp|lt|gt|quot|nbsp|#\d+);")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _MOJIBAKE = re.compile(r"â€[™œ\x9d“”]|Ã[©¨¡³±¼\x83]|ï»¿|Â[\xa0§°]")

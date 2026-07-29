@@ -57,6 +57,14 @@ _STAMP = re.compile(
 # such as "Abstract word count: 353 words".
 MIN_ABSTRACT_WORDS = 50
 
+# Journals set an article-type label immediately above the title, and it ends
+# up in the same block.
+_TITLE_LABEL = re.compile(
+    r"^\s*(research article|original research|review article|short report"
+    r"|brief communication|perspective|editorial|letter|article)\s+(?=\S)",
+    re.I,
+)
+
 MAX_PAGES = 60
 
 
@@ -149,6 +157,40 @@ def _collect_blocks(document: fitz.Document) -> list[_Block]:
     return blocks
 
 
+def _drop_running_heads(blocks: list[_Block]) -> list[_Block]:
+    """Remove the furniture repeated on every page.
+
+    Journals print the masthead, article title, or a citation line in the
+    header or footer of each page. It reads as ordinary text and, being short
+    and near the top, is otherwise mistaken for the paper's title — a PLOS
+    article extracted as "PLOS ONE".
+    """
+
+    pages = {block.page for block in blocks}
+    if len(pages) < 3:
+        return blocks
+
+    appearances: dict[str, set[int]] = {}
+    for block in blocks:
+        if len(block.text) <= 120:
+            appearances.setdefault(block.text, set()).add(block.page)
+
+    repeated = {
+        text for text, seen in appearances.items() if len(seen) >= 3
+    }
+    # Keep the first occurrence: a paper's own title is also printed as its
+    # running head, and dropping every copy would lose the title itself.
+    kept: list[_Block] = []
+    seen_once: set[str] = set()
+    for block in blocks:
+        if block.text in repeated:
+            if block.text in seen_once:
+                continue
+            seen_once.add(block.text)
+        kept.append(block)
+    return kept
+
+
 def _order_blocks(blocks: list[_Block]) -> list[_Block]:
     """Sort into reading order, handling two-column layouts.
 
@@ -177,6 +219,22 @@ def _order_blocks(blocks: list[_Block]) -> list[_Block]:
         else:
             ordered.extend(page_blocks)
     return ordered
+
+
+def _looks_like_affiliations(text: str) -> bool:
+    """Author affiliations sit exactly where an unlabelled abstract does.
+
+    They are a comma-heavy list of institutions rather than prose, so they are
+    told apart by density of institution words and commas per sentence.
+    """
+
+    lowered = text.casefold()
+    institutions = sum(
+        lowered.count(word)
+        for word in ("department", "university", "faculty", "institute", "hospital")
+    )
+    sentences = max(text.count(". "), 1)
+    return institutions >= 2 and text.count(",") / sentences > 3
 
 
 def _heading_level(text: str) -> int:
@@ -229,7 +287,7 @@ def extract_pdf(data: bytes) -> Document:
                     extraction_method="pdf",
                     warnings=("PDF is password protected",),
                 )
-            blocks = _order_blocks(_collect_blocks(pdf))
+            blocks = _order_blocks(_drop_running_heads(_collect_blocks(pdf)))
     except Exception as exc:  # noqa: BLE001 - a malformed PDF is data, not a bug
         return Document(
             extraction_method="pdf",
@@ -247,10 +305,15 @@ def extract_pdf(data: bytes) -> Document:
         weights[block.size] += len(block.text)
     body_size = weights.most_common(1)[0][0]
 
+    # A masthead such as "PLOS ONE" is set larger than anything else on the
+    # page, so size alone would pick the journal over the paper.
     title = None
-    largest = max(blocks[:6], key=lambda b: b.size, default=None)
+    candidates = [
+        block for block in blocks[:8] if len(block.text.split()) >= 4
+    ]
+    largest = max(candidates, key=lambda b: b.size, default=None)
     if largest is not None and largest.size > body_size:
-        title = largest.text
+        title = _TITLE_LABEL.sub("", largest.text)
     else:
         # AMS styles set the title at body size, so nothing stands out by face.
         # It is then the first short line on the opening page.
@@ -330,7 +393,11 @@ def extract_pdf(data: bytes) -> Document:
         # affiliations and the first numbered section. It is the substantial
         # paragraph in that unheaded run.
         candidate = max(
-            (p for p in sections[0].paragraphs if len(p.split()) > 50),
+            (
+                p
+                for p in sections[0].paragraphs
+                if len(p.split()) > 50 and not _looks_like_affiliations(p)
+            ),
             key=lambda p: len(p.split()),
             default=None,
         )
