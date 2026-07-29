@@ -8,6 +8,7 @@ from curious_now_v2.retrieval.document import (
     Document,
     Figure,
     Section,
+    SectionKind,
     Table,
     classify_section,
     infer_method_sections,
@@ -52,11 +53,24 @@ def _depth_of(section: Tag) -> int:
     return depth
 
 
+def _in_translation(tag: Tag) -> bool:
+    """Whether a node belongs to a <sub-article> translation or peer review.
+
+    Bilingual journals ship the same figure twice, labelled "Figura 1" and
+    "Figure 1". Sections are read from the main article's body, so floats must
+    come from there too or the two disagree.
+    """
+
+    return tag.find_parent("sub-article") is not None
+
+
 def _figures_and_tables(
     root: Tag,
 ) -> tuple[tuple[Figure, ...], tuple[Table, ...]]:
     figures: list[Figure] = []
     for node in root.find_all("fig"):
+        if _in_translation(node):
+            continue
         caption_node = node.find("caption")
         caption = _compact(caption_node.get_text(" ")) if caption_node else ""
         if not caption:
@@ -71,6 +85,8 @@ def _figures_and_tables(
 
     tables: list[Table] = []
     for node in root.find_all("table-wrap"):
+        if _in_translation(node):
+            continue
         label_node = node.find("label")
         caption_node = node.find("caption")
         grid = node.find("table")
@@ -124,6 +140,21 @@ def extract_jats(xml: str) -> Document:
                     level=_depth_of(node),
                 )
             )
+
+        if not sections:
+            # Sectionless articles are valid JATS — book reviews, editorials,
+            # and correspondence often place paragraphs straight in <body>.
+            loose = tuple(
+                text
+                for node in body.find_all("p")
+                if node.find_parent(_PULLED_OUT) is None
+                and node.find_parent("sec") is None
+                and len(text := _compact(node.get_text(" "))) > 1
+            )
+            if loose:
+                sections.append(
+                    Section(title=None, kind=SectionKind.OTHER, paragraphs=loose)
+                )
 
     # Publishers place floats differently: some inline them in <body>, others
     # (MDPI among them) collect them in a <floats-group> beside it. Searching

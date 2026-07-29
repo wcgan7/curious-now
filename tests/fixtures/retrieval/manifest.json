@@ -144,6 +144,114 @@
       "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13207440/fullTextXML",
       "kind": "jats_xml",
       "note": "MDPI-sourced JATS, different section conventions"
+    },
+    {
+      "name": "arxiv_math_topology",
+      "url": "https://arxiv.org/html/2607.25931",
+      "kind": "arxiv_html",
+      "note": "math.AT: theorem-heavy, dense notation"
+    },
+    {
+      "name": "arxiv_hep_theory",
+      "url": "https://arxiv.org/html/2607.26011",
+      "kind": "arxiv_html",
+      "note": "hep-th: equation-dominated physics conventions"
+    },
+    {
+      "name": "arxiv_astro",
+      "url": "https://arxiv.org/html/2607.26058",
+      "kind": "arxiv_html",
+      "note": "astro-ph: observational, table-heavy"
+    },
+    {
+      "name": "arxiv_qbio",
+      "url": "https://arxiv.org/html/2607.25573",
+      "kind": "arxiv_html",
+      "note": "q-bio: biology conventions on arXiv"
+    },
+    {
+      "name": "arxiv_econ",
+      "url": "https://arxiv.org/html/2607.25416",
+      "kind": "arxiv_html",
+      "note": "econ.EM: econometrics, different section naming"
+    },
+    {
+      "name": "arxiv_condmat",
+      "url": "https://arxiv.org/html/2607.26029",
+      "kind": "arxiv_html",
+      "note": "cond-mat: statistical mechanics"
+    },
+    {
+      "name": "jats_plos_digit",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13298756/fullTextXML",
+      "kind": "jats_xml",
+      "note": "PLOS Digital Health"
+    },
+    {
+      "name": "jats_plos_one",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13293445/fullTextXML",
+      "kind": "jats_xml",
+      "note": "PLOS One: different JATS pipeline"
+    },
+    {
+      "name": "jats_plos_global",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13293414/fullTextXML",
+      "kind": "jats_xml",
+      "note": "PLOS Global Public Health"
+    },
+    {
+      "name": "jats_portuguese",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13224953/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Portuguese-language JATS from SciELO; non-English section headings"
+    },
+    {
+      "name": "jats_spanish",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13267756/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Spanish-language JATS; non-English headings"
+    },
+    {
+      "name": "jats_brazilian_cardio",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13155791/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Arq Bras Cardiol; bilingual JATS conventions"
+    },
+    {
+      "name": "arxiv_combinatorics",
+      "url": "https://arxiv.org/html/2607.26049",
+      "kind": "arxiv_html",
+      "note": "math.CO short note; minimal structure"
+    },
+    {
+      "name": "jats_nanomicro",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13294434/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Springer Nano-Micro Letters"
+    },
+    {
+      "name": "jats_insights_imaging",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13294407/fullTextXML",
+      "kind": "jats_xml",
+      "note": "Springer Insights into Imaging"
+    },
+    {
+      "name": "jats_mol_biomed",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC13294431/fullTextXML",
+      "kind": "jats_xml",
+      "note": "BMC Molecular Biomedicine"
+    },
+    {
+      "name": "arxiv_round4_a",
+      "url": "https://arxiv.org/html/2607.25976",
+      "kind": "arxiv_html",
+      "note": "math.CO, further structural variation"
+    },
+    {
+      "name": "arxiv_round4_b",
+      "url": "https://arxiv.org/html/2607.25928",
+      "kind": "arxiv_html",
+      "note": "math.CO, further structural variation"
     }
   ]
 }

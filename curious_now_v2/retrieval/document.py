@@ -22,27 +22,60 @@ class SectionKind(StrEnum):
 
 # Ordered most specific first: "related work" must not be read as "work", and
 # "results and discussion" must not be claimed by the discussion rule.
+# Romance-language equivalents are included because PubMed Central carries a
+# large body of Spanish- and Portuguese-language research. Without them every
+# heading falls through to OTHER, which costs the article its structure and so
+# its eligibility for the deeper layers.
 _SECTION_PATTERNS: tuple[tuple[SectionKind, re.Pattern[str]], ...] = tuple(
     (kind, re.compile(pattern, re.I))
     for kind, pattern in (
-        (SectionKind.ABSTRACT, r"^\s*abstract\b"),
-        (SectionKind.REFERENCES, r"^\s*(references|bibliography|works cited)\b"),
-        (SectionKind.ACKNOWLEDGEMENTS, r"^\s*acknowledg"),
-        (SectionKind.LIMITATIONS, r"\b(limitations?|threats to validity)\b"),
+        (SectionKind.ABSTRACT, r"^\s*(abstract|resumo|resumen|résumé)\b"),
+        (
+            SectionKind.REFERENCES,
+            r"^\s*(references|bibliography|works cited"
+            r"|referências|referencias|références|bibliografía)\b",
+        ),
+        (
+            SectionKind.ACKNOWLEDGEMENTS,
+            r"^\s*(acknowledg|agradecimento|agradecimiento|remerciement)",
+        ),
+        (
+            SectionKind.LIMITATIONS,
+            r"\b(limitations?|threats to validity|limitaç|limitacion)\w*",
+        ),
         (
             SectionKind.RELATED_WORK,
-            r"\b(related work|prior work|previous work|literature review)\b",
+            r"\b(related work|prior work|previous work|literature review"
+            r"|trabalhos relacionados|trabajos relacionados)\b",
         ),
         (
             SectionKind.METHOD,
-            # method\w* so "Methodology" and "Methods" both land here.
-            r"\b(method\w*|materials|approach|architecture|"
-            r"model design|implementation|experimental\s+(setup|design|procedure))\b",
+            # method\w* so "Methodology" and "Methods" both land here. Proofs,
+            # derivations, and constructions are the mechanism in a theory
+            # paper, where nothing is ever called a method.
+            r"\b(method\w*|materia\w*|approach|architecture|"
+            r"model design|implementation|experimental\s+(setup|design|procedure)|"
+            r"proofs?|derivations?|constructions?|algorithms?"
+            r"|m[ée]todo\w*|metodolog\w*|m[ée]thode\w*|procedimento\w*)\b",
         ),
-        (SectionKind.RESULTS, r"\b(results?|findings|evaluation|experiments?)\b"),
-        (SectionKind.DISCUSSION, r"\bdiscussion\b"),
-        (SectionKind.CONCLUSION, r"\b(conclusions?|concluding|future work|outlook)\b"),
-        (SectionKind.INTRODUCTION, r"\b(introduction|background|motivation)\b"),
+        (
+            SectionKind.RESULTS,
+            r"\b(results?|findings|evaluation|experiments?"
+            r"|resultados?|résultats?|achados)\b",
+        ),
+        (SectionKind.DISCUSSION, r"\b(discussion|discussão|discusión)\b"),
+        (
+            SectionKind.CONCLUSION,
+            r"\b(conclusions?|concluding|future work|outlook"
+            r"|conclus[õoóa]\w*|considerações finais)\b",
+        ),
+        (
+            SectionKind.INTRODUCTION,
+            # "Contexto" is deliberately absent: under a methods heading it
+            # means the study setting, not background.
+            r"\b(introduction|background|motivation"
+            r"|introdu[çc]\w*|introducci[óo]n|antecedentes)\b",
+        ),
     )
 )
 
@@ -101,6 +134,11 @@ _POST_METHOD = frozenset(
         SectionKind.DISCUSSION,
         SectionKind.CONCLUSION,
         SectionKind.LIMITATIONS,
+    }
+)
+# Back matter, never body content in its own right.
+_TRAILING = frozenset(
+    {
         SectionKind.APPENDIX,
         SectionKind.REFERENCES,
         SectionKind.ACKNOWLEDGEMENTS,
@@ -116,6 +154,11 @@ def infer_method_sections(sections: tuple[Section, ...]) -> tuple[Section, ...]:
     "Probabilistic Surrogate for RAMBO", "Acquisition Functions" — so no
     keyword matches. Position is the reliable signal: whatever sits between the
     background and the experiments is where the work is described.
+
+    This infers a contribution zone rather than a precise methods section. When
+    a paper labels no results section, the zone runs to the conclusion and will
+    include result-bearing prose. That is the intended trade: a coarse
+    mechanism signal beats none, and claim extraction reads the text either way.
     """
 
     top_level = [
@@ -129,6 +172,8 @@ def infer_method_sections(sections: tuple[Section, ...]) -> tuple[Section, ...]:
     )
     if start is None:
         return sections
+    # A theory paper often has no results or conclusion section at all, so fall
+    # back to the start of the back matter, then to the end of the document.
     end = next(
         (
             index
@@ -138,7 +183,14 @@ def infer_method_sections(sections: tuple[Section, ...]) -> tuple[Section, ...]:
         None,
     )
     if end is None:
-        return sections
+        end = next(
+            (
+                index
+                for index, section in top_level
+                if index > start and section.kind in _TRAILING
+            ),
+            len(sections),
+        )
 
     return tuple(
         replace(section, kind=SectionKind.METHOD)

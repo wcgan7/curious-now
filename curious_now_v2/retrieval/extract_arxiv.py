@@ -210,6 +210,35 @@ def extract_arxiv_html(html: str) -> Document:
             )
         )
 
+    # Short notes often place their prose straight in the document with no
+    # sectioning at all, so anything outside every section would be lost.
+    # LaTeXML wraps the title and author block in .ltx_block, which is how
+    # front matter is told apart from body prose sitting at the same depth.
+    candidates = soup.select(_BLOCK_SELECTOR)
+    candidate_ids = {id(block) for block in candidates}
+    # Affiliations and licence notices sit at the same depth as body prose but
+    # always precede the abstract, so document order separates them.
+    order = {id(tag): index for index, tag in enumerate(soup.find_all(True))}
+    front_matter_ends = (
+        order.get(id(abstract_node), -1) if abstract_node is not None else -1
+    )
+    loose = tuple(
+        text
+        for block in candidates
+        if block.find_parent(_is_emitted_section) is None
+        and block.find_parent(class_="ltx_abstract") is None
+        and block.find_parent(class_="ltx_block") is None
+        and order.get(id(block), 0) > front_matter_ends
+        and not any(id(ancestor) in candidate_ids for ancestor in block.parents)
+        and (text := _compact(block.get_text(" "))) != title
+        and len(text) > 1
+    )
+    if loose:
+        sections.insert(
+            0,
+            Section(title=None, kind=SectionKind.OTHER, paragraphs=loose),
+        )
+
     figures, tables = _captions(soup)
     warnings: list[str] = []
     if not sections:
