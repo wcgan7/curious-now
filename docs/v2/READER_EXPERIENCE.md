@@ -283,8 +283,10 @@ or a Technical action.
 - Technical uses a stable deep-linkable route.
 - Returning to the feed SHOULD restore the previous scroll position.
 - Switching orientation SHOULD retain the story-header position on small screens.
-- A local preference MAY remember the most recently selected orientation, but v2
-  defaults new stories to Glance and does not infer expertise.
+- A local preference MAY remember the orientation last selected within a story,
+  so returning to that story restores it. A newly opened story always defaults to
+  Glance; v2 does not carry an orientation choice across stories or infer
+  expertise.
 - New evidence MUST NOT switch the visible presentation halfway through a reading
   session.
 

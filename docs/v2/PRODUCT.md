@@ -233,7 +233,7 @@ V2 includes:
 - a structured evidence packet;
 - a versioned conceptual spine and display title;
 - Glance and Explain generation;
-- Technical deep dives for suitable papers;
+- Technical deep dives for stories with sufficient accessible primary material;
 - visible evidence and trust information;
 - topics and search;
 - concept cards and prerequisite links;
@@ -254,9 +254,10 @@ V2 includes:
 - native mobile applications;
 - a public general-purpose API.
 
-Local browser preferences may remember an orientation choice without introducing
-accounts. Familiarity is topic-specific, so the product must not silently infer a
-permanent expertise level from clicks.
+Local browser preferences may remember a per-story orientation choice without
+introducing accounts. Familiarity is topic-specific, so the product must not
+silently infer a permanent expertise level from clicks or carry one story's
+orientation choice into another.
 
 ## Success criteria
 

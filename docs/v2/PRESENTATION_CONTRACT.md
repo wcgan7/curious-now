@@ -58,6 +58,22 @@ The shared semantic plan from which all four layers are rendered. It contains:
 Every factual element in the conceptual spine MUST resolve to one or more supported
 claims in the evidence packet.
 
+## Story kinds
+
+A story may cover a development, result, release, correction, or debate, drawn
+from any science source — not only research papers. The layer contracts below
+apply to every kind: their required-content lists name roles a presentation must
+fill, not a paper-shaped template.
+
+- For a result, “what is new” is the finding, and the comparison is the prior
+  state of evidence or the relevant baseline.
+- For a release, they are the new capability and what was previously available.
+- For a correction, they are what changed and what was previously believed.
+- For a debate, they are the competing positions and the evidence each cites.
+
+A required element that is genuinely inapplicable to a story kind MAY be omitted;
+it MUST NOT be satisfied with invented material.
+
 ## Reader progression
 
 The layers have different product roles.
@@ -121,7 +137,14 @@ If no valid generated display title exists, the reader uses:
 
 1. the clearest eligible source title, with its source attribution;
 2. otherwise the story working title;
-3. otherwise the primary source title.
+3. otherwise the primary source title, with its source attribution.
+
+A source title is eligible when it does not violate the prohibited-behavior rules
+above. A fallback that reaches step 3 MAY show a title that would fail the
+display-title contract, because a source’s own headline is an attributed fact
+rather than Curious Now editorial text; it MUST remain visibly attributed to its
+source. A fallback source title MUST NOT be edited into partial compliance — it
+is shown verbatim or not at all.
 
 A failed title generation MUST NOT block publication.
 
@@ -173,7 +196,7 @@ Explain MUST cover:
 2. what is new;
 3. how the approach works at an intuitive but field-aware level;
 4. the key evidence or experimental result;
-5. how it compares with the relevant baseline;
+5. how it compares with the relevant baseline or prior state of understanding;
 6. the important limitation and uncertainty.
 
 It MAY use established field terminology without defining every basic term. It
@@ -194,7 +217,8 @@ understanding.
 
 Technical is eligible only when:
 
-- the story contains suitable primary research;
+- the story contains suitable primary material — a paper, preprint, technical
+  report, dataset, or equivalent primary documentation, not only coverage of it;
 - accessible primary material is sufficient to inspect the method and evidence;
 - the evidence packet distinguishes reported results from interpretation;
 - the system can cite the relevant sections, figures, tables, or source items.
@@ -253,6 +277,7 @@ Each generated presentation records:
 
 - story ID;
 - evidence-packet ID and version;
+- conceptual-spine ID and version;
 - presentation layer;
 - prompt version;
 - model provider and model;
@@ -260,15 +285,19 @@ Each generated presentation records:
 - validation status;
 - creation time.
 
-New evidence creates a new conceptual spine and new presentation candidates. The
-reader continues showing the previous valid set until the replacement set is
-validated. A partially generated new set MUST NOT create cross-version mixtures.
+New evidence creates a new conceptual spine and new presentation candidates. A
+spine MAY also be regenerated for an unchanged evidence packet, for example after
+a prompt improvement; the regenerated spine receives a new version. The reader
+continues showing the previous valid set until the replacement set is validated.
+A displayed set MUST come from one evidence-packet version and one
+conceptual-spine version; a partially generated new set MUST NOT create
+cross-version mixtures.
 
 ## Evidence-only behavior
 
 When generation is unavailable or evidence is insufficient:
 
-- the feed still shows a safe fallback title;
+- the feed still shows a fallback title chosen by the title fallback order;
 - the story still exposes source titles, source roles, dates, and links;
 - the reader clearly states which explanations are not yet available;
 - Technical is omitted when ineligible;

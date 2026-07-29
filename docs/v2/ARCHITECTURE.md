@@ -29,7 +29,7 @@ sources -> ingest -> normalize -> hydrate -> cluster -> evidence packet
                                                                      Postgres
                                                                         ^
                                                                         |
-                         READ PATH (on demand)                     |
+                         READ PATH (on demand)                          |
 browser -> Next.js server components / route handlers ------------------+
 ```
 
@@ -127,12 +127,13 @@ conceptual spine.
   intuition.
 - Explain assumes foundational field familiarity and adds terminology, mechanism,
   evidence, comparison, and limitations.
-- Technical is restricted to suitable primary research with enough accessible
-  material to inspect methods and evidence.
+- Technical is restricted to stories with suitable primary material and enough
+  accessible text to inspect methods and evidence.
 - Glance and Explain are orientation choices; Technical is a progressive
   investigation reached after either orientation.
 - Generated content is never produced in a reader request.
-- Model, prompt version, evidence-packet version, and generation status are stored.
+- Model, prompt version, evidence-packet version, conceptual-spine version,
+  generation status, and validation status are stored.
 
 The normative content rules are defined in
 [`PRESENTATION_CONTRACT.md`](PRESENTATION_CONTRACT.md). The screen hierarchy is
@@ -165,8 +166,9 @@ Ranking does not use per-user engagement.
 
 A story can be published when it has:
 
-- a non-empty safe reader title, which may be a generated display title or a source
-  fallback;
+- a non-empty reader title chosen by the title fallback order in
+  [`PRESENTATION_CONTRACT.md`](PRESENTATION_CONTRACT.md), which may be a validated
+  display title or an attributed source-title fallback;
 - at least one visible evidence item;
 - a canonical source link.
 
@@ -176,8 +178,10 @@ presents evidence-only mode without empty orientation controls.
 
 An explanation is eligible for display only when:
 
-- its generation succeeded;
-- it references the current evidence packet;
+- its generation and validation succeeded;
+- it references the newest evidence-packet version that has a complete validated
+  presentation set — a newer packet version whose presentations are not yet
+  validated does not withdraw the previous valid set;
 - the packet contains no unsupported claims;
 - its depth is appropriate for the available evidence.
 
