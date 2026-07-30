@@ -52,7 +52,19 @@
           "url": "https://www.nature.com/nature.rss",
           "kind": "rss",
           "default_content_type": "peer_reviewed",
-          "fetch_interval_minutes": 60
+          "fetch_interval_minutes": 60,
+          "content_type_rules": [
+            {
+              "pattern": "d41586-",
+              "content_type": "news",
+              "note": "Nature news, comment, features and reviews"
+            },
+            {
+              "pattern": "s41586-",
+              "content_type": "peer_reviewed",
+              "note": "Nature research record, including its corrections"
+            }
+          ]
         }
       ],
       "policy": {

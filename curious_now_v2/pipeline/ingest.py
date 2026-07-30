@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from curious_now_v2.core.enums import AccessClass, ContentType, SourceRole
+from curious_now_v2.core.source_registry import ContentTypeRule
 
 _TRACKING_PARAM_PREFIXES = ("utm_",)
 _TRACKING_PARAMS = frozenset(
@@ -44,6 +45,7 @@ class RawFeedEntry(BaseModel):
     summary: str | None = None
     published_at: datetime | None = None
     default_content_type: ContentType
+    content_type_rules: tuple[ContentTypeRule, ...] = ()
 
 
 class IngestCandidate(BaseModel):
@@ -61,10 +63,46 @@ class IngestCandidate(BaseModel):
     canonical_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     snippet: str | None
     content_type: ContentType
+    # Where the type came from, which decides what may be claimed from it.
+    # See classify_content_type: a default from a single-kind feed describes
+    # the item; a default reached on a mixed feed describes nothing.
+    content_type_basis: str = "feed_default"
+    content_type_note: str | None = None
     access_class: AccessClass
     published_at: datetime | None
     doi: str | None
     arxiv_id: str | None
+
+
+def classify_content_type(
+    entry: RawFeedEntry, canonical_url: str, doi: str | None
+) -> tuple[ContentType, str, str | None]:
+    """Type one item from itself where possible, from its feed otherwise.
+
+    Returns the type with the basis for it, because those are different facts
+    and only one of them can be shown to a reader.
+
+    A default is not worthless — arXiv's feed carries preprints and nothing
+    else, so "preprint" describes every item on it. It fails on a feed that
+    carries several kinds, which is how a Nature book review came to be labelled
+    peer reviewed, ranked above real research, and announced to the model as a
+    peer-reviewed paper. Rules are only written for a feed found to be mixed, so
+    their presence is what separates the two cases.
+    """
+
+    for rule in entry.content_type_rules:
+        if rule.matches(canonical_url, entry.url, doi):
+            return rule.content_type, "source_pattern", rule.note or (
+                f"matched {rule.pattern!r}"
+            )
+    if entry.content_type_rules:
+        # Rules exist because this feed was found to carry more than one kind of
+        # thing, so its default is a fallback rather than a description, and an
+        # item none of them recognises is genuinely unclassified.
+        return entry.default_content_type, "feed_unmatched", (
+            "no rule matched; the feed default is a fallback here"
+        )
+    return entry.default_content_type, "feed_default", None
 
 
 def canonicalize_url(url: str) -> str:
@@ -139,6 +177,7 @@ def normalize_entry(entry: RawFeedEntry) -> IngestCandidate:
     )
     arxiv_id, doi = extract_scholarly_ids(identifier_text)
     snippet = entry.summary.strip() if entry.summary and entry.summary.strip() else None
+    content_type, basis, note = classify_content_type(entry, canonical_url, doi)
 
     return IngestCandidate(
         source_id=entry.source_id,
@@ -150,7 +189,9 @@ def normalize_entry(entry: RawFeedEntry) -> IngestCandidate:
         canonical_url=canonical_url,
         canonical_hash=hashlib.sha256(canonical_url.encode()).hexdigest(),
         snippet=snippet,
-        content_type=entry.default_content_type,
+        content_type=content_type,
+        content_type_basis=basis,
+        content_type_note=note,
         access_class=AccessClass.SNIPPET if snippet else AccessClass.METADATA_ONLY,
         published_at=entry.published_at,
         doi=doi,

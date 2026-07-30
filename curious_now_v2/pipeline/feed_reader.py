@@ -143,6 +143,7 @@ def fetch_feed(
                 summary=summary,
                 published_at=_published_at(entry),
                 default_content_type=feed.default_content_type,
+                content_type_rules=feed.content_type_rules,
             )
             candidates.append(normalize_entry(raw_entry))
         except ValueError:

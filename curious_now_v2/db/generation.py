@@ -37,6 +37,7 @@ class GenerationRunResult:
     generated: int
     declined_explain: int
     withheld_kind: int
+    relabelled: int
     invalid: int
     failed: int
     cost_usd: float
@@ -156,6 +157,44 @@ def _withhold(
                 story_id,
             ),
         )
+
+
+# A type the classifier can withdraw. Demotion only, deliberately: having read
+# the text, it can say a book review is not a research paper, but nothing it
+# reads can establish that a paper was peer reviewed. A claim about vetting has
+# to come from the record, never from a model's impression of the prose.
+NOT_RESEARCH = frozenset({"not_science", "announcement"})
+PAPER_TYPES = frozenset({"peer_reviewed", "preprint"})
+
+
+def _reconcile_content_type(
+    connection: psycopg.Connection[Any],
+    *,
+    item_id: UUID,
+    content_type: str,
+    story_kind: str,
+) -> bool:
+    """Withdraw a paper label the text does not support."""
+
+    if story_kind not in NOT_RESEARCH or content_type not in PAPER_TYPES:
+        return False
+    with connection.transaction(), connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE items SET
+              content_type = 'other',
+              content_type_basis = 'classifier',
+              content_type_note = %s,
+              updated_at = now()
+            WHERE id = %s AND content_type_basis <> 'classifier';
+            """,
+            (
+                f"labelled {content_type} on arrival; the text is a "
+                f"{story_kind.replace('_', ' ')}",
+                item_id,
+            ),
+        )
+        return cursor.rowcount > 0
 
 
 def _store(
@@ -366,7 +405,7 @@ def run_generation(
 
     engine = generator or CodexGenerator(model=model or CodexGenerator.model)
     now = datetime.now(UTC)
-    generated = declined = invalid = failed = withheld = 0
+    generated = declined = invalid = failed = withheld = relabelled = 0
     cost = 0.0
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -394,6 +433,14 @@ def run_generation(
             if not extracted.usable:
                 failed += 1
                 continue
+
+            if _reconcile_content_type(
+                connection,
+                item_id=story.item_id,
+                content_type=story.content_type,
+                story_kind=extracted.story_kind,
+            ):
+                relabelled += 1
 
             if not extracted.worth_publishing:
                 # An announcement reports that something happened; the feed is
@@ -451,6 +498,7 @@ def run_generation(
                             "generated": generated,
                             "declined_explain": declined,
                             "withheld_kind": withheld,
+                            "relabelled": relabelled,
                             "invalid": invalid,
                             "failed": failed,
                             "cost_usd": round(cost, 4),
@@ -465,6 +513,7 @@ def run_generation(
         generated=generated,
         declined_explain=declined,
         withheld_kind=withheld,
+        relabelled=relabelled,
         invalid=invalid,
         failed=failed,
         cost_usd=round(cost, 4),

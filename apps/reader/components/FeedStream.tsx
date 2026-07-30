@@ -27,6 +27,20 @@ const PAPER_TYPES: ReadonlyArray<SourceLink["contentType"]> = [
   "peer_reviewed",
 ];
 
+// "Peer reviewed" and "Preprint" are claims about how a piece of work was
+// vetted, so they are withheld where nothing establishes them. That is narrower
+// than it sounds: arXiv's feed carries preprints and nothing else, so its
+// default describes every item on it. Only a feed known to carry several kinds
+// — Nature sends research, news, comment and book reviews down one URL — leaves
+// an unmatched item unclassified, and there the source's role is shown instead,
+// which is true of every item and claims nothing unestablished.
+function reviewBadge(source: SourceLink): string | undefined {
+  if (source.contentTypeBasis === "feed_unmatched") {
+    return undefined;
+  }
+  return reviewLabels[source.contentType];
+}
+
 function formatRelativeTime(value: string): string {
   const elapsedMs = Date.now() - new Date(value).getTime();
   const minutes = Math.round(elapsedMs / 60_000);
@@ -52,12 +66,16 @@ function formatRelativeTime(value: string): string {
 function StoryCard({ story, index }: { story: FeedStory; index: number }) {
   const leadSource = story.sources[0];
   const badge = leadSource
-    ? (reviewLabels[leadSource.contentType] ?? roleLabels[leadSource.sourceRole])
+    ? (reviewBadge(leadSource) ?? roleLabels[leadSource.sourceRole])
     : "Evidence";
   const paperAttached =
     leadSource !== undefined &&
     !PAPER_TYPES.includes(leadSource.contentType) &&
-    story.sources.some((source) => PAPER_TYPES.includes(source.contentType));
+    story.sources.some(
+      (source) =>
+        PAPER_TYPES.includes(source.contentType) &&
+        source.contentTypeBasis !== "feed_unmatched",
+    );
 
   return (
     <Link className="storyCard" href={`/story/${story.id}`}>

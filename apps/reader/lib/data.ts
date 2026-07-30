@@ -115,6 +115,7 @@ export async function getFeedPage(
             'title', i.title,
             'url', i.url,
             'contentType', i.content_type,
+            'contentTypeBasis', i.content_type_basis,
             'accessClass', i.access_class,
             'publishedAt', i.published_at
           )
@@ -217,6 +218,7 @@ export async function searchStories(
             'title', i.title,
             'url', i.url,
             'contentType', i.content_type,
+            'contentTypeBasis', i.content_type_basis,
             'accessClass', i.access_class,
             'publishedAt', i.published_at
           )
@@ -280,6 +282,7 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
               'title', i.title,
               'url', i.url,
               'contentType', i.content_type,
+            'contentTypeBasis', i.content_type_basis,
               'accessClass', i.access_class,
               'publishedAt', i.published_at
             )

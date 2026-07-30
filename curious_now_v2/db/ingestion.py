@@ -15,6 +15,7 @@ from curious_now_v2.core.enums import (
     StoryItemRole,
 )
 from curious_now_v2.core.source_registry import (
+    ContentTypeRule,
     FeedSpec,
     SourcePolicy,
     SourceRegistry,
@@ -105,15 +106,17 @@ def sync_source_registry(
                       url,
                       feed_kind,
                       default_content_type,
+                      content_type_rules,
                       fetch_interval_minutes,
                       active,
                       next_fetch_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, now())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, now())
                     ON CONFLICT (url) DO UPDATE SET
                       source_id = EXCLUDED.source_id,
                       feed_kind = EXCLUDED.feed_kind,
                       default_content_type = EXCLUDED.default_content_type,
+                      content_type_rules = EXCLUDED.content_type_rules,
                       fetch_interval_minutes = EXCLUDED.fetch_interval_minutes,
                       active = EXCLUDED.active,
                       updated_at = now();
@@ -123,6 +126,8 @@ def sync_source_registry(
                         feed.url,
                         feed.kind.value,
                         feed.default_content_type.value,
+                        Jsonb([rule.model_dump(mode="json")
+                               for rule in feed.content_type_rules]),
                         feed.fetch_interval_minutes,
                         source.active,
                     ),
@@ -149,6 +154,7 @@ def list_due_feeds(
               f.url,
               f.feed_kind,
               f.default_content_type,
+              f.content_type_rules,
               f.fetch_interval_minutes,
               f.etag,
               f.last_modified,
@@ -174,7 +180,10 @@ def list_due_feeds(
             url=row[2],
             kind=row[3],
             default_content_type=row[4],
-            fetch_interval_minutes=row[5],
+            content_type_rules=tuple(
+                ContentTypeRule.model_validate(rule) for rule in (row[5] or [])
+            ),
+            fetch_interval_minutes=row[6],
         )
         source = SourceSpec(
             name=row[8],
@@ -250,6 +259,8 @@ def _upsert_item(
         candidate.title,
         candidate.snippet,
         candidate.content_type.value,
+        candidate.content_type_basis,
+        candidate.content_type_note,
         candidate.published_at,
         candidate.doi,
         candidate.arxiv_id,
@@ -267,14 +278,16 @@ def _upsert_item(
               title,
               snippet,
               content_type,
+              content_type_basis,
+              content_type_note,
               published_at,
               doi,
               arxiv_id,
               access_class
             )
             VALUES (
-              %s, %s, %s, %s, %s, %s,
-              %s, %s, %s, %s, %s, %s
+              %s, %s, %s, %s, %s, %s, %s,
+              %s, %s, %s, %s, %s, %s, %s
             )
             RETURNING id;
             """,
@@ -295,7 +308,15 @@ def _upsert_item(
           canonical_hash = %s,
           title = %s,
           snippet = %s,
-          content_type = %s,
+          content_type = CASE
+            WHEN items.content_type_basis IN ('document', 'classifier')
+            THEN items.content_type ELSE %s END,
+          content_type_basis = CASE
+            WHEN items.content_type_basis IN ('document', 'classifier')
+            THEN items.content_type_basis ELSE %s END,
+          content_type_note = CASE
+            WHEN items.content_type_basis IN ('document', 'classifier')
+            THEN items.content_type_note ELSE %s END,
           published_at = COALESCE(%s, published_at),
           doi = COALESCE(%s, doi),
           arxiv_id = COALESCE(%s, arxiv_id),

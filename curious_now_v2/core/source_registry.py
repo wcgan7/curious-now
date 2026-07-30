@@ -18,12 +18,35 @@ class SourcePolicy(BaseModel):
     notes: str | None = None
 
 
+class ContentTypeRule(BaseModel):
+    """Decides one item's type from its own URL or DOI.
+
+    A journal that publishes research, news, comment and book reviews down one
+    feed cannot be described by a single default, and its RSS says nothing
+    about which is which — Nature's entries carry no category at all. What does
+    distinguish them is the identifier: research articles are `10.1038/s41586-`
+    and everything editorial is `10.1038/d41586-`. A rule names that substring
+    so the item is typed from evidence about itself.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    pattern: str = Field(min_length=3)
+    content_type: ContentType
+    note: str | None = None
+
+    def matches(self, *candidates: str | None) -> bool:
+        return any(self.pattern in value for value in candidates if value)
+
+
 class FeedSpec(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     url: str = Field(min_length=1)
     kind: FeedKind = FeedKind.RSS
     default_content_type: ContentType
+    # Tried in order; the default applies only when none matches.
+    content_type_rules: tuple[ContentTypeRule, ...] = ()
     fetch_interval_minutes: int = Field(default=60, gt=0)
 
     @field_validator("url")

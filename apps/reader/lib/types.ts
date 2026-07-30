@@ -21,6 +21,13 @@ export type ContentType =
 export type ExplanationDepth = "glance" | "explain" | "technical";
 export type ReaderMode = "evidence_only" | "enriched";
 
+export type ContentTypeBasis =
+  | "feed_default"
+  | "feed_unmatched"
+  | "source_pattern"
+  | "document"
+  | "classifier";
+
 export interface SourceLink {
   itemId: string;
   sourceName: string;
@@ -29,6 +36,10 @@ export interface SourceLink {
   title: string;
   url: string;
   contentType: ContentType;
+  // Where contentType came from. 'feed_unmatched' means the feed carries
+  // several kinds and none of its rules recognised this one, so nothing about
+  // its review status has been established.
+  contentTypeBasis: ContentTypeBasis;
   accessClass: string;
   publishedAt: string | null;
 }
