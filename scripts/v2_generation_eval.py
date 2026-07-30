@@ -67,20 +67,31 @@ Produce three things.
 development. No hype words, no unsupported superlatives, no manufactured \
 question. Attribute the claim if it comes only from an interested party.
 
-2. glance: for a reader new to the topic, about 120-200 words. State what \
-happened, the simplest accurate mental model, and why it might matter. Put the \
-single most interpretation-changing caveat in `qualification`. Set `supported` \
-to false if the source cannot even support this.
+2. glance: for someone curious but with no background in this field at all — \
+imagine explaining it to a sharp friend who works in something else. Say what \
+happened, give them one clear mental model for it, and say why it might matter. \
+Put the single most interpretation-changing caveat in `qualification`.
 
-3. explain: for a reader who knows the field, about 700-1200 words, answering \
-ONE question: how does it work? Explain the mechanism and why it produces the \
-claimed effect. Cover evidence and comparison only where the source supports \
-them. Carry the qualification that keeps the mechanism honest.
+   Carry FEW ideas, not many stated briefly. Any term your reader would not \
+   know must be explained right there or replaced with ordinary language: \
+   never write "a sum of five abelian line bundles on a Calabi-Yau threefold" \
+   and move on. A Glance that reads like a compressed abstract has failed even \
+   if every word is true. Around 30-60 seconds of reading. If the source \
+   cannot support even this, set `supported` to false.
 
-If the source does not describe a mechanism, set mechanism_supported to false, \
-put the reason in declined_reason, and leave explain.text empty. Declining is \
-a correct answer and is preferred over writing something the source does not \
-support.
+3. explain: an ELI20 for a reader who knows this field, answering ONE \
+question: how does it work? Explain the mechanism and why it produces the \
+claimed effect. Carry the qualification that keeps the mechanism honest. Bring \
+in evidence or comparison only where the mechanism needs them to make sense.
+
+   Write the explanation, not a length. Stop as soon as the mechanism is \
+   clear — 300 words that land are better than 500 that pad. Never exceed 500 \
+   words, and never restate Glance at greater length.
+
+   If the source does not describe a mechanism, set mechanism_supported to \
+   false, put the reason in declined_reason, and leave explain.text empty. \
+   Declining is a correct answer and is preferred over writing something the \
+   source does not support.
 
 SOURCE: {source_name} ({content_type})
 TITLE: {title}
@@ -287,8 +298,9 @@ def check(result: Result, *, expect_mechanism: bool) -> None:
         # announcement clears the word count and still has nothing to explain,
         # so a reasoned decline is a correct answer here, not a failure.
         if explain.get("mechanism_supported"):
-            result.checks["explain_length_ok"] = (
-                600 <= words(explain.get("text")) <= 1500
+            # A ceiling, not a range: an Explain is not worse for being short.
+            result.checks["explain_within_ceiling"] = (
+                80 <= words(explain.get("text")) <= 520
             )
         else:
             result.checks["explain_declined_with_reason"] = (

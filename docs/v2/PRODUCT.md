@@ -85,7 +85,7 @@ Glance is the default presentation after opening a title.
 Explain is the internal equivalent of ELI20.
 
 - assumes foundational familiarity with the field;
-- takes approximately 3–6 minutes to read;
+- runs to at most about 500 words, stopping when the mechanism is clear;
 - may use established terminology and useful jargon;
 - answers how it works: the mechanism, and why that produces the claimed effect;
 - carries the qualification that keeps the mechanism honest;

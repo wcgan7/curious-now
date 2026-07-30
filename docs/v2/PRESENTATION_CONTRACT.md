@@ -169,7 +169,15 @@ Glance MUST provide:
 4. the one qualification most likely to change the reader’s interpretation.
 
 It SHOULD use an analogy only when the analogy preserves the relevant mechanism.
-Any necessary term SHOULD be defined at first use.
+
+Every term a newcomer would not know MUST be explained where it first appears,
+or replaced with ordinary language. A Glance that reads as a compressed abstract
+has failed even when every statement in it is true: "a sum of five abelian line
+bundles on a Calabi–Yau threefold" tells its intended reader nothing.
+
+Glance carries few ideas rather than many stated briefly. Compression is the
+failure mode here, not length — the fix for a dense Glance is fewer concepts,
+never more words, because the reading budget is fixed.
 
 ### Exclusions
 
@@ -188,8 +196,17 @@ Simple language MUST NOT become stronger certainty.
 ### Audience and duration
 
 - Assumes foundational familiarity with the field.
-- Targets approximately 3–6 minutes of reading.
 - Corresponds internally to ELI20.
+- Runs to at most about 500 words, and stops when the mechanism is clear.
+
+Length is a ceiling, never a target. Generation is asked for an explanation
+addressed to a particular reader, not for a word count, because a model given a
+range will fill it — and filling it is how a mechanism gets padded with
+restated context. An Explain that answers how it works in 300 words is better
+than one that reaches 500.
+
+This budget was 3–6 minutes when Explain carried six required elements. It
+carries one, so the budget came down with it.
 
 ### Required content
 
