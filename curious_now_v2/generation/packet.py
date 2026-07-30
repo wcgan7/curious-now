@@ -6,7 +6,7 @@ from typing import Any
 from curious_now_v2.core.enums import ClaimKind
 from curious_now_v2.generation.client import Completion, Generator
 
-PROMPT_VERSION = "packet-v2"
+PROMPT_VERSION = "packet-v3"
 
 # Extraction, deliberately: asking which claims the source supports is a task a
 # model does well, where asking whether it feels able to explain something is
@@ -28,6 +28,7 @@ SCHEMA: dict[str, Any] = {
             "enum": [
                 "research_result",
                 "release",
+                "explainer",
                 "correction",
                 "debate",
                 "announcement",
@@ -88,16 +89,29 @@ about. Judge the item, not the publisher:
   research_result  a study, experiment, analysis, or proof, with findings
   release          a model, tool, dataset, or product made available, where the
                    source describes what it is and how it works
+  explainer        an account of how something already established works, often
+                   occasioned by an event in the news — it explains a mechanism
+                   rather than reporting a new finding
   correction       a retraction, correction, or revised conclusion
   debate           disagreement between positions over evidence
   announcement     an event, podcast, funding award, appointment, or programme —
                    something happening rather than something found or built
-  not_science      marketing, opinion, or general news with no scientific content
+  not_science      marketing, opinion, review, or general news carrying no
+                   scientific content of its own
 
-Be strict. A company blog post about a product is a release only if it explains
-what the thing does; if it is mainly promotion, it is an announcement. A podcast
-series, a conference, or a grant is an announcement, however scientific the
-subject matter.
+Be strict, and note that the distinctions turn on what the text does, not on how
+newsworthy it is:
+
+- A company blog post about a product is a release only if it explains what the
+  thing does; if it is mainly promotion, it is an announcement.
+- A podcast series, a conference, or a grant is an announcement, however
+  scientific the subject matter.
+- A news article covering an ongoing event is an explainer if it explains the
+  science behind the event, and an announcement if it only reports what
+  happened. "Wildfires have spread across the region" is an announcement;
+  "here is how a fire builds its own thunderstorm" is an explainer.
+- A review of a book, film, or exhibition is not_science even when the subject
+  is science, because the claims belong to the work under review.
 
 central_claim is the single thing this item amounts to, in one sentence.
 prerequisites are concepts a reader would need in order to follow it.
@@ -122,15 +136,19 @@ VALID_KINDS = frozenset(
     {
         "research_result",
         "release",
+        "explainer",
         "correction",
         "debate",
         "announcement",
         "not_science",
     }
 )
-# Kinds that carry a development worth opening. An announcement reports that
-# something happened; the feed is for what was found or built.
-PUBLISHABLE_KINDS = frozenset({"research_result", "release", "correction", "debate"})
+# Kinds the ladder can carry. An announcement reports that something happened
+# and leaves nothing to explain; an explainer reports nothing new and is still
+# the clearest case the ladder has, since it is mechanism throughout.
+PUBLISHABLE_KINDS = frozenset(
+    {"research_result", "release", "explainer", "correction", "debate"}
+)
 
 
 @dataclass(frozen=True)

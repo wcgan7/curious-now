@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -56,8 +57,18 @@ def list_stories_needing_presentations(
     *,
     limit: int,
     regenerate: bool = False,
+    story_ids: Sequence[UUID] | None = None,
 ) -> tuple[PendingStory, ...]:
-    """Published stories with no current presentation, richest item first."""
+    """Published stories awaiting presentation, grounded in their richest item.
+
+    Stories come back in id order, which is arbitrary and therefore fair. It is
+    deliberately not richest-first: ordering a limited batch by length would
+    hand every slot to whichever source publishes the longest documents, which
+    is how two earlier fairness faults in this pipeline worked.
+
+    `story_ids` restricts the batch to named stories, so one result can be
+    re-examined without paying for a whole batch.
+    """
 
     having = "" if regenerate else """
         AND NOT EXISTS (
@@ -65,6 +76,7 @@ def list_stories_needing_presentations(
           WHERE ep.story_id = s.id AND ep.status = 'valid'
         )
     """
+    chosen = "AND s.id = ANY(%s)" if story_ids else ""
     with connection.cursor() as cursor:
         cursor.execute(
             f"""
@@ -80,11 +92,12 @@ def list_stories_needing_presentations(
             WHERE s.status = 'published'
               AND i.full_text IS NOT NULL
               AND COALESCE(i.full_text_words, 0) >= %s
+              {chosen}
               {having}
             ORDER BY s.id, i.full_text_words DESC
             LIMIT %s;
             """,
-            (MIN_WORDS, limit),
+            (MIN_WORDS, list(story_ids), limit) if story_ids else (MIN_WORDS, limit),
         )
         return tuple(
             PendingStory(
@@ -111,6 +124,12 @@ def _withhold(
 
     A podcast series or a funding award may be perfectly well evidenced and
     still not be a development anyone can be shown an explanation of.
+
+    The classifier version is recorded because this judgement is only as good
+    as the taxonomy behind it: adding `explainer` turned a wildfire piece from
+    something we dropped into one of the better things in the feed. A story
+    withheld under an older version is a candidate for reconsideration, and
+    without this there is no way to find one.
     """
 
     with connection.transaction(), connection.cursor() as cursor:
@@ -130,6 +149,7 @@ def _withhold(
                         f"withheld: this is a {kind.replace('_', ' ')}, "
                         "not a development to explain",
                         claim[:200],
+                        f"classified by {packet_module.PROMPT_VERSION}",
                     ]
                 ),
                 now,
@@ -267,21 +287,28 @@ def _store(
         )
         title_id = cast(UUID, _one(cursor)[0])
 
-        layers = (
+        # The qualification is not a field the reader is shown; it is written
+        # into the Glance prose. What is kept here is the span locating it, so
+        # a later audit can ask whether it survived without reading every word.
+        layers: tuple[tuple[ExplanationDepth, str, bool, dict[str, str], str], ...] = (
             (
                 ExplanationDepth.GLANCE,
                 presentation.glance,
                 presentation.glance_supported,
-                presentation.glance_qualification,
+                {"qualification_span": presentation.glance_qualification_span}
+                if presentation.glance_qualification_span
+                else {},
+                "",
             ),
             (
                 ExplanationDepth.EXPLAIN,
                 presentation.explain,
                 presentation.explain_supported,
+                {},
                 presentation.explain_declined_reason,
             ),
         )
-        for depth, body, supported, note in layers:
+        for depth, body, supported, provenance, declined in layers:
             usable = supported and bool(body.strip()) and presentation.valid
             cursor.execute(
                 """
@@ -302,13 +329,13 @@ def _store(
                     spine_id,
                     depth.value,
                     "valid" if usable else ("invalid" if supported else "failed"),
-                    Jsonb({"qualification": note} if supported else {}),
+                    Jsonb(provenance if supported else {}),
                     body or None,
                     model,
                     present_module.PROMPT_VERSION,
                     presentation.completion.usage.input_tokens,
                     presentation.completion.usage.output_tokens,
-                    None if supported else (note or "declined"),
+                    None if supported else (declined or "declined"),
                     now if usable else None,
                 ),
             )
@@ -333,6 +360,7 @@ def run_generation(
     model: str | None = None,
     regenerate: bool = False,
     generator: Generator | None = None,
+    story_ids: Sequence[UUID] | None = None,
 ) -> GenerationRunResult:
     """Extract an evidence packet, then write the layers it can support."""
 
@@ -352,7 +380,7 @@ def run_generation(
             run_id = cast(UUID, _one(cursor)[0])
 
         pending = list_stories_needing_presentations(
-            connection, limit=limit, regenerate=regenerate
+            connection, limit=limit, regenerate=regenerate, story_ids=story_ids
         )
         for story in pending:
             extracted = extract_packet(

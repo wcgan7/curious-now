@@ -8,7 +8,7 @@ from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation.client import Completion, Generator
 from curious_now_v2.generation.packet import ExtractedPacket
 
-PROMPT_VERSION = "present-v2"
+PROMPT_VERSION = "present-v3"
 
 # Prohibited by the title contract, and cheap to check.
 HYPE = (
@@ -19,6 +19,14 @@ HYPE = (
     "unprecedented",
     "paradigm shift",
 )
+
+# A qualification the reader meets as a heading is the thing we removed, so
+# catch it coming back in the prose.
+_LABELLED = re.compile(
+    r"\s*(caveat|qualification|limitation|note|important|disclaimer|but note)\b\s*[:—-]",
+    re.I,
+)
+_QUOTES = str.maketrans("‘’“”", "''\"\"")
 
 GLANCE_MIN_WORDS = 80
 GLANCE_MAX_WORDS = 260
@@ -45,10 +53,13 @@ SCHEMA: dict[str, Any] = {
         "glance": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["text", "qualification", "supported"],
+            "required": ["text", "qualification_span", "supported"],
             "properties": {
                 "text": {"type": "string"},
-                "qualification": {"type": "string"},
+                # Not shown to anyone: a quote from `text` locating the
+                # qualification, so integration can be checked rather than
+                # trusted. A separate field would be read as a separate section.
+                "qualification_span": {"type": "string"},
                 "supported": {"type": "boolean"},
             },
         },
@@ -74,15 +85,17 @@ source text is given so you can phrase things naturally — not so you can add \
 anything the claims do not carry. Do not use outside knowledge.
 
 First settle the spine, which all the writing shares:
-  novelty         what is genuinely new here, in one sentence
+  novelty         what is genuinely new here, in one sentence — or, for an
+                  explainer, which nothing is new in, what it makes clear
   core_intuition  the simplest accurate way to hold the idea
   qualification   the one thing whose omission would most mislead a reader
 
 Then produce:
 
-1. display_title: 6-14 words, plain language, naming the actual development. No \
-hype, no unsupported superlative, no manufactured question. Attribute the claim \
-if only an interested party makes it.
+1. display_title: 6-14 words, plain language, naming the actual development — or \
+for an explainer, the thing being explained. No hype, no unsupported \
+superlative, no manufactured question. Attribute the claim if only an \
+interested party makes it.
 
 2. glance: for someone curious with no background in this field — imagine a \
 sharp friend who works in something else. What happened, one clear mental model \
@@ -94,18 +107,33 @@ for it, and why it might matter. About 30-60 seconds of reading.
    every word in it is true. Set `supported` false if the claims cannot carry \
    even this.
 
-   The qualification must be the thing whose omission would most mislead — and \
-   what that is depends on the kind of item:
+   Where the evidence carries a qualification, write it into the Glance as \
+   part of the explanation — a clause or a sentence in the reader's path, \
+   placed where it changes how the sentence beside it is read. It belongs \
+   wherever the reader would otherwise take away too much, which is almost \
+   never the final sentence: a last line has nothing after it to correct, and \
+   reads as the disclaimer we are trying to avoid. Then quote the words you \
+   used in `qualification_span`, verbatim from your own Glance text. That \
+   quote is a check on you and is shown to nobody.
+
+   A qualification says what is not settled. A further claim about what is \
+   expected or predicted is not one, unless you write what makes it uncertain.
+
+   The qualification is the thing whose omission would most mislead — and what \
+   that is depends on the kind of item:
 
    - a study or analysis: the scope condition or uncertainty the work itself \
      concedes — the population, the setting, what was not shown;
    - a release or anything an interested party announces about its own work: \
-     that the claim comes from them and has not been independently checked.
+     that the claim comes from them and has not been independently checked;
+   - an explainer: where the account stops — the part of the picture that is \
+     still contested, or the step the explanation does not settle.
 
    Do not manufacture one. A restatement of what the thing is ("it interprets \
    data rather than recording it"), or a product detail ("still in beta"), is \
-   not a qualification — leave it empty rather than write either. Never write \
-   about the source itself: say what is uncertain, not "the source says".
+   not a qualification — leave `qualification_span` empty rather than write \
+   either. Never write about the source itself: say what is uncertain, not \
+   "the source says".
 
 3. explain: an ELI20 for a reader who knows this field, answering ONE question: \
 how does it work? The mechanism, and why it produces the claimed effect. Carry \
@@ -144,7 +172,7 @@ class Presentation:
     spine_qualification: str
     display_title: str
     glance: str
-    glance_qualification: str
+    glance_qualification_span: str
     glance_supported: bool
     explain: str
     explain_supported: bool
@@ -168,6 +196,18 @@ class Presentation:
 
 def _words(value: str) -> int:
     return len(value.split())
+
+
+def _flat(value: str) -> str:
+    """Normalise for comparison: whitespace, and the quote marks models vary on."""
+
+    return " ".join(value.split()).translate(_QUOTES).casefold()
+
+
+def _quotes(span: str, text: str) -> bool:
+    """Whether the span really is a piece of the text it claims to come from."""
+
+    return len(span.split()) >= 3 and _flat(span) in _flat(text)
 
 
 def _sentences(text: str) -> set[str]:
@@ -205,16 +245,24 @@ def validate(presentation: Presentation, packet: ExtractedPacket) -> tuple[str, 
         # "still in beta" and "it interprets data rather than recording it".
         qualifiable = bool(
             packet.limitations
+            or packet.story_kind == "release"
             or any(
                 claim.kind.value in {"limitation", "uncertainty"}
                 for claim in packet.claims
             )
         )
-        if qualifiable and not presentation.glance_qualification.strip():
+        span = presentation.glance_qualification_span.strip()
+        if qualifiable and not span:
             problems.append("glance omits a qualification the evidence supports")
-        if re.match(r"\s*the (source|article|paper|post)\b",
-                    presentation.glance_qualification, re.I):
+        elif span and not _quotes(span, presentation.glance):
+            # The span exists only to prove the qualification is in the prose
+            # the reader gets. If it is not there, it was written beside the
+            # Glance rather than into it, which is what we removed.
+            problems.append("qualification is not in the glance the reader reads")
+        if re.match(r"\s*the (source|article|paper|post)\b", span, re.I):
             problems.append("qualification describes the source, not the science")
+        if _LABELLED.match(span):
+            problems.append("qualification is labelled rather than written in")
 
     if presentation.explain_supported:
         count = _words(presentation.explain)
@@ -280,7 +328,7 @@ def generate_presentation(
         spine_qualification=str(spine.get("qualification") or "").strip(),
         display_title=str(payload.get("display_title") or "").strip(),
         glance=str(glance.get("text") or "").strip(),
-        glance_qualification=str(glance.get("qualification") or "").strip(),
+        glance_qualification_span=str(glance.get("qualification_span") or "").strip(),
         glance_supported=bool(glance.get("supported")),
         explain=str(explain.get("text") or "").strip(),
         explain_supported=bool(explain.get("mechanism_supported")),

@@ -138,11 +138,11 @@ story page so nested interactive controls do not fragment the feed.
 │  │ of information matter right now. The new    │  │ 02 Lab announcement   │  │
 │  │ design gives it a way to keep useful...     │  │    Source title    ↗   │  │
 │  │                                             │  │                        │  │
-│  │ Why it matters                              │  │ STATUS                 │  │
-│  │ ...                                         │  │ Preprint               │  │
-│  │                                             │  │ Not independently      │  │
-│  │ Important qualification                     │  │ confirmed              │  │
-│  │ ...                                         │  └────────────────────────┘  │
+│  │ information across a long input, which the   │  │ STATUS                 │  │
+│  │ usual design discards. It was tested on one │  │ Preprint               │  │
+│  │ model family, so whether it holds more      │  │ Not independently      │  │
+│  │ widely is still open.                       │  │ confirmed              │  │
+│  │                                             │  └────────────────────────┘  │
 │  └─────────────────────────────────────────────┘                              │
 │                                                                              │
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
@@ -190,8 +190,9 @@ secondary gesture but MUST NOT be the only way to change orientation.
 │ Evidence and comparison      │
 │ ...                          │
 │                              │
-│ Important limitation         │
-│ ...                          │
+│ ...tested on one model       │
+│ family, so how far it        │
+│ generalises is still open.   │
 ├──────────────────────────────┤
 │ TECHNICAL WALKTHROUGH        │
 │ Methods and results · 11 min │

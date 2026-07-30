@@ -136,7 +136,7 @@ The normative layer and evaluation rules live in
 
 ## The canonical story
 
-A story is one scientific development, result, release, correction, or debate. It
+A story is one scientific result, release, explainer, correction, or debate. It
 may contain:
 
 - a paper or preprint;

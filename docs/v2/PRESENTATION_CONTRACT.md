@@ -60,22 +60,35 @@ claims in the evidence packet.
 
 ## Story kinds
 
-A story may cover a development, result, release, correction, or debate, drawn
-from any science source — not only research papers. The layer contracts below
-apply to every kind: their required-content lists name roles a presentation must
-fill, not a paper-shaped template.
+A story may cover a result, release, explainer, correction, or debate, drawn from
+any science source — not only research papers. The layer contracts below apply to
+every kind: their required-content lists name roles a presentation must fill, not
+a paper-shaped template.
 
 - For a result, the mechanism is what produces the finding, and the comparison
   is the prior state of evidence or the relevant baseline.
 - For a release, they are how the new capability works and what was previously
   available.
+- For an explainer — an account of established science, usually occasioned by
+  an event — the mechanism is the whole of the story, and the comparison is what
+  a reader would otherwise have assumed. Nothing is new, which does not make it
+  a lesser story: an explainer is mechanism throughout, and so is often the
+  clearest case the ladder has.
 - For a correction, they are why the original conclusion failed and what was
   previously believed.
 - For a debate, they are what each position claims follows from the evidence,
   and where the positions actually diverge.
 
 A required element that is genuinely inapplicable to a story kind MAY be omitted;
-it MUST NOT be satisfied with invented material.
+it MUST NOT be satisfied with invented material. In particular an explainer has
+no novelty to state, and MUST NOT manufacture one.
+
+Two kinds are recognised in order to be excluded. An **announcement** reports
+that something happened — an event, a podcast, a grant, an appointment — and
+leaves nothing to explain, however scientific its subject. A **review** of a
+book, film, or exhibition carries no claims of its own, since the claims belong
+to the work under review. Neither is published, and the distinction turns on what
+the text does rather than on how scientific it sounds.
 
 ## Reader progression
 
@@ -104,7 +117,7 @@ entry point from the feed.
 
 A display title MUST:
 
-- identify the actual development, result, release, correction, or debate;
+- identify the actual result, release, explainer, correction, or debate;
 - preserve the qualification needed to avoid a materially false impression;
 - use attribution when the claim comes only from an interested party;
 - remain compatible with the confidence expressed by the evidence packet;
@@ -167,6 +180,14 @@ Glance MUST provide:
 2. the simplest accurate mental model;
 3. why it might matter;
 4. the one qualification most likely to change the reader’s interpretation.
+
+These are things the Glance must convey, not parts it is assembled from. In
+particular the qualification is written into the prose, placed where it changes
+how the sentence beside it is read — never appended as a labelled caveat, and
+never carried in a separate field. A caveat presented as a footer is read as
+boilerplate and skipped, which defeats the reason for requiring it; and a
+qualification stored beside the text rather than inside it can be dropped by any
+surface that renders only the prose.
 
 It SHOULD use an analogy only when the analogy preserves the relevant mechanism.
 
