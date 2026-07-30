@@ -73,6 +73,9 @@ def list_items_needing_text(
                 ) AS rank_in_source
               FROM items
               WHERE full_text IS NULL
+                -- A source dropped for never returning anything must stop
+                -- being asked; its backlog outlives the decision otherwise.
+                AND source_id IN (SELECT id FROM sources WHERE active)
                 AND (
                   full_text_status = 'pending'
                   OR (

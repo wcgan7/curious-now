@@ -51,6 +51,7 @@ FAMILY_FLOOR = 2
 @dataclass
 class Source:
     name: str
+    active: bool = True
     items: int = 0
     published: int = 0
     families: Counter[str] = field(default_factory=Counter)
@@ -98,7 +99,7 @@ def load(connection: psycopg.Connection) -> dict[str, Source]:
         cursor.execute(
             """
             SELECT
-              s.name, i.url, i.content_type, i.content_type_basis,
+              s.name, s.active, i.url, i.content_type, i.content_type_basis,
               COALESCE(i.full_text_status, 'pending'), i.full_text_error,
               EXISTS (
                 SELECT 1 FROM story_items si JOIN stories st ON st.id = si.story_id
@@ -108,9 +109,12 @@ def load(connection: psycopg.Connection) -> dict[str, Source]:
             JOIN sources s ON s.id = i.source_id;
             """
         )
-        for name, url, content_type, basis, status, error, published in cursor:
+        for (
+            name, active, url, content_type, basis, status, error, published
+        ) in cursor:
             source = sources[name]
             source.name = name
+            source.active = active
             source.items += 1
             source.families[family(url)] += 1
             source.types[(content_type, basis)] += 1
@@ -149,6 +153,12 @@ def main() -> int:
     print(f"{'source':26s} {'items':>6s} {'pub':>5s} {'retrieved':>10s}  type (basis)")
     failures = 0
     for name, source in sorted(sources.items()):
+        if not source.active:
+            # Retired: its items are blocked by decision, not by a publisher,
+            # and reporting them as refused requests would invent a fault.
+            print(f"{name[:26]:26s} {source.items:6d} {source.published:5d} "
+                  f"{'retired':>10s}  source is no longer active")
+            continue
         rate = (
             f"{source.retrieved}/{source.attempted}"
             if source.attempted

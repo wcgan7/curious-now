@@ -103,3 +103,71 @@ def test_fetch_feed_treats_not_modified_as_a_successful_empty_batch() -> None:
     assert batch.status is FeedReadStatus.NOT_MODIFIED
     assert batch.candidates == ()
     assert batch.etag == '"same-etag"'
+
+
+MIXED_RSS = b"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Broadcaster Science</title>
+    <item>
+      <guid>article-1</guid>
+      <title>How a fire builds its own thunderstorm</title>
+      <link>https://example.test/news/articles/c8r2074l0rmo</link>
+    </item>
+    <item>
+      <guid>schedule-1</guid>
+      <title>Inside Science</title>
+      <link>https://example.test/sounds/play/live:radio_four</link>
+    </item>
+    <item>
+      <guid>video-1</guid>
+      <title>Drone footage shows tornado damage</title>
+      <link>https://example.test/news/videos/cgr751pvnd2o</link>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+def test_a_feed_may_carry_entries_that_are_not_readable_items() -> None:
+    """Some feed entries have nothing behind them to read.
+
+    A broadcaster's science feed includes its live radio schedule, whose text
+    is whatever is on air and different every hour, and video pages with no
+    transcript. Both were ingested, fetched, retried fortnightly, and — where
+    they had enough words — classified by a model before being withheld.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=MIXED_RSS,
+                              headers={"content-type": "application/rss+xml"})
+
+    feed = FeedSpec(
+        url="https://example.test/feed.xml",
+        default_content_type=ContentType.NEWS,
+        exclude_patterns=("/sounds/play", "/news/videos"),
+    )
+    source = SourceSpec(
+        name="Broadcaster Science",
+        role=SourceRole.JOURNALISM,
+        feeds=(feed,),
+        policy=SourcePolicy(counts_as_independent=True),
+    )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        batch = fetch_feed(
+            client=client, source_id=uuid4(), source=source, feed=feed
+        )
+
+    assert len(batch.candidates) == 1
+    assert batch.candidates[0].url.endswith("c8r2074l0rmo")
+    assert batch.skipped_entries == 2
+
+
+def test_an_unconfigured_feed_excludes_nothing() -> None:
+    feed = FeedSpec(
+        url="https://example.test/feed.xml",
+        default_content_type=ContentType.NEWS,
+    )
+    assert feed.excludes("https://example.test/sounds/play/anything") is None

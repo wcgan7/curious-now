@@ -89,7 +89,8 @@
         "counts_as_independent": false,
         "allow_full_text_extraction": false,
         "notes": "First-party lab material; seek paper links and independent coverage."
-      }
+      },
+      "active": false
     },
     {
       "name": "Google DeepMind",
@@ -206,7 +207,11 @@
           "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
           "kind": "rss",
           "default_content_type": "news",
-          "fetch_interval_minutes": 60
+          "fetch_interval_minutes": 60,
+          "exclude_patterns": [
+            "/sounds/play",
+            "/news/videos"
+          ]
         }
       ],
       "policy": {

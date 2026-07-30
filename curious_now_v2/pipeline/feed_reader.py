@@ -127,6 +127,14 @@ def fetch_feed(
             skipped_entries += 1
             continue
 
+        if feed.excludes(url):
+            # Not a failure to record: the feed carries things that are not
+            # readable items, and this one was recognised before it cost
+            # anything. A live radio schedule reads differently every hour;
+            # a video page has no text at all.
+            skipped_entries += 1
+            continue
+
         summary = _plain_text(
             _entry_value(entry, "summary")
             or _entry_value(entry, "description")

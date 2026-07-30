@@ -91,6 +91,7 @@ def list_stories_needing_presentations(
             LEFT JOIN display_titles dt
               ON dt.id = s.current_display_title_id AND dt.status = 'valid'
             WHERE s.status = 'published'
+              AND src.active
               AND i.full_text IS NOT NULL
               AND COALESCE(i.full_text_words, 0) >= %s
               {chosen}

@@ -47,7 +47,17 @@ class FeedSpec(BaseModel):
     default_content_type: ContentType
     # Tried in order; the default applies only when none matches.
     content_type_rules: tuple[ContentTypeRule, ...] = ()
+    # URL substrings this feed carries that are not readable items at all —
+    # a broadcast schedule, a video page with no transcript. Matching entries
+    # never become items, so nothing downstream spends a request or a model
+    # call discovering that there was never anything to read.
+    exclude_patterns: tuple[str, ...] = ()
     fetch_interval_minutes: int = Field(default=60, gt=0)
+
+    def excludes(self, url: str) -> str | None:
+        """The pattern that rules this URL out, if any."""
+
+        return next((p for p in self.exclude_patterns if p in url), None)
 
     @field_validator("url")
     @classmethod
