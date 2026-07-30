@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
 import time
@@ -19,6 +20,21 @@ CACHED_INPUT_DISCOUNT = 0.10
 
 DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_EFFORT = "high"
+
+
+# A model writing mathematics writes a great many backslashes, and sometimes
+# escapes one too many: the Technical walkthrough of a quantum optimisation
+# paper came back with ten literal "\\n" sequences where paragraph breaks
+# belonged. The negative lookahead is what keeps this safe — every LaTeX command
+# beginning with n continues in lower case (\\nabla, \\neq, \\nu, \\nonumber), so a
+# backslash-n followed by anything else was never a command.
+_ESCAPED_NEWLINE = re.compile(r"\\n(?![a-z])")
+
+
+def unescape_newlines(text: str) -> str:
+    """Turn a literally written newline escape back into a newline."""
+
+    return _ESCAPED_NEWLINE.sub("\n", text)
 
 
 @dataclass(frozen=True)

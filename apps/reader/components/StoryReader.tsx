@@ -45,6 +45,71 @@ function estimateMinutes(text: string | null | undefined): number | null {
   return Math.max(1, Math.round(words / 220));
 }
 
+type TechnicalSection = { heading: string; text: string };
+type TechnicalCitation = { label: string; used_for: string };
+
+function technicalSections(content: Record<string, unknown>): TechnicalSection[] {
+  const raw = content?.sections;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .filter(
+      (s): s is TechnicalSection =>
+        typeof s === "object" &&
+        s !== null &&
+        typeof (s as TechnicalSection).heading === "string" &&
+        typeof (s as TechnicalSection).text === "string",
+    )
+    .filter((s) => s.text.trim().length > 0);
+}
+
+function technicalCitations(content: Record<string, unknown>): TechnicalCitation[] {
+  const raw = content?.citations;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter(
+    (c): c is TechnicalCitation =>
+      typeof c === "object" &&
+      c !== null &&
+      typeof (c as TechnicalCitation).label === "string",
+  );
+}
+
+// The walkthrough's headings are the order in which the work is inspected —
+// problem, approach, evidence, results, limitations — so they are the reader's
+// map through it. Flattening them into one column, which is what this did
+// before, throws that away and leaves several thousand words undifferentiated.
+function TechnicalBody({
+  sections,
+  plainText,
+}: {
+  sections: TechnicalSection[];
+  plainText: string | null | undefined;
+}) {
+  if (!sections.length) {
+    return <ExplanationBody plainText={plainText} />;
+  }
+  return (
+    <div className="technicalBody">
+      {sections.map((section) => (
+        <section className="technicalSection" key={section.heading}>
+          <h3>{section.heading}</h3>
+          <div className="explanationText">
+            {section.text
+              .split("\n")
+              .filter(Boolean)
+              .map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function ExplanationBody({ plainText }: { plainText: string | null | undefined }) {
   if (!plainText) {
     return (
@@ -156,7 +221,23 @@ export function StoryReader({
               </div>
               <section className="explanationPanel">
                 <p className="sectionKicker">Technical · Investigate the work</p>
-                <ExplanationBody plainText={technical.plainText} />
+                <TechnicalBody
+                  plainText={technical.plainText}
+                  sections={technicalSections(technical.content)}
+                />
+                {technicalCitations(technical.content).length ? (
+                  <div className="technicalCitations">
+                    <p className="sectionKicker">Drawn from</p>
+                    <ul>
+                      {technicalCitations(technical.content).map((citation) => (
+                        <li key={citation.label}>
+                          <strong>{citation.label}</strong>
+                          {citation.used_for ? ` — ${citation.used_for}` : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </section>
             </>
           ) : orientations.length ? (

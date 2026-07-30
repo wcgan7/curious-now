@@ -993,3 +993,46 @@ button {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Technical is the only layer with internal structure: its headings are the
+   order in which the work is inspected, and its citations are what a reader
+   opened this layer to check. Both are given room rather than folded into
+   the prose column the orientation layers use. */
+.technicalSection {
+  margin: 0 0 40px;
+}
+
+.technicalSection h3 {
+  margin: 0 0 10px;
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.technicalCitations {
+  margin-top: 48px;
+  padding-top: 28px;
+  border-top: 1px solid var(--rule, rgba(128, 128, 128, 0.25));
+}
+
+.technicalCitations ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.technicalCitations li {
+  padding: 6px 0;
+  opacity: 0.8;
+}
+
+.technicalCitations strong {
+  font-weight: 600;
+  opacity: 1;
+}

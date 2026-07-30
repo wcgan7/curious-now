@@ -56,8 +56,23 @@ def list_items_needing_text(
     connection: psycopg.Connection[Any],
     *,
     limit: int,
+    refetch_source: str | None = None,
+    refetch_path: str | None = None,
 ) -> tuple[PendingItem, ...]:
-    """Items never tried, or tried long enough ago to be worth retrying."""
+    """Items never tried, or tried long enough ago to be worth retrying.
+
+    `refetch_source` and `refetch_path` reopen items that already have text,
+    which the normal queue never does — it selects on `full_text IS NULL`, so a
+    fix to an extractor reaches everything that arrives afterwards and nothing
+    already held. Recovering arXiv's display equations changed what the
+    LaTeXML path produces and left all 45 stored arXiv papers exactly as they
+    were, still missing the mathematics their prose discusses.
+    """
+
+    if refetch_source or refetch_path:
+        return _list_items_to_refetch(
+            connection, limit=limit, source=refetch_source, path=refetch_path
+        )
 
     with connection.cursor() as cursor:
         cursor.execute(
@@ -90,6 +105,56 @@ def list_items_needing_text(
             LIMIT %s;
             """,
             (f"{RETRY_AFTER_DAYS} days", limit),
+        )
+        return tuple(
+            PendingItem(
+                item_id=row[0],
+                url=row[1],
+                arxiv_id=row[2],
+                doi=row[3],
+                content_type=row[4],
+            )
+            for row in cursor
+        )
+
+
+def _list_items_to_refetch(
+    connection: psycopg.Connection[Any],
+    *,
+    limit: int,
+    source: str | None,
+    path: str | None,
+) -> tuple[PendingItem, ...]:
+    """Items whose text should be extracted again from the same source.
+
+    Deliberately narrow, and never automatic. Re-extraction costs a request to
+    a publisher for text we already hold, so it is asked for by name — a source
+    or an extraction path — when a change to that path makes the stored version
+    wrong rather than merely older.
+    """
+
+    clauses = ["i.full_text IS NOT NULL"]
+    parameters: list[object] = []
+    if source:
+        clauses.append("src.name = %s")
+        parameters.append(source)
+    if path:
+        clauses.append("i.full_text_source = %s")
+        parameters.append(path)
+    parameters.append(limit)
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT i.id, i.url, i.arxiv_id, i.doi, i.content_type
+            FROM items i
+            JOIN sources src ON src.id = i.source_id
+            WHERE {" AND ".join(clauses)}
+              AND src.active
+            ORDER BY i.full_text_fetched_at ASC NULLS FIRST, i.id
+            LIMIT %s;
+            """,
+            tuple(parameters),
         )
         return tuple(
             PendingItem(
@@ -205,8 +270,15 @@ def run_retrieval(
     *,
     limit: int = 50,
     timeout_seconds: float = 30,
+    refetch_source: str | None = None,
+    refetch_path: str | None = None,
 ) -> RetrievalRunResult:
-    """Resolve full text for items that do not have any yet."""
+    """Resolve full text for items that do not have any yet.
+
+    With `refetch_source` or `refetch_path`, resolve it again for items that
+    already have text, so a fix to an extractor can reach what is already
+    stored.
+    """
 
     now = datetime.now(UTC)
     counts = dict.fromkeys(
@@ -228,7 +300,12 @@ def run_retrieval(
                 raise RuntimeError("pipeline run insert returned no ID")
             run_id = cast(UUID, row[0])
 
-        pending = list_items_needing_text(connection, limit=limit)
+        pending = list_items_needing_text(
+            connection,
+            limit=limit,
+            refetch_source=refetch_source,
+            refetch_path=refetch_path,
+        )
         with Fetcher(timeout_seconds=timeout_seconds) as fetcher:
             for item in pending:
                 resolution = resolve_item_text(

@@ -12,10 +12,12 @@ from psycopg.types.json import Jsonb
 from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation import packet as packet_module
 from curious_now_v2.generation import present as present_module
+from curious_now_v2.generation import technical as technical_module
 from curious_now_v2.generation.client import CodexGenerator, Generator
 from curious_now_v2.generation.judge import declined_reason, judge_mechanism
 from curious_now_v2.generation.packet import extract_packet
 from curious_now_v2.generation.present import generate_presentation
+from curious_now_v2.generation.technical import generate_technical
 
 
 def _one(cursor: psycopg.Cursor[Any]) -> tuple[Any, ...]:
@@ -41,6 +43,8 @@ class GenerationRunResult:
     relabelled: int
     # Explains withdrawn by the judge for listing capabilities, not mechanism.
     judged_out: int
+    technical: int
+    technical_declined: int
     invalid: int
     failed: int
     cost_usd: float
@@ -57,6 +61,11 @@ class PendingStory:
     # What retrieval actually got, not what we wish it got. Explain and
     # Technical are both gated on this, and it was a hardcoded constant.
     text_sufficiency: str
+    # The gate's finding, and the document's own section/figure/table labels.
+    # Technical is the only layer that cites, so it is the only one that needs
+    # to know what there is to cite.
+    technical_eligible: bool
+    structure: dict[str, Any] | None
 
 
 def list_stories_needing_presentations(
@@ -99,7 +108,9 @@ def list_stories_needing_presentations(
               COALESCE(dt.text, s.working_title), i.full_text,
               CASE WHEN i.full_text_kind = 'fulltext'
                    THEN 'open_full_text' ELSE COALESCE(i.access_class, 'abstract')
-              END
+              END,
+              'technical' = ANY(s.supported_depths),
+              i.text_structure
             FROM stories s
             JOIN story_items si ON si.story_id = s.id
             JOIN items i ON i.id = si.item_id
@@ -128,6 +139,8 @@ def list_stories_needing_presentations(
                 title=row[4],
                 text=row[5],
                 text_sufficiency=row[6],
+                technical_eligible=bool(row[7]),
+                structure=row[8],
             )
             for row in cursor
         )
@@ -258,6 +271,7 @@ def _store(
     story: PendingStory,
     extracted: packet_module.ExtractedPacket,
     presentation: present_module.Presentation,
+    technical: technical_module.Technical | None,
     model: str,
     now: datetime,
 ) -> None:
@@ -386,7 +400,7 @@ def _store(
         # The qualification is not a field the reader is shown; it is written
         # into the Glance prose. What is kept here is the span locating it, so
         # a later audit can ask whether it survived without reading every word.
-        layers: tuple[tuple[ExplanationDepth, str, bool, dict[str, str], str], ...] = (
+        layers: tuple[tuple[ExplanationDepth, str, bool, dict[str, Any], str], ...] = (
             (
                 ExplanationDepth.GLANCE,
                 presentation.glance,
@@ -404,6 +418,31 @@ def _store(
                 presentation.explain_declined_reason,
             ),
         )
+        if technical is not None:
+            # Technical carries structure the other layers do not: its headings
+            # are the argument's order and its citations are what a reader came
+            # to check, so both are stored rather than flattened into prose.
+            layers += (
+                (
+                    ExplanationDepth.TECHNICAL,
+                    technical.text,
+                    technical.valid,
+                    {
+                        "sections": [
+                            {"heading": s.heading, "text": s.text}
+                            for s in technical.sections
+                        ],
+                        "citations": [
+                            {"label": c.label, "used_for": c.used_for}
+                            for c in technical.citations
+                        ],
+                        "prerequisites": list(technical.prerequisites),
+                    },
+                    technical.declined_reason
+                    or "; ".join(technical.violations),
+                ),
+            )
+
         for depth, body, supported, provenance, declined in layers:
             usable = supported and bool(body.strip()) and presentation.valid
             cursor.execute(
@@ -463,6 +502,145 @@ def _store(
             )
 
 
+
+
+@dataclass
+class _Outcome:
+    """What one story cost, and what became of it."""
+
+    cost: float = 0.0
+    generated: int = 0
+    declined: int = 0
+    withheld: int = 0
+    relabelled: int = 0
+    judged_out: int = 0
+    technical: int = 0
+    technical_declined: int = 0
+    invalid: int = 0
+    failed: int = 0
+
+
+def _present_one(
+    connection: psycopg.Connection[Any],
+    *,
+    engine: Generator,
+    story: PendingStory,
+    now: datetime,
+) -> _Outcome:
+    """Take one story from stored evidence to stored presentation.
+
+    Separated from the run loop so that a failure has somewhere to stop. Every
+    write inside is committed as it happens, so a story that raises leaves the
+    corpus consistent and is simply picked up by the next run.
+    """
+
+    out = _Outcome()
+    extracted = extract_packet(
+        engine,
+        source_name=story.source_name,
+        content_type=story.content_type,
+        title=story.title,
+        text=story.text,
+    )
+    out.cost += extracted.completion.usage.cost(engine.model)
+    if not extracted.usable:
+        out.failed = 1
+        return out
+
+    if _reconcile_content_type(
+        connection,
+        item_id=story.item_id,
+        content_type=story.content_type,
+        story_kind=extracted.story_kind,
+    ):
+        out.relabelled = 1
+
+    if not extracted.worth_publishing:
+        # An announcement reports that something happened; the feed is for what
+        # was found or built. Withdraw it rather than spend a second call
+        # explaining the mechanism of a podcast.
+        _withhold(
+            connection,
+            story_id=story.story_id,
+            kind=extracted.story_kind,
+            claim=extracted.central_claim,
+            now=now,
+        )
+        out.withheld = 1
+        return out
+
+    presentation = generate_presentation(
+        engine,
+        extracted,
+        source_name=story.source_name,
+        content_type=story.content_type,
+        text=story.text,
+    )
+    out.cost += presentation.completion.usage.cost(engine.model)
+    if not presentation.completion.ok:
+        out.failed = 1
+        return out
+
+    if presentation.explain_supported and presentation.explain.strip():
+        # A third call, and the cheapest of the three: it reads the Explain
+        # alone, not the source. The writer decides whether the evidence carries
+        # a mechanism and, asked to write, tends to find that it does.
+        judgement = judge_mechanism(
+            engine,
+            title=presentation.display_title or story.title,
+            source_name=story.source_name,
+            explain=presentation.explain,
+        )
+        out.cost += judgement.completion.usage.cost(engine.model)
+        if not judgement.explains:
+            presentation = present_module.Presentation(
+                **{
+                    **presentation.__dict__,
+                    "explain": "",
+                    "explain_supported": False,
+                    "explain_declined_reason": declined_reason(judgement),
+                }
+            )
+            out.judged_out = 1
+
+    # Technical only where the gate found the text can carry it and the
+    # orientation above it stands. It is the most expensive call by far — it
+    # reads the whole document — so it is never spent on a story a reader
+    # cannot already orient in.
+    written: technical_module.Technical | None = None
+    if story.technical_eligible and presentation.valid:
+        written = generate_technical(
+            engine,
+            source_name=story.source_name,
+            content_type=story.content_type,
+            title=presentation.display_title or story.title,
+            full_text=story.text,
+            structure=story.structure,
+        )
+        out.cost += written.completion.usage.cost(engine.model)
+        if written.valid:
+            out.technical = 1
+        elif written.completion.ok:
+            out.technical_declined = 1
+
+    _store(
+        connection,
+        story=story,
+        extracted=extracted,
+        presentation=presentation,
+        technical=written,
+        model=engine.model,
+        now=now,
+    )
+    if presentation.valid:
+        out.generated = 1
+        if not presentation.explain_supported:
+            out.declined = 1
+    else:
+        out.invalid = 1
+    return out
+
+
 def run_generation(
     database_url: str,
     *,
@@ -476,9 +654,8 @@ def run_generation(
 
     engine = generator or CodexGenerator(model=model or CodexGenerator.model)
     now = datetime.now(UTC)
-    generated = declined = invalid = failed = withheld = relabelled = 0
-    judged_out = 0
-    cost = 0.0
+    totals = _Outcome()
+    errors: list[str] = []
 
     with psycopg.connect(database_url, autocommit=True) as connection:
         with connection.transaction(), connection.cursor() as cursor:
@@ -492,96 +669,53 @@ def run_generation(
 
         reopened = reconsider_withheld(connection)
         if reopened:
-            log = f"reopened {reopened} stories withheld by an older classifier"
-            print(log)
+            print(  # noqa: T201
+                f"reopened {reopened} stories withheld by an older classifier"
+            )
 
         pending = list_stories_needing_presentations(
             connection, limit=limit, regenerate=regenerate, story_ids=story_ids
         )
         for story in pending:
-            extracted = extract_packet(
-                engine,
-                source_name=story.source_name,
-                content_type=story.content_type,
-                title=story.title,
-                text=story.text,
-            )
-            cost += extracted.completion.usage.cost(engine.model)
-            if not extracted.usable:
-                failed += 1
-                continue
-
-            if _reconcile_content_type(
-                connection,
-                item_id=story.item_id,
-                content_type=story.content_type,
-                story_kind=extracted.story_kind,
-            ):
-                relabelled += 1
-
-            if not extracted.worth_publishing:
-                # An announcement reports that something happened; the feed is
-                # for what was found or built. Withdraw it rather than spend a
-                # second call explaining the mechanism of a podcast.
-                _withhold(
-                    connection,
-                    story_id=story.story_id,
-                    kind=extracted.story_kind,
-                    claim=extracted.central_claim,
-                    now=now,
+            try:
+                outcome = _present_one(
+                    connection, engine=engine, story=story, now=now
                 )
-                withheld += 1
+            except Exception as error:  # noqa: BLE001 — one story cannot end a run
+                # Hours of subprocess calls should not be lost, along with every
+                # counter, because one story raised. It stays unpresented and is
+                # picked up next run.
+                totals.failed += 1
+                errors.append(f"{story.story_id}: {type(error).__name__}: {error}")
                 continue
 
-            presentation = generate_presentation(
-                engine,
-                extracted,
-                source_name=story.source_name,
-                content_type=story.content_type,
-                text=story.text,
-            )
-            cost += presentation.completion.usage.cost(engine.model)
-            if not presentation.completion.ok:
-                failed += 1
-                continue
+            totals.cost += outcome.cost
+            totals.generated += outcome.generated
+            totals.declined += outcome.declined
+            totals.withheld += outcome.withheld
+            totals.relabelled += outcome.relabelled
+            totals.judged_out += outcome.judged_out
+            totals.technical += outcome.technical
+            totals.technical_declined += outcome.technical_declined
+            totals.invalid += outcome.invalid
+            totals.failed += outcome.failed
 
-            if presentation.explain_supported and presentation.explain.strip():
-                # A third call, and the cheapest of the three: it reads the
-                # Explain alone, not the source. The writer decides whether the
-                # evidence carries a mechanism and, asked to write, tends to
-                # find that it does.
-                judgement = judge_mechanism(
-                    engine,
-                    title=presentation.display_title or story.title,
-                    source_name=story.source_name,
-                    explain=presentation.explain,
-                )
-                cost += judgement.completion.usage.cost(engine.model)
-                if not judgement.explains:
-                    presentation = present_module.Presentation(
-                        **{
-                            **presentation.__dict__,
-                            "explain": "",
-                            "explain_supported": False,
-                            "explain_declined_reason": declined_reason(judgement),
-                        }
-                    )
-                    judged_out += 1
-
-            _store(
-                connection,
-                story=story,
-                extracted=extracted,
-                presentation=presentation,
-                model=engine.model,
-                now=now,
-            )
-            if presentation.valid:
-                generated += 1
-                if not presentation.explain_supported:
-                    declined += 1
-            else:
-                invalid += 1
+        counters: dict[str, Any] = {
+            "attempted": len(pending),
+            "generated": totals.generated,
+            "declined_explain": totals.declined,
+            "withheld_kind": totals.withheld,
+            "reopened": reopened,
+            "relabelled": totals.relabelled,
+            "judged_out": totals.judged_out,
+            "technical": totals.technical,
+            "technical_declined": totals.technical_declined,
+            "invalid": totals.invalid,
+            "failed": totals.failed,
+            "cost_usd": round(totals.cost, 4),
+        }
+        if errors:
+            counters["errors"] = errors[:20]
 
         with connection.transaction(), connection.cursor() as cursor:
             cursor.execute(
@@ -591,33 +725,22 @@ def run_generation(
                 WHERE id = %s;
                 """,
                 (
-                    "succeeded" if generated else "partial",
-                    Jsonb(
-                        {
-                            "attempted": len(pending),
-                            "generated": generated,
-                            "declined_explain": declined,
-                            "withheld_kind": withheld,
-                            "reopened": reopened,
-                            "relabelled": relabelled,
-                            "judged_out": judged_out,
-                            "invalid": invalid,
-                            "failed": failed,
-                            "cost_usd": round(cost, 4),
-                        }
-                    ),
+                    "succeeded" if totals.generated and not errors else "partial",
+                    Jsonb(counters),
                     run_id,
                 ),
             )
 
     return GenerationRunResult(
         attempted=len(pending),
-        generated=generated,
-        declined_explain=declined,
-        withheld_kind=withheld,
-        relabelled=relabelled,
-        judged_out=judged_out,
-        invalid=invalid,
-        failed=failed,
-        cost_usd=round(cost, 4),
+        generated=totals.generated,
+        declined_explain=totals.declined,
+        withheld_kind=totals.withheld,
+        relabelled=totals.relabelled,
+        judged_out=totals.judged_out,
+        technical=totals.technical,
+        technical_declined=totals.technical_declined,
+        invalid=totals.invalid,
+        failed=totals.failed,
+        cost_usd=round(totals.cost, 4),
     )
