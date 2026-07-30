@@ -1,0 +1,386 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any, cast
+from uuid import UUID
+
+import psycopg
+from psycopg.types.json import Jsonb
+
+from curious_now_v2.core.enums import AccessClass, ExplanationDepth
+from curious_now_v2.generation import packet as packet_module
+from curious_now_v2.generation import present as present_module
+from curious_now_v2.generation.client import CodexGenerator, Generator
+from curious_now_v2.generation.packet import extract_packet
+from curious_now_v2.generation.present import generate_presentation
+
+
+def _one(cursor: psycopg.Cursor[Any]) -> tuple[Any, ...]:
+    """A RETURNING clause always yields a row; make that explicit for callers."""
+
+    row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError("expected a returned row")
+    return cast("tuple[Any, ...]", row)
+
+
+# Enough text to be worth spending inference on; the gate has already decided
+# the story can support a layer.
+MIN_WORDS = 150
+
+
+@dataclass(frozen=True)
+class GenerationRunResult:
+    attempted: int
+    generated: int
+    declined_explain: int
+    invalid: int
+    failed: int
+    cost_usd: float
+
+
+@dataclass(frozen=True)
+class PendingStory:
+    story_id: UUID
+    item_id: UUID
+    source_name: str
+    content_type: str
+    title: str
+    text: str
+
+
+def list_stories_needing_presentations(
+    connection: psycopg.Connection[Any],
+    *,
+    limit: int,
+    regenerate: bool = False,
+) -> tuple[PendingStory, ...]:
+    """Published stories with no current presentation, richest item first."""
+
+    having = "" if regenerate else """
+        AND NOT EXISTS (
+          SELECT 1 FROM evidence_packets ep
+          WHERE ep.story_id = s.id AND ep.status = 'valid'
+        )
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT DISTINCT ON (s.id)
+              s.id, i.id, src.name, i.content_type,
+              COALESCE(dt.text, s.working_title), i.full_text
+            FROM stories s
+            JOIN story_items si ON si.story_id = s.id
+            JOIN items i ON i.id = si.item_id
+            JOIN sources src ON src.id = i.source_id
+            LEFT JOIN display_titles dt
+              ON dt.id = s.current_display_title_id AND dt.status = 'valid'
+            WHERE s.status = 'published'
+              AND i.full_text IS NOT NULL
+              AND COALESCE(i.full_text_words, 0) >= %s
+              {having}
+            ORDER BY s.id, i.full_text_words DESC
+            LIMIT %s;
+            """,
+            (MIN_WORDS, limit),
+        )
+        return tuple(
+            PendingStory(
+                story_id=row[0],
+                item_id=row[1],
+                source_name=row[2],
+                content_type=row[3],
+                title=row[4],
+                text=row[5],
+            )
+            for row in cursor
+        )
+
+
+def _store(
+    connection: psycopg.Connection[Any],
+    *,
+    story: PendingStory,
+    extracted: packet_module.ExtractedPacket,
+    presentation: present_module.Presentation,
+    model: str,
+    now: datetime,
+) -> None:
+    """Persist packet, claims, spine, and presentations as one version.
+
+    Everything written here references one packet version and one spine
+    version, so a reader can never be shown a mixture of two.
+    """
+
+    with connection.transaction(), connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT COALESCE(max(version), 0) + 1 FROM evidence_packets
+            WHERE story_id = %s;
+            """,
+            (story.story_id,),
+        )
+        version = cast(int, _one(cursor)[0])
+
+        cursor.execute(
+            """
+            INSERT INTO evidence_packets (
+              story_id, version, status, text_sufficiency, central_claim,
+              limitations, provenance, validated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id;
+            """,
+            (
+                story.story_id,
+                version,
+                "valid" if presentation.valid else "invalid",
+                AccessClass.OPEN_FULL_TEXT.value,
+                extracted.central_claim,
+                Jsonb(list(extracted.limitations)),
+                Jsonb(
+                    {
+                        "model": model,
+                        "prompt_version": packet_module.PROMPT_VERSION,
+                        "grounding_item": str(story.item_id),
+                        "prerequisites": list(extracted.prerequisites),
+                    }
+                ),
+                now if presentation.valid else None,
+            ),
+        )
+        packet_id = cast(UUID, _one(cursor)[0])
+
+        for ordinal, claim in enumerate(extracted.claims):
+            cursor.execute(
+                """
+                INSERT INTO evidence_claims (
+                  evidence_packet_id, ordinal, claim_kind, claim_text, confidence
+                ) VALUES (%s, %s, %s, %s, %s) RETURNING id;
+                """,
+                (packet_id, ordinal, claim.kind.value, claim.text, claim.confidence),
+            )
+            claim_id = cast(UUID, _one(cursor)[0])
+            cursor.execute(
+                """
+                INSERT INTO claim_evidence (claim_id, item_id, support_kind, excerpt)
+                VALUES (%s, %s, 'direct', %s)
+                ON CONFLICT DO NOTHING;
+                """,
+                (claim_id, story.item_id, claim.excerpt),
+            )
+
+        cursor.execute(
+            """
+            INSERT INTO conceptual_spines (
+              story_id, evidence_packet_id, version, status, central_claim,
+              novelty, core_intuition, essential_qualification,
+              prerequisite_concepts, prompt_version, model_provider, model_name,
+              validated_at
+            )
+            VALUES (%s, %s, 1, %s, %s, %s, %s, %s, %s, %s, 'openai', %s, %s)
+            RETURNING id;
+            """,
+            (
+                story.story_id,
+                packet_id,
+                "valid" if presentation.valid else "invalid",
+                extracted.central_claim,
+                presentation.spine_novelty,
+                presentation.spine_intuition,
+                presentation.spine_qualification,
+                Jsonb(list(extracted.prerequisites)),
+                present_module.PROMPT_VERSION,
+                model,
+                now if presentation.valid else None,
+            ),
+        )
+        spine_id = cast(UUID, _one(cursor)[0])
+
+        cursor.execute(
+            """
+            INSERT INTO display_titles (
+              story_id, evidence_packet_id, conceptual_spine_id, version, text,
+              status, prompt_version, model_provider, model_name, validated_at
+            )
+            VALUES (
+              %s, %s, %s,
+              (SELECT COALESCE(max(version), 0) + 1 FROM display_titles
+               WHERE story_id = %s),
+              %s, %s, %s, 'openai', %s, %s
+            )
+            RETURNING id;
+            """,
+            (
+                story.story_id,
+                packet_id,
+                spine_id,
+                story.story_id,
+                presentation.display_title or story.title,
+                "valid" if presentation.valid else "invalid",
+                present_module.PROMPT_VERSION,
+                model,
+                now if presentation.valid else None,
+            ),
+        )
+        title_id = cast(UUID, _one(cursor)[0])
+
+        layers = (
+            (
+                ExplanationDepth.GLANCE,
+                presentation.glance,
+                presentation.glance_supported,
+                presentation.glance_qualification,
+            ),
+            (
+                ExplanationDepth.EXPLAIN,
+                presentation.explain,
+                presentation.explain_supported,
+                presentation.explain_declined_reason,
+            ),
+        )
+        for depth, body, supported, note in layers:
+            usable = supported and bool(body.strip()) and presentation.valid
+            cursor.execute(
+                """
+                INSERT INTO explanations (
+                  story_id, evidence_packet_id, conceptual_spine_id, depth,
+                  status, content, plain_text, model_provider, model_name,
+                  prompt_version, input_tokens, output_tokens, failure_reason,
+                  validated_at
+                )
+                VALUES (
+                  %s, %s, %s, %s, %s, %s, %s, 'openai', %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT DO NOTHING;
+                """,
+                (
+                    story.story_id,
+                    packet_id,
+                    spine_id,
+                    depth.value,
+                    "valid" if usable else ("invalid" if supported else "failed"),
+                    Jsonb({"qualification": note} if supported else {}),
+                    body or None,
+                    model,
+                    present_module.PROMPT_VERSION,
+                    presentation.completion.usage.input_tokens,
+                    presentation.completion.usage.output_tokens,
+                    None if supported else (note or "declined"),
+                    now if usable else None,
+                ),
+            )
+
+        if presentation.valid:
+            cursor.execute(
+                """
+                UPDATE stories SET
+                  current_evidence_packet_id = %s,
+                  current_display_title_id = %s,
+                  updated_at = now()
+                WHERE id = %s;
+                """,
+                (packet_id, title_id, story.story_id),
+            )
+
+
+def run_generation(
+    database_url: str,
+    *,
+    limit: int = 10,
+    model: str | None = None,
+    regenerate: bool = False,
+    generator: Generator | None = None,
+) -> GenerationRunResult:
+    """Extract an evidence packet, then write the layers it can support."""
+
+    engine = generator or CodexGenerator(model=model or CodexGenerator.model)
+    now = datetime.now(UTC)
+    generated = declined = invalid = failed = 0
+    cost = 0.0
+
+    with psycopg.connect(database_url, autocommit=True) as connection:
+        with connection.transaction(), connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO pipeline_runs (job_name, status)
+                VALUES ('generate', 'running') RETURNING id;
+                """
+            )
+            run_id = cast(UUID, _one(cursor)[0])
+
+        pending = list_stories_needing_presentations(
+            connection, limit=limit, regenerate=regenerate
+        )
+        for story in pending:
+            extracted = extract_packet(
+                engine,
+                source_name=story.source_name,
+                content_type=story.content_type,
+                title=story.title,
+                text=story.text,
+            )
+            cost += extracted.completion.usage.cost(engine.model)
+            if not extracted.usable:
+                failed += 1
+                continue
+
+            presentation = generate_presentation(
+                engine,
+                extracted,
+                source_name=story.source_name,
+                content_type=story.content_type,
+                text=story.text,
+            )
+            cost += presentation.completion.usage.cost(engine.model)
+            if not presentation.completion.ok:
+                failed += 1
+                continue
+
+            _store(
+                connection,
+                story=story,
+                extracted=extracted,
+                presentation=presentation,
+                model=engine.model,
+                now=now,
+            )
+            if presentation.valid:
+                generated += 1
+                if not presentation.explain_supported:
+                    declined += 1
+            else:
+                invalid += 1
+
+        with connection.transaction(), connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE pipeline_runs SET
+                  status = %s, finished_at = now(), counters = %s
+                WHERE id = %s;
+                """,
+                (
+                    "succeeded" if generated else "partial",
+                    Jsonb(
+                        {
+                            "attempted": len(pending),
+                            "generated": generated,
+                            "declined_explain": declined,
+                            "invalid": invalid,
+                            "failed": failed,
+                            "cost_usd": round(cost, 4),
+                        }
+                    ),
+                    run_id,
+                ),
+            )
+
+    return GenerationRunResult(
+        attempted=len(pending),
+        generated=generated,
+        declined_explain=declined,
+        invalid=invalid,
+        failed=failed,
+        cost_usd=round(cost, 4),
+    )

@@ -7,6 +7,7 @@ from pathlib import Path
 import psycopg
 
 from curious_now_v2.core.source_registry import load_source_registry
+from curious_now_v2.db.generation import run_generation
 from curious_now_v2.db.hydration import run_hydration
 from curious_now_v2.db.ingestion import sync_source_registry
 from curious_now_v2.db.migrations import apply_migrations
@@ -76,6 +77,19 @@ def build_parser() -> argparse.ArgumentParser:
     retrieve.add_argument("--limit", type=int, default=50)
     retrieve.add_argument("--timeout-seconds", type=float, default=30)
     _add_database_url_argument(retrieve)
+
+    generate = commands.add_parser(
+        "generate",
+        help="extract evidence packets and write the layers they support",
+    )
+    generate.add_argument("--limit", type=int, default=10)
+    generate.add_argument("--model", default=None)
+    generate.add_argument(
+        "--regenerate",
+        action="store_true",
+        help="rebuild presentations for stories that already have a valid packet",
+    )
+    _add_database_url_argument(generate)
 
     gate = commands.add_parser(
         "gate",
@@ -184,6 +198,23 @@ def main() -> None:
             f"{retrieval.abstract_only} abstract only); "
             f"{retrieval.paywalled} paywalled, {retrieval.blocked} blocked, "
             f"{retrieval.failed} unavailable"
+        )
+        return
+
+    if args.command == "generate":
+        if args.limit < 1:
+            raise SystemExit("--limit must be positive")
+        result = run_generation(
+            _database_url(args.database_url),
+            limit=args.limit,
+            model=args.model,
+            regenerate=args.regenerate,
+        )
+        print(  # noqa: T201
+            f"generated {result.generated}/{result.attempted} stories "
+            f"({result.declined_explain} declined Explain); "
+            f"{result.invalid} failed validation, {result.failed} errored; "
+            f"US${result.cost_usd:.2f}"
         )
         return
 

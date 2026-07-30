@@ -1,0 +1,269 @@
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import Any
+
+from curious_now_v2.core.enums import ExplanationDepth
+from curious_now_v2.generation.client import Completion, Generator
+from curious_now_v2.generation.packet import ExtractedPacket
+
+PROMPT_VERSION = "present-v1"
+
+# Prohibited by the title contract, and cheap to check.
+HYPE = (
+    "breakthrough",
+    "revolutionary",
+    "game-chang",
+    "groundbreaking",
+    "unprecedented",
+    "paradigm shift",
+)
+
+GLANCE_MIN_WORDS = 80
+GLANCE_MAX_WORDS = 260
+EXPLAIN_MAX_WORDS = 520
+TITLE_MIN_WORDS = 5
+TITLE_MAX_WORDS = 16
+
+SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["spine", "display_title", "glance", "explain"],
+    "properties": {
+        "spine": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["novelty", "core_intuition", "qualification"],
+            "properties": {
+                "novelty": {"type": "string"},
+                "core_intuition": {"type": "string"},
+                "qualification": {"type": "string"},
+            },
+        },
+        "display_title": {"type": "string"},
+        "glance": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["text", "qualification", "supported"],
+            "properties": {
+                "text": {"type": "string"},
+                "qualification": {"type": "string"},
+                "supported": {"type": "boolean"},
+            },
+        },
+        "explain": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["text", "mechanism_supported", "declined_reason"],
+            "properties": {
+                "text": {"type": "string"},
+                "mechanism_supported": {"type": "boolean"},
+                "declined_reason": {"type": "string"},
+            },
+        },
+    },
+}
+
+PROMPT = """You are writing for Curious Now, a calm feed of science worth \
+understanding.
+
+Everything you write must stay inside the SUPPORTED CLAIMS below. Those claims \
+were extracted from the source and each is backed by a verbatim quote. The \
+source text is given so you can phrase things naturally — not so you can add \
+anything the claims do not carry. Do not use outside knowledge.
+
+First settle the spine, which all the writing shares:
+  novelty         what is genuinely new here, in one sentence
+  core_intuition  the simplest accurate way to hold the idea
+  qualification   the one thing whose omission would most mislead a reader
+
+Then produce:
+
+1. display_title: 6-14 words, plain language, naming the actual development. No \
+hype, no unsupported superlative, no manufactured question. Attribute the claim \
+if only an interested party makes it.
+
+2. glance: for someone curious with no background in this field — imagine a \
+sharp friend who works in something else. What happened, one clear mental model \
+for it, and why it might matter. About 30-60 seconds of reading.
+
+   Carry FEW ideas, not many stated briefly. Any term your reader would not \
+   know must be explained right where it appears or replaced with ordinary \
+   language. A Glance that reads like a compressed abstract has failed even if \
+   every word in it is true. Set `supported` false if the claims cannot carry \
+   even this.
+
+3. explain: an ELI20 for a reader who knows this field, answering ONE question: \
+how does it work? The mechanism, and why it produces the claimed effect. Carry \
+the qualification that keeps the mechanism honest.
+
+   Write the explanation, not a length. Stop when the mechanism is clear — 300 \
+   words that land beat 500 that pad. Never exceed 500 words. Never restate \
+   Glance at greater length.
+
+   If the claims carry no mechanism, set mechanism_supported false, give the \
+   reason in declined_reason, and leave text empty. Declining is correct and is \
+   preferred over writing past the evidence.
+
+`[equation]` and `[expression]` mark mathematics that could not be recovered \
+from the source. Never treat them as content and never say what the equation states.
+
+SOURCE: {source_name} ({content_type})
+CENTRAL CLAIM: {central_claim}
+
+SUPPORTED CLAIMS
+{claims}
+
+CONCEDED LIMITATIONS
+{limitations}
+
+SOURCE TEXT (for phrasing only)
+{text}
+"""
+
+
+@dataclass(frozen=True)
+class Presentation:
+    spine_novelty: str
+    spine_intuition: str
+    spine_qualification: str
+    display_title: str
+    glance: str
+    glance_qualification: str
+    glance_supported: bool
+    explain: str
+    explain_supported: bool
+    explain_declined_reason: str
+    completion: Completion
+    violations: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def valid_depths(self) -> tuple[ExplanationDepth, ...]:
+        depths: list[ExplanationDepth] = []
+        if self.glance_supported and self.glance.strip():
+            depths.append(ExplanationDepth.GLANCE)
+        if self.explain_supported and self.explain.strip():
+            depths.append(ExplanationDepth.EXPLAIN)
+        return tuple(depths)
+
+    @property
+    def valid(self) -> bool:
+        return not self.violations and bool(self.valid_depths)
+
+
+def _words(value: str) -> int:
+    return len(value.split())
+
+
+def _sentences(text: str) -> set[str]:
+    return {
+        part.strip()
+        for part in re.split(r"(?<=[.!?])\s+", text)
+        if len(part.split()) > 5
+    }
+
+
+def validate(presentation: Presentation, packet: ExtractedPacket) -> tuple[str, ...]:
+    """Check the parts of the contract a machine can judge.
+
+    Human evaluation still decides whether the result is any good; this only
+    catches the breaches that need no taste — a hyped title, a Glance with no
+    qualification, an Explain that restates Glance at length.
+    """
+
+    problems: list[str] = []
+    title = presentation.display_title
+
+    if not TITLE_MIN_WORDS <= _words(title) <= TITLE_MAX_WORDS:
+        problems.append(f"title is {_words(title)} words")
+    if any(word in title.casefold() for word in HYPE):
+        problems.append("title uses prohibited hype")
+    if title.rstrip().endswith("?"):
+        problems.append("title is a question")
+
+    if presentation.glance_supported:
+        count = _words(presentation.glance)
+        if not GLANCE_MIN_WORDS <= count <= GLANCE_MAX_WORDS:
+            problems.append(f"glance is {count} words")
+        if not presentation.glance_qualification.strip():
+            problems.append("glance carries no qualification")
+
+    if presentation.explain_supported:
+        count = _words(presentation.explain)
+        if count > EXPLAIN_MAX_WORDS:
+            problems.append(f"explain is {count} words, over the ceiling")
+        if count < 60:
+            problems.append(f"explain is only {count} words")
+        shared = _sentences(presentation.glance) & _sentences(presentation.explain)
+        if shared:
+            problems.append("explain reuses a sentence from glance")
+    elif not presentation.explain_declined_reason.strip():
+        problems.append("explain declined without a reason")
+
+    # A mechanism cannot be explained from claims that never describe one.
+    if presentation.explain_supported and not any(
+        claim.kind.value == "method" for claim in packet.claims
+    ):
+        problems.append("explain claims a mechanism the packet does not support")
+
+    if "[equation]" in presentation.explain or "[expression]" in presentation.explain:
+        problems.append("explain passes an unrecovered-maths marker to the reader")
+
+    return tuple(problems)
+
+
+def generate_presentation(
+    generator: Generator,
+    packet: ExtractedPacket,
+    *,
+    source_name: str,
+    content_type: str,
+    text: str,
+) -> Presentation:
+    """Render the reader-facing layers from the packet's supported claims."""
+
+    claims = "\n".join(
+        f"- [{claim.kind.value}] {claim.text}" for claim in packet.claims
+    )
+    limitations = (
+        "\n".join(f"- {value}" for value in packet.limitations)
+        or "- (the source concedes none)"
+    )
+    completion = generator.complete(
+        PROMPT.format(
+            source_name=source_name,
+            content_type=content_type,
+            central_claim=packet.central_claim,
+            claims=claims,
+            limitations=limitations,
+            text=text,
+        ),
+        SCHEMA,
+    )
+    payload = completion.payload or {}
+    spine = payload.get("spine") or {}
+    glance = payload.get("glance") or {}
+    explain = payload.get("explain") or {}
+
+    presentation = Presentation(
+        spine_novelty=str(spine.get("novelty") or "").strip(),
+        spine_intuition=str(spine.get("core_intuition") or "").strip(),
+        spine_qualification=str(spine.get("qualification") or "").strip(),
+        display_title=str(payload.get("display_title") or "").strip(),
+        glance=str(glance.get("text") or "").strip(),
+        glance_qualification=str(glance.get("qualification") or "").strip(),
+        glance_supported=bool(glance.get("supported")),
+        explain=str(explain.get("text") or "").strip(),
+        explain_supported=bool(explain.get("mechanism_supported")),
+        explain_declined_reason=str(explain.get("declined_reason") or "").strip(),
+        completion=completion,
+    )
+    if not completion.ok:
+        return presentation
+    return Presentation(
+        **{
+            **presentation.__dict__,
+            "violations": validate(presentation, packet),
+        }
+    )
