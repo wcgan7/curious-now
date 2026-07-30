@@ -632,14 +632,12 @@ button {
 }
 
 .explanationPanel,
-.pendingPanel,
-.claimsSection {
+.pendingPanel {
   padding: 48px 0;
 }
 
 .explanationPanel .sectionKicker,
 .pendingPanel .sectionKicker,
-.claimsSection .sectionKicker,
 .evidenceShelf .sectionKicker {
   margin-bottom: 12px;
 }
@@ -723,7 +721,6 @@ button {
 }
 
 .pendingPanel h2,
-.claimsSection h2,
 .evidenceShelf h2 {
   margin: 0 0 18px;
   font-family: var(--serif);
@@ -741,67 +738,14 @@ button {
   line-height: 1.65;
 }
 
-.claimsSection {
-  border-top: 1px solid var(--line);
-}
 
-.claimsSection > ol {
-  padding: 0;
-  margin: 30px 0 0;
-  list-style: none;
-}
 
-.claimsSection > ol > li {
-  padding: 24px 0;
-  border-top: 1px solid var(--line);
-}
 
-.claimsSection > ol > li > div {
-  display: flex;
-  justify-content: space-between;
-  color: var(--ink-soft);
-  font-size: 0.63rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
 
-.claimsSection > ol > li > p {
-  font-family: var(--serif);
-  font-size: 1.17rem;
-  line-height: 1.55;
-}
 
-.claimsSection ul {
-  padding: 0;
-  list-style: none;
-}
 
-.claimsSection ul li {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
 
-.claimsSection ul a {
-  width: fit-content;
-  color: var(--blue);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
 
-.claimsSection q {
-  padding-left: 12px;
-  border-left: 2px solid var(--line);
-  color: var(--ink-soft);
-  font-family: var(--serif);
-  font-size: 0.9rem;
-  font-style: italic;
-  line-height: 1.5;
-}
 
 .evidenceShelf {
   align-self: start;

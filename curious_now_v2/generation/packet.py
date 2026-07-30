@@ -6,7 +6,7 @@ from typing import Any
 from curious_now_v2.core.enums import ClaimKind
 from curious_now_v2.generation.client import Completion, Generator
 
-PROMPT_VERSION = "packet-v3"
+PROMPT_VERSION = "packet-v4"
 
 # Extraction, deliberately: asking which claims the source supports is a task a
 # model does well, where asking whether it feels able to explain something is
@@ -74,8 +74,13 @@ Rules that matter more than completeness:
 - Record only what the source states. Do not add background knowledge, and do
   not infer a claim the text merely gestures at.
 - Every claim needs a verbatim excerpt. If you cannot quote it, do not record it.
-- Use `method` for how something works or was done — the mechanism. Use
-  `comparison` only where the source compares against a baseline or prior
+- Use `method` for how something works or was done — the mechanism, the steps,
+  the reason one thing produces another. A statement that something *can* do
+  something is not a method: "it fetches information when needed", "it filters
+  background noise", "it follows instructions more reliably" are capabilities,
+  and recording them as methods makes a product's feature list look like a
+  mechanism. If the source does not say how, there is no method claim to make.
+  Use `comparison` only where the source compares against a baseline or prior
   state. Use `limitation` or `uncertainty` for what the source itself concedes.
 - Do not invent limitations. If the source concedes nothing, leave the list
   empty; that absence is itself informative.
@@ -89,9 +94,10 @@ about. Judge the item, not the publisher:
   research_result  a study, experiment, analysis, or proof, with findings
   release          a model, tool, dataset, or product made available, where the
                    source describes what it is and how it works
-  explainer        an account of how something already established works, often
-                   occasioned by an event in the news — it explains a mechanism
-                   rather than reporting a new finding
+  explainer        an account of how something already established works in
+                   nature or in a technology, often occasioned by an event in
+                   the news — it explains a mechanism rather than reporting a
+                   new finding
   correction       a retraction, correction, or revised conclusion
   debate           disagreement between positions over evidence
   announcement     an event, podcast, funding award, appointment, or programme —
@@ -112,6 +118,11 @@ newsworthy it is:
   "here is how a fire builds its own thunderstorm" is an explainer.
 - A review of a book, film, or exhibition is not_science even when the subject
   is science, because the claims belong to the work under review.
+- An account of how an organisation operates — how a lab picks projects, how it
+  works with product teams, its history and notable alumni — is not_science,
+  however scientific that organisation is. An explainer explains something
+  about the world; a company describing its own way of working is describing
+  itself.
 
 central_claim is the single thing this item amounts to, in one sentence.
 prerequisites are concepts a reader would need in order to follow it.

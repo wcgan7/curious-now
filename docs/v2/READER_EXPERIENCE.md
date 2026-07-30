@@ -344,7 +344,11 @@ Remaining known deltas, pending later milestones:
   walkthrough sections with per-section evidence links;
 - topics and highlighted-story explanations have no reader UI; search covers
   story, display, and source titles but has no topic or date filters;
-- claim-level provenance appears in the claim ledger, not yet inline in
-  explanation text.
+- claim-level provenance is not reader-facing. It was rendered as a numbered
+  claim ledger — every extracted claim with its kind and a confidence
+  percentage — which put the pipeline's internal record on the page in the
+  pipeline's own vocabulary. The evidence packet still holds it, and the source
+  shelf still links every source; the intended form is provenance inline in the
+  explanation, which is not built.
 
 These are known prototype differences, not alternative product behavior.

@@ -196,9 +196,15 @@ or replaced with ordinary language. A Glance that reads as a compressed abstract
 has failed even when every statement in it is true: "a sum of five abelian line
 bundles on a Calabi–Yau threefold" tells its intended reader nothing.
 
-Glance carries few ideas rather than many stated briefly. Compression is the
-failure mode here, not length — the fix for a dense Glance is fewer concepts,
-never more words, because the reading budget is fixed.
+Glance carries ONE idea. Not few — one: the single thing a reader should walk
+away knowing, with one way to picture it or one reason to believe it. Everything
+else the source establishes belongs to Explain.
+
+Method, sample sizes, percentages, date ranges, and any second finding are
+excluded from Glance however true they are, because a Glance that carries them
+has spent the reader's attention on detail before they hold the idea the detail
+is about. Compression is the failure mode here, not length — the fix for a dense
+Glance is fewer concepts, never more words, because the reading budget is fixed.
 
 ### Exclusions
 

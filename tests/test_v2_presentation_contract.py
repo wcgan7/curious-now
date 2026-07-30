@@ -224,3 +224,36 @@ def test_only_developments_are_worth_publishing() -> None:
     assert make_packet(story_kind="explainer").worth_publishing
     assert not make_packet(story_kind="announcement").worth_publishing
     assert not make_packet(story_kind="not_science").worth_publishing
+
+
+def test_a_short_attribution_still_counts_as_a_qualification() -> None:
+    """For a release the qualification can be two words, and often is.
+
+    "Google says", opening a sentence about Google's own product, attributes
+    the claim. A three-word floor — there only so a span cannot match by
+    accident — rejected exactly that, twice, on a Glance that had done the
+    right thing.
+    """
+
+    glance = (
+        "Google says its updated audio model keeps a live conversation coherent "
+        "while it handles a task, bringing in real-time information without "
+        "breaking the flow. Picture a voice agent that can act and still "
+        "remember what was said earlier. That could make live voice agents "
+        "feel more natural to talk to."
+    )
+    problems = validate(
+        make_presentation(
+            glance=glance,
+            glance_qualification_span="Google says",
+        ),
+        make_packet(story_kind="release", limitations=()),
+    )
+    assert problems == ()
+
+
+def test_a_span_too_short_to_mean_anything_is_still_rejected() -> None:
+    problems = validate(
+        make_presentation(glance_qualification_span="the"), make_packet()
+    )
+    assert any("not in the glance" in problem for problem in problems)

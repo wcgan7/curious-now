@@ -8,7 +8,7 @@ from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation.client import Completion, Generator
 from curious_now_v2.generation.packet import ExtractedPacket
 
-PROMPT_VERSION = "present-v3"
+PROMPT_VERSION = "present-v5"
 
 # Prohibited by the title contract, and cheap to check.
 HYPE = (
@@ -28,8 +28,17 @@ _LABELLED = re.compile(
 )
 _QUOTES = str.maketrans("‘’“”", "''\"\"")
 
-GLANCE_MIN_WORDS = 80
-GLANCE_MAX_WORDS = 260
+# A ceiling low enough to force a choice. At 260 a Glance could carry the
+# study's prevalence range, its date range, its method, two comparisons and a
+# closing flourish, and every one of those was true — which is exactly the
+# compressed abstract the contract prohibits.
+#
+# The floor is a nonsense guard and nothing more. A 49-word Glance was rejected
+# by a floor of 50 while being the best in the batch — one idea, its
+# qualification inside it, no padding — which is word count becoming the target
+# again, in the other direction.
+GLANCE_MIN_WORDS = 25
+GLANCE_MAX_WORDS = 150
 EXPLAIN_MAX_WORDS = 520
 TITLE_MIN_WORDS = 5
 TITLE_MAX_WORDS = 16
@@ -98,14 +107,23 @@ superlative, no manufactured question. Attribute the claim if only an \
 interested party makes it.
 
 2. glance: for someone curious with no background in this field — imagine a \
-sharp friend who works in something else. What happened, one clear mental model \
-for it, and why it might matter. About 30-60 seconds of reading.
+sharp friend who works in something else.
 
-   Carry FEW ideas, not many stated briefly. Any term your reader would not \
-   know must be explained right where it appears or replaced with ordinary \
-   language. A Glance that reads like a compressed abstract has failed even if \
-   every word in it is true. Set `supported` false if the claims cannot carry \
-   even this.
+   ONE idea. Decide the single thing this reader should walk away knowing, say \
+   it plainly, give them one way to picture it or one reason to believe it, and \
+   say why it might matter. Then stop. You are not summarising the source. You \
+   are handing over the one thing worth carrying.
+
+   Leave out of Glance, however true: how the work was done, sample sizes, \
+   percentages, date ranges, place names that mean nothing to this reader, \
+   lists of anything, and any second finding. All of that belongs to Explain. A \
+   Glance carrying them has spent the reader's attention on detail before they \
+   have the idea the detail is about.
+
+   Any term your reader would not know must be explained right where it appears \
+   or replaced with ordinary language. A Glance that reads like a compressed \
+   abstract has failed even if every word in it is true. Set `supported` false \
+   if the claims cannot carry even this.
 
    Where the evidence carries a qualification, write it into the Glance as \
    part of the explanation — a clause or a sentence in the reader's path, \
@@ -143,9 +161,26 @@ the qualification that keeps the mechanism honest.
    words that land beat 500 that pad. Never exceed 500 words. Never restate \
    Glance at greater length.
 
-   If the claims carry no mechanism, set mechanism_supported false, give the \
-   reason in declined_reason, and leave text empty. Declining is correct and is \
-   preferred over writing past the evidence.
+   A mechanism says how something works. A list of what something can do is \
+   not a mechanism, however long: "it fetches information when needed", "it \
+   filters background noise" and "it follows instructions more reliably" \
+   describe capabilities, and an Explain assembled from them only tells the \
+   reader what Glance already told them, at greater length. If the second level \
+   would be more detail rather than more depth, there is no second level.
+
+   For a release this is the usual case, so treat Explain as the exception. A \
+   product announcement describes what its product does; that is its purpose. \
+   Write an Explain only where the source says what is going on INSIDE — the \
+   technique, the representation, the signal, the reason the approach works. \
+   "SynthID embeds an imperceptible watermark into the generated waveform" is \
+   a mechanism. "It translates between two languages and switches based on who \
+   is speaking" is the product working as described, and is Glance's job.
+
+   So if the claims carry no mechanism, set mechanism_supported false, give the \
+   reason in declined_reason, and leave text empty. Declining is correct, it is \
+   common for a product announcement, and it is always preferred to writing \
+   past the evidence. A story with a good Glance and no Explain is a complete \
+   story.
 
 `[equation]` and `[expression]` mark mathematics that could not be recovered \
 from the source. Never treat them as content and never say what the equation states.
@@ -220,9 +255,20 @@ def _flat(value: str) -> str:
 
 
 def _quotes(span: str, text: str) -> bool:
-    """Whether the span really is a piece of the text it claims to come from."""
+    """Whether the span really is a piece of the text it claims to come from.
 
-    return len(span.split()) >= 3 and _flat(span) in _flat(text)
+    The length floor only exists so a span cannot match by accident — "the" is
+    inside every Glance ever written. It is not a judgement about how much a
+    qualification needs to say: "Google says", opening a sentence about a
+    company's own product, attributes the claim in two words, and an earlier
+    three-word floor rejected a Glance for carrying it properly.
+    """
+
+    return (
+        len(span.split()) >= 2
+        and len(span.strip()) >= 8
+        and _flat(span) in _flat(text)
+    )
 
 
 def _sentences(text: str) -> set[str]:

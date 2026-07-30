@@ -133,7 +133,6 @@ export function StoryReader({
             {formatDate(story.publishedAt)}
           </time>
           <span>{story.sources.length} source{story.sources.length === 1 ? "" : "s"}</span>
-          <span>{story.claims.length} grounded claim{story.claims.length === 1 ? "" : "s"}</span>
         </div>
       </header>
 
@@ -219,33 +218,6 @@ export function StoryReader({
             </section>
           )}
 
-          {story.claims.length ? (
-            <section className="claimsSection">
-              <p className="sectionKicker">Claim ledger</p>
-              <h2>What the evidence supports</h2>
-              <ol>
-                {story.claims.map((claim) => (
-                  <li key={claim.id}>
-                    <div>
-                      <span>{claim.kind}</span>
-                      <strong>{Math.round(claim.confidence * 100)}%</strong>
-                    </div>
-                    <p>{claim.text}</p>
-                    <ul>
-                      {claim.citations.map((citation) => (
-                        <li key={`${claim.id}-${citation.itemId}`}>
-                          <a href={citation.url} rel="noreferrer" target="_blank">
-                            {citation.sourceName} ↗
-                          </a>
-                          {citation.excerpt ? <q>{citation.excerpt}</q> : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ) : null}
         </div>
 
         <aside className="evidenceShelf">
