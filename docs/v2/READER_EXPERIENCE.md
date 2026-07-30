@@ -312,6 +312,19 @@ Trust information uses plain labels, not opaque universal quality scores.
 - Reduced-motion preferences disable nonessential transitions.
 - Technical equations and figures require textual alternatives.
 
+### Equations in Technical
+
+Technical may use an equation where it materially improves understanding, so
+the reader must typeset one properly rather than printing raw markup. TeX
+survives retrieval from arXiv's LaTeXML rendering and from JATS, and is the
+form stored, so the reader renders TeX and supplies the textual alternative the
+accessibility rule requires.
+
+Math does not survive the PDF path: glyph positions carry no notation, so a
+paper resolved from PDF yields prose without usable equations. Technical for
+such a paper is still worth producing; it simply cannot show the mathematics,
+and should not paraphrase an equation it cannot display.
+
 ## Current prototype delta
 
 The checked-in `apps/reader/` application follows the approved reading flow:
