@@ -22,8 +22,61 @@ _WHITESPACE = re.compile(r"\s+")
 _PULLED_OUT = ("fig", "table-wrap", "supplementary-material")
 
 
+# MathML elements that carry structure rather than a bare symbol. Flattening
+# these loses the mathematics: a fraction becomes its numerator and denominator
+# run together, and "sin" spelt as separate <mi> letters becomes "s i n".
+_STRUCTURAL_MATHML = (
+    "mfrac",
+    "msup",
+    "msub",
+    "msubsup",
+    "msqrt",
+    "mroot",
+    "munder",
+    "mover",
+    "munderover",
+    "mtable",
+)
+
+
 def _compact(value: str) -> str:
     return _WHITESPACE.sub(" ", value).strip()
+
+
+def _resolve_math(soup: BeautifulSoup) -> None:
+    """Give every formula a single honest textual form.
+
+    JATS carries MathML, which flattens to glyph soup: the Kuramoto equation
+    dφ/dt = w − b sin(φ) reads as "d ϕ i d t = w 0 − b s i n ( ϕ i )", where
+    the fraction has vanished and the sine has come apart. That is worse than
+    omitting the equation, because it looks like mathematics and states
+    something different.
+
+    Publishers that also supply TeX get their TeX used. Otherwise a formula
+    with real structure is replaced by a marker, and only bare symbols — a
+    lone variable, a number — are kept as characters.
+    """
+
+    for node in soup.find_all(["disp-formula", "inline-formula"]):
+        tex = node.find("tex-math")
+        if tex is not None and tex.get_text(strip=True):
+            node.replace_with(f" {_compact(tex.get_text())} ")
+            continue
+        math = node.find(["math", "mml:math"])
+        if math is None:
+            continue
+        if math.find(_STRUCTURAL_MATHML):
+            display = node.name == "disp-formula"
+            node.replace_with(" [equation] " if display else " [expression] ")
+        else:
+            node.replace_with(f" {_compact(math.get_text())} ")
+
+    # Formulas sometimes sit as bare <math> outside a formula wrapper.
+    for math in soup.find_all(["math", "mml:math"]):
+        if math.find(_STRUCTURAL_MATHML):
+            math.replace_with(" [expression] ")
+        else:
+            math.replace_with(f" {_compact(math.get_text())} ")
 
 
 def _nearest_section(tag: Tag) -> Tag | None:
@@ -112,6 +165,7 @@ def extract_jats(xml: str) -> Document:
     """
 
     soup = BeautifulSoup(xml, "xml")
+    _resolve_math(soup)
 
     title_node = soup.find("article-title")
     title = _compact(title_node.get_text(" ")) if title_node else None

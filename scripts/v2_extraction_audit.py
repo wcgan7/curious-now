@@ -283,6 +283,21 @@ def check_title_not_body(doc: Document, raw: str, kind: str) -> Finding:
     return ok()
 
 
+def check_math_not_mangled(doc: Document, raw: str, kind: str) -> Finding:
+    """Flattened MathML misstates the mathematics.
+
+    Reading MathML as characters loses the structure: a fraction becomes its
+    parts run together and a function name spelt as separate <mi> letters
+    becomes "s i n". That is worse than omitting the formula, because it looks
+    like mathematics and says something different.
+    """
+
+    runs = re.findall(r"\b(?:[a-z] ){2,}[a-z]\b", doc.text)
+    if len(runs) > 2:
+        return Finding(FAIL, f"letter-spaced math: {runs[:2]}")
+    return ok()
+
+
 def check_headings_name_something(doc: Document, raw: str, kind: str) -> Finding:
     """A section title has to be words.
 
@@ -349,6 +364,7 @@ CHECKS: tuple[tuple[str, Check], ...] = (
     ("mojibake", check_no_mojibake),
     ("merged-para", check_paragraph_not_merged),
     ("title-in-body", check_title_not_body),
+    ("math-intact", check_math_not_mangled),
     ("headings", check_headings_name_something),
     ("fig-numbers", check_figure_numbering),
     ("fragments", check_paragraph_fragmentation),
