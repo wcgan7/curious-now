@@ -28,4 +28,6 @@ CREATE INDEX idx_items_source_active
   ON items (source_id)
   WHERE full_text IS NULL;
 
+INSERT INTO schema_migrations (version) VALUES ('0007_feed_exclusions');
+
 COMMIT;

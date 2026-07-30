@@ -171,6 +171,10 @@ def run_story(
     # The validator the pipeline runs is the check that matters; anything it
     # rejects would never reach a reader.
     result.checks["contract_clean"] = not presentation.violations
+    # Scored separately because it fails separately: a hyped title costs the
+    # story its display title, not its explanation. Folding the two together
+    # would hide a model that titles everything "a revolutionary breakthrough".
+    result.checks["title_clean"] = presentation.title_valid
 
     if presentation.explain_supported:
         result.separation = ladder_separation(presentation.glance, presentation.explain)
@@ -250,8 +254,8 @@ def main() -> int:
             f"{passed}/{len(result.checks)}"
             + (f"  FAILED: {', '.join(failed)}" if failed else "")
         )
-        if result.presentation and result.presentation.violations:
-            note += f"  [{'; '.join(result.presentation.violations)}]"
+        if result.presentation and result.presentation.all_violations:
+            note += f"  [{'; '.join(result.presentation.all_violations)}]"
         incoming, outgoing = result.tokens
         print(
             f"{result.model:16s} {result.story[:22]:22s} "
@@ -286,6 +290,9 @@ def main() -> int:
                     "separation": r.separation,
                     "violations": (
                         list(r.presentation.violations) if r.presentation else []
+                    ),
+                    "title_violations": (
+                        list(r.presentation.title_violations) if r.presentation else []
                     ),
                     "error": r.error,
                     "display_title": (

@@ -9,7 +9,7 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
-from curious_now_v2.core.enums import AccessClass, ExplanationDepth
+from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation import packet as packet_module
 from curious_now_v2.generation import present as present_module
 from curious_now_v2.generation.client import CodexGenerator, Generator
@@ -51,6 +51,9 @@ class PendingStory:
     content_type: str
     title: str
     text: str
+    # What retrieval actually got, not what we wish it got. Explain and
+    # Technical are both gated on this, and it was a hardcoded constant.
+    text_sufficiency: str
 
 
 def list_stories_needing_presentations(
@@ -71,10 +74,17 @@ def list_stories_needing_presentations(
     re-examined without paying for a whole batch.
     """
 
+    # Skip what is already being shown, rather than everything that has ever
+    # had a packet. A story withheld after it had published keeps that packet,
+    # so excluding on the packet alone left it in draft for good — the reopening
+    # that `reconsider_withheld` performs would have had no effect at all.
     having = "" if regenerate else """
-        AND NOT EXISTS (
-          SELECT 1 FROM evidence_packets ep
-          WHERE ep.story_id = s.id AND ep.status = 'valid'
+        AND NOT (
+          s.status = 'published'
+          AND EXISTS (
+            SELECT 1 FROM evidence_packets ep
+            WHERE ep.story_id = s.id AND ep.status = 'valid'
+          )
         )
     """
     chosen = "AND s.id = ANY(%s)" if story_ids else ""
@@ -83,14 +93,19 @@ def list_stories_needing_presentations(
             f"""
             SELECT DISTINCT ON (s.id)
               s.id, i.id, src.name, i.content_type,
-              COALESCE(dt.text, s.working_title), i.full_text
+              COALESCE(dt.text, s.working_title), i.full_text,
+              CASE WHEN i.full_text_kind = 'fulltext'
+                   THEN 'open_full_text' ELSE COALESCE(i.access_class, 'abstract')
+              END
             FROM stories s
             JOIN story_items si ON si.story_id = s.id
             JOIN items i ON i.id = si.item_id
             JOIN sources src ON src.id = i.source_id
             LEFT JOIN display_titles dt
               ON dt.id = s.current_display_title_id AND dt.status = 'valid'
-            WHERE s.status = 'published'
+            WHERE s.status <> 'hidden'
+              AND s.withheld_kind IS NULL
+              AND cardinality(s.supported_depths) > 0
               AND src.active
               AND i.full_text IS NOT NULL
               AND COALESCE(i.full_text_words, 0) >= %s
@@ -109,6 +124,7 @@ def list_stories_needing_presentations(
                 content_type=row[3],
                 title=row[4],
                 text=row[5],
+                text_sufficiency=row[6],
             )
             for row in cursor
         )
@@ -140,12 +156,16 @@ def _withhold(
             UPDATE stories SET
               status = 'draft',
               supported_depths = '{}',
+              withheld_kind = %s,
+              withheld_by = %s,
               publication_reasons = %s,
               gated_at = %s,
               updated_at = now()
             WHERE id = %s;
             """,
             (
+                kind,
+                packet_module.PROMPT_VERSION,
                 Jsonb(
                     [
                         f"withheld: this is a {kind.replace('_', ' ')}, "
@@ -166,6 +186,32 @@ def _withhold(
 # to come from the record, never from a model's impression of the prose.
 NOT_RESEARCH = frozenset({"not_science", "announcement"})
 PAPER_TYPES = frozenset({"peer_reviewed", "preprint"})
+
+
+def reconsider_withheld(connection: psycopg.Connection[Any]) -> int:
+    """Reopen stories dropped by a classifier we no longer run.
+
+    Adding `explainer` to the taxonomy turned a piece on how a wildfire builds
+    its own thunderstorm from something we discarded as not science into one of
+    the better things in the corpus. Nothing would have found it again: the
+    withholding was recorded and never revisited. A judgement is only as good
+    as the taxonomy behind it, so a change of taxonomy reopens the question.
+    """
+
+    with connection.transaction(), connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE stories SET
+              withheld_kind = NULL,
+              withheld_by = NULL,
+              publication_reasons = '[]'::jsonb,
+              updated_at = now()
+            WHERE withheld_kind IS NOT NULL
+              AND withheld_by IS DISTINCT FROM %s;
+            """,
+            (packet_module.PROMPT_VERSION,),
+        )
+        return cursor.rowcount
 
 
 def _reconcile_content_type(
@@ -236,7 +282,7 @@ def _store(
                 story.story_id,
                 version,
                 "valid" if presentation.valid else "invalid",
-                AccessClass.OPEN_FULL_TEXT.value,
+                story.text_sufficiency,
                 extracted.central_claim,
                 Jsonb(list(extracted.limitations)),
                 Jsonb(
@@ -319,10 +365,12 @@ def _store(
                 spine_id,
                 story.story_id,
                 presentation.display_title or story.title,
-                "valid" if presentation.valid else "invalid",
+                # Judged on its own terms: a hyped or over-long title is
+                # invalid as a title, and says nothing about the explanation.
+                "valid" if presentation.title_valid else "invalid",
                 present_module.PROMPT_VERSION,
                 model,
-                now if presentation.valid else None,
+                now if presentation.title_valid else None,
             ),
         )
         title_id = cast(UUID, _one(cursor)[0])
@@ -381,15 +429,29 @@ def _store(
             )
 
         if presentation.valid:
+            # Publication happens here and only here: a story is offered to a
+            # reader when there is something to show them, which is not a fact
+            # the gate can know from counting words.
+            #
+            # The display title is pointed at separately, because a title that
+            # breaks the contract falls back to the source's own headline —
+            # an attributed fact rather than our editorial text — while the
+            # explanation it belongs to goes out unaffected.
             cursor.execute(
                 """
                 UPDATE stories SET
+                  status = 'published',
+                  published_at = COALESCE(published_at, now()),
                   current_evidence_packet_id = %s,
                   current_display_title_id = %s,
                   updated_at = now()
-                WHERE id = %s;
+                WHERE id = %s AND status <> 'hidden';
                 """,
-                (packet_id, title_id, story.story_id),
+                (
+                    packet_id,
+                    title_id if presentation.title_valid else None,
+                    story.story_id,
+                ),
             )
 
 
@@ -418,6 +480,11 @@ def run_generation(
                 """
             )
             run_id = cast(UUID, _one(cursor)[0])
+
+        reopened = reconsider_withheld(connection)
+        if reopened:
+            log = f"reopened {reopened} stories withheld by an older classifier"
+            print(log)
 
         pending = list_stories_needing_presentations(
             connection, limit=limit, regenerate=regenerate, story_ids=story_ids
@@ -499,6 +566,7 @@ def run_generation(
                             "generated": generated,
                             "declined_explain": declined,
                             "withheld_kind": withheld,
+                            "reopened": reopened,
                             "relabelled": relabelled,
                             "invalid": invalid,
                             "failed": failed,

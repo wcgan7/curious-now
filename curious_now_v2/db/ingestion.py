@@ -325,7 +325,14 @@ def _upsert_item(
           published_at = COALESCE(%s, published_at),
           doi = COALESCE(%s, doi),
           arxiv_id = COALESCE(%s, arxiv_id),
-          access_class = %s,
+          -- A feed entry only ever carries a snippet or nothing at all, so
+          -- re-seeing one says nothing about the text we since fetched.
+          -- Retrieval and hydration both raise this and say in as many words
+          -- that it "only ever rises"; ingest was quietly lowering it again
+          -- every time a publisher's window still listed the entry.
+          access_class = CASE
+            WHEN items.access_class IN ('abstract', 'open_full_text')
+            THEN items.access_class ELSE %s END,
           updated_at = now()
         WHERE id = %s;
         """,
@@ -477,7 +484,11 @@ def _attach_story(
               published_at,
               last_evidence_at
             )
-            VALUES (%s, 'published', COALESCE(%s, now()), COALESCE(%s, now()))
+            -- Draft, not published. A story arrives as evidence; it becomes
+            -- a story a reader is offered once something has been written about
+            -- it, which generation decides. Publishing on arrival is what made
+            -- the feed a mirror of fifteen RSS headlines.
+            VALUES (%s, 'draft', COALESCE(%s, now()), COALESCE(%s, now()))
             RETURNING id;
             """,
             (

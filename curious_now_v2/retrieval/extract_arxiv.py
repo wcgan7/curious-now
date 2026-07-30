@@ -21,8 +21,16 @@ _FIGURE_LABEL = re.compile(r"^\s*((?:figure|fig\.?|table)\s*\d+[.:]?)", re.I)
 # LaTeXML also wraps \paragraph{} units in section.ltx_paragraph. Those are too
 # fine-grained to emit as sections, so their prose belongs to the enclosing
 # section and their titles are kept inline as the lead-ins they are.
+# Display mathematics sits outside the paragraph flow, in its own table: a
+# lone equation in table.ltx_equation, an aligned group in table.ltx_eqn_table.
+# Neither is inside a p.ltx_p, so leaving them out of this selector silently
+# dropped the mathematics from every paper — 128 of 141 display equations in
+# one fixture, 88 of 98 in another — while the surrounding prose went on
+# referring to "Equation 3". The TeX itself was never the problem: it is in
+# each element's alttext and _resolve_math already prefers it.
 _BLOCK_SELECTOR = (
     "p.ltx_p, li.ltx_item, blockquote.ltx_quote, div.ltx_theorem,"
+    " table.ltx_equation, table.ltx_eqn_table,"
     " [class~=ltx_title_paragraph]"
 )
 _EMITTED_SECTION_CLASSES = frozenset(

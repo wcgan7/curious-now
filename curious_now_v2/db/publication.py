@@ -50,13 +50,14 @@ def _load_story_items(
         JOIN items i ON i.id = si.item_id
         JOIN sources src ON src.id = i.source_id
         WHERE s.status <> 'hidden'
+          AND s.withheld_kind IS NULL
     """
     parameters: tuple[object, ...] = ()
     if limit is not None:
         query += """
           AND s.id IN (
             SELECT id FROM stories
-            WHERE status <> 'hidden'
+            WHERE status <> 'hidden' AND withheld_kind IS NULL
             ORDER BY gated_at NULLS FIRST, last_evidence_at DESC
             LIMIT %s
           )
@@ -105,9 +106,12 @@ def _store_gate(
         cursor.execute(
             """
             UPDATE stories SET
+              -- Eligibility is not publication. A story goes out when a
+              -- validated presentation exists for it, which is decided in
+              -- generation; the gate must not promote one on word count, and
+              -- must not demote one that already has an explanation.
               status = CASE
-                WHEN %s THEN 'published'
-                WHEN status = 'hidden' THEN 'hidden'
+                WHEN status IN ('hidden', 'published') THEN status
                 ELSE 'draft'
               END,
               supported_depths = %s,

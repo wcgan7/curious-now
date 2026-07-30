@@ -8,10 +8,14 @@ inside it, an Explain that restated Glance at greater length.
 
 from __future__ import annotations
 
-from curious_now_v2.core.enums import ClaimKind
+from curious_now_v2.core.enums import ClaimKind, ExplanationDepth
 from curious_now_v2.generation.client import Completion, Usage
 from curious_now_v2.generation.packet import ExtractedClaim, ExtractedPacket
-from curious_now_v2.generation.present import Presentation, validate
+from curious_now_v2.generation.present import (
+    Presentation,
+    validate,
+    validate_title,
+)
 
 GLANCE = (
     "Researchers trained a model to predict how a protein folds from its "
@@ -144,11 +148,33 @@ def test_rejects_a_qualification_about_the_source_rather_than_the_science() -> N
 
 
 def test_rejects_hype_in_the_title() -> None:
-    problems = validate(
-        make_presentation(display_title="A breakthrough in predicting protein structure"),
-        make_packet(),
-    )
+    problems = validate_title("A breakthrough in predicting protein structure")
     assert any("hype" in problem for problem in problems)
+    assert validate_title("A model predicts protein structure from sequence") == ()
+
+
+def test_a_bad_title_does_not_withhold_a_good_explanation() -> None:
+    """The contract is explicit: a failed title MUST NOT block publication.
+
+    Title violations used to be folded into the same tuple as layer violations,
+    and `_store` multiplied every layer by `presentation.valid` — so one word
+    over the limit withdrew a sound Glance and Explain and dropped the story to
+    evidence only. The remedy for a bad title is the source's own headline.
+    """
+
+    presentation = make_presentation(
+        display_title="A breakthrough in predicting protein structure",
+    )
+    presentation = Presentation(
+        **{
+            **presentation.__dict__,
+            "title_violations": validate_title(presentation.display_title),
+            "violations": validate(presentation, make_packet()),
+        }
+    )
+    assert not presentation.title_valid
+    assert presentation.valid
+    assert presentation.valid_depths == (ExplanationDepth.GLANCE, ExplanationDepth.EXPLAIN)
 
 
 def test_rejects_an_explain_that_lifts_a_sentence_from_glance() -> None:

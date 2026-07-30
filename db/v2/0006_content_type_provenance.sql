@@ -47,4 +47,6 @@ CREATE INDEX idx_items_content_type_basis
   ON items (content_type_basis)
   WHERE content_type_basis = 'feed_default';
 
+INSERT INTO schema_migrations (version) VALUES ('0006_content_type_provenance');
+
 COMMIT;

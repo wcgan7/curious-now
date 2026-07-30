@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import psycopg
@@ -127,3 +127,100 @@ def test_exact_paper_ids_cluster_two_items_into_one_evidence_only_story() -> Non
             counts = cursor.fetchone()
 
     assert counts == (1, 2)
+
+
+def test_re_ingesting_an_entry_does_not_undo_what_retrieval_established() -> None:
+    """A feed entry says nothing about text we have since fetched.
+
+    Feed candidates only ever carry a snippet or nothing at all, and publishers
+    keep entries in their window for days. So every re-poll used to knock an
+    item's access class back down to 'snippet', discarding the 'abstract' or
+    'open_full_text' that retrieval wrote after actually reading the document.
+    Retrieval and hydration both say in as many words that this value "only
+    ever rises"; ingest was the one place quietly lowering it.
+    """
+
+    now = datetime.now(UTC)
+    suffix = uuid4().hex
+    feed = FeedSpec(
+        url=f"https://example.test/{suffix}.xml",
+        default_content_type=ContentType.PEER_REVIEWED,
+    )
+    registry = SourceRegistry(
+        version=1,
+        sources=(
+            SourceSpec(
+                name=f"Monotone Source {suffix}",
+                role=SourceRole.PRIMARY_RESEARCH,
+                feeds=(feed,),
+                policy=SourcePolicy(counts_as_independent=True),
+            ),
+        )
+    )
+
+    assert TEST_DATABASE_URL is not None
+    apply_migrations(TEST_DATABASE_URL)
+    with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as connection:
+        sync_source_registry(connection, registry)
+        # sync stamps next_fetch_at with the database's now(), which is later
+        # than the timestamp captured above.
+        due = next(
+            candidate
+            for candidate in list_due_feeds(
+                connection, now=now + timedelta(minutes=1), limit=500
+            )
+            if candidate.feed.url == feed.url
+        )
+
+        entry = RawFeedEntry(
+            source_id=due.source_id,
+            source_name=due.source.name,
+            source_role=due.source.role,
+            source_native_id="monotone-1",
+            title="A paper with a summary in its feed entry",
+            url="https://example.test/paper/monotone-1",
+            summary="A short teaser from the feed.",
+            default_content_type=ContentType.PEER_REVIEWED,
+        )
+        batch = FeedBatch(
+            source_id=due.source_id,
+            feed_url=feed.url,
+            status=FeedReadStatus.SUCCEEDED,
+            http_status=200,
+            etag=None,
+            last_modified=None,
+            candidates=(normalize_entry(entry),),
+            skipped_entries=0,
+        )
+        persist_feed_batch(
+            connection, feed_id=due.feed_id, batch=batch,
+            started_at=now, finished_at=now,
+        )
+
+        with connection.cursor() as cursor:
+            # Stand in for retrieval having read the document.
+            cursor.execute(
+                """
+                UPDATE items SET access_class = 'open_full_text'
+                WHERE source_native_id = 'monotone-1' AND source_id = %s;
+                """,
+                (due.source_id,),
+            )
+
+        # The publisher's window still lists the entry on the next poll.
+        persist_feed_batch(
+            connection, feed_id=due.feed_id, batch=batch,
+            started_at=now, finished_at=now,
+        )
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT access_class FROM items
+                WHERE source_native_id = 'monotone-1' AND source_id = %s;
+                """,
+                (due.source_id,),
+            )
+            row = cursor.fetchone()
+
+    assert row == ("open_full_text",)

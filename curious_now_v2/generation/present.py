@@ -178,6 +178,11 @@ class Presentation:
     explain_supported: bool
     explain_declined_reason: str
     completion: Completion
+    # Kept apart because they fail apart. A hyped title is a reason to fall
+    # back to the source's own headline, not a reason to withhold an
+    # explanation that is perfectly sound: "a failed title generation MUST NOT
+    # block publication" (PRESENTATION_CONTRACT.md).
+    title_violations: tuple[str, ...] = field(default_factory=tuple)
     violations: tuple[str, ...] = field(default_factory=tuple)
 
     @property
@@ -191,7 +196,17 @@ class Presentation:
 
     @property
     def valid(self) -> bool:
+        """Whether anything can be shown to a reader — titles aside."""
+
         return not self.violations and bool(self.valid_depths)
+
+    @property
+    def title_valid(self) -> bool:
+        return not self.title_violations and bool(self.display_title.strip())
+
+    @property
+    def all_violations(self) -> tuple[str, ...]:
+        return self.title_violations + self.violations
 
 
 def _words(value: str) -> int:
@@ -218,23 +233,34 @@ def _sentences(text: str) -> set[str]:
     }
 
 
-def validate(presentation: Presentation, packet: ExtractedPacket) -> tuple[str, ...]:
-    """Check the parts of the contract a machine can judge.
+def validate_title(title: str) -> tuple[str, ...]:
+    """Judge the display title alone.
 
-    Human evaluation still decides whether the result is any good; this only
-    catches the breaches that need no taste — a hyped title, a Glance with no
-    qualification, an Explain that restates Glance at length.
+    Separate from the layers because the remedy is separate: a title that fails
+    is replaced by the source's own headline, which is an attributed fact rather
+    than our editorial text, and the story goes out regardless.
     """
 
     problems: list[str] = []
-    title = presentation.display_title
-
     if not TITLE_MIN_WORDS <= _words(title) <= TITLE_MAX_WORDS:
         problems.append(f"title is {_words(title)} words")
     if any(word in title.casefold() for word in HYPE):
         problems.append("title uses prohibited hype")
     if title.rstrip().endswith("?"):
         problems.append("title is a question")
+    return tuple(problems)
+
+
+def validate(presentation: Presentation, packet: ExtractedPacket) -> tuple[str, ...]:
+    """Check the parts of the contract a machine can judge.
+
+    Human evaluation still decides whether the result is any good; this only
+    catches the breaches that need no taste — a Glance with no qualification,
+    an Explain that restates Glance at length. The title is judged separately,
+    by `validate_title`, since it fails without taking the story with it.
+    """
+
+    problems: list[str] = []
 
     if presentation.glance_supported:
         count = _words(presentation.glance)
@@ -340,6 +366,7 @@ def generate_presentation(
     return Presentation(
         **{
             **presentation.__dict__,
+            "title_violations": validate_title(presentation.display_title),
             "violations": validate(presentation, packet),
         }
     )
