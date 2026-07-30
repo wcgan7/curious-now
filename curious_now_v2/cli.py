@@ -212,7 +212,8 @@ def main() -> None:
         )
         print(  # noqa: T201
             f"generated {result.generated}/{result.attempted} stories "
-            f"({result.declined_explain} declined Explain); "
+            f"({result.declined_explain} declined Explain, "
+            f"{result.withheld_kind} withheld as not a development); "
             f"{result.invalid} failed validation, {result.failed} errored; "
             f"US${result.cost_usd:.2f}"
         )

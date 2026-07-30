@@ -35,6 +35,7 @@ class GenerationRunResult:
     attempted: int
     generated: int
     declined_explain: int
+    withheld_kind: int
     invalid: int
     failed: int
     cost_usd: float
@@ -98,6 +99,45 @@ def list_stories_needing_presentations(
         )
 
 
+def _withhold(
+    connection: psycopg.Connection[Any],
+    *,
+    story_id: UUID,
+    kind: str,
+    claim: str,
+    now: datetime,
+) -> None:
+    """Return a story to draft because of what it is, not what it lacks.
+
+    A podcast series or a funding award may be perfectly well evidenced and
+    still not be a development anyone can be shown an explanation of.
+    """
+
+    with connection.transaction(), connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE stories SET
+              status = 'draft',
+              supported_depths = '{}',
+              publication_reasons = %s,
+              gated_at = %s,
+              updated_at = now()
+            WHERE id = %s;
+            """,
+            (
+                Jsonb(
+                    [
+                        f"withheld: this is a {kind.replace('_', ' ')}, "
+                        "not a development to explain",
+                        claim[:200],
+                    ]
+                ),
+                now,
+                story_id,
+            ),
+        )
+
+
 def _store(
     connection: psycopg.Connection[Any],
     *,
@@ -143,6 +183,7 @@ def _store(
                     {
                         "model": model,
                         "prompt_version": packet_module.PROMPT_VERSION,
+                        "story_kind": extracted.story_kind,
                         "grounding_item": str(story.item_id),
                         "prerequisites": list(extracted.prerequisites),
                     }
@@ -297,7 +338,7 @@ def run_generation(
 
     engine = generator or CodexGenerator(model=model or CodexGenerator.model)
     now = datetime.now(UTC)
-    generated = declined = invalid = failed = 0
+    generated = declined = invalid = failed = withheld = 0
     cost = 0.0
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -324,6 +365,20 @@ def run_generation(
             cost += extracted.completion.usage.cost(engine.model)
             if not extracted.usable:
                 failed += 1
+                continue
+
+            if not extracted.worth_publishing:
+                # An announcement reports that something happened; the feed is
+                # for what was found or built. Withdraw it rather than spend a
+                # second call explaining the mechanism of a podcast.
+                _withhold(
+                    connection,
+                    story_id=story.story_id,
+                    kind=extracted.story_kind,
+                    claim=extracted.central_claim,
+                    now=now,
+                )
+                withheld += 1
                 continue
 
             presentation = generate_presentation(
@@ -367,6 +422,7 @@ def run_generation(
                             "attempted": len(pending),
                             "generated": generated,
                             "declined_explain": declined,
+                            "withheld_kind": withheld,
                             "invalid": invalid,
                             "failed": failed,
                             "cost_usd": round(cost, 4),
@@ -380,6 +436,7 @@ def run_generation(
         attempted=len(pending),
         generated=generated,
         declined_explain=declined,
+        withheld_kind=withheld,
         invalid=invalid,
         failed=failed,
         cost_usd=round(cost, 4),

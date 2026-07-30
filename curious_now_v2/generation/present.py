@@ -8,7 +8,7 @@ from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation.client import Completion, Generator
 from curious_now_v2.generation.packet import ExtractedPacket
 
-PROMPT_VERSION = "present-v1"
+PROMPT_VERSION = "present-v2"
 
 # Prohibited by the title contract, and cheap to check.
 HYPE = (
@@ -94,6 +94,19 @@ for it, and why it might matter. About 30-60 seconds of reading.
    every word in it is true. Set `supported` false if the claims cannot carry \
    even this.
 
+   The qualification must be the thing whose omission would most mislead — and \
+   what that is depends on the kind of item:
+
+   - a study or analysis: the scope condition or uncertainty the work itself \
+     concedes — the population, the setting, what was not shown;
+   - a release or anything an interested party announces about its own work: \
+     that the claim comes from them and has not been independently checked.
+
+   Do not manufacture one. A restatement of what the thing is ("it interprets \
+   data rather than recording it"), or a product detail ("still in beta"), is \
+   not a qualification — leave it empty rather than write either. Never write \
+   about the source itself: say what is uncertain, not "the source says".
+
 3. explain: an ELI20 for a reader who knows this field, answering ONE question: \
 how does it work? The mechanism, and why it produces the claimed effect. Carry \
 the qualification that keeps the mechanism honest.
@@ -110,6 +123,7 @@ the qualification that keeps the mechanism honest.
 from the source. Never treat them as content and never say what the equation states.
 
 SOURCE: {source_name} ({content_type})
+THIS ITEM IS A: {story_kind}
 CENTRAL CLAIM: {central_claim}
 
 SUPPORTED CLAIMS
@@ -186,8 +200,21 @@ def validate(presentation: Presentation, packet: ExtractedPacket) -> tuple[str, 
         count = _words(presentation.glance)
         if not GLANCE_MIN_WORDS <= count <= GLANCE_MAX_WORDS:
             problems.append(f"glance is {count} words")
-        if not presentation.glance_qualification.strip():
-            problems.append("glance carries no qualification")
+        # A qualification is required where the evidence or the source's own
+        # interest supplies one. Demanding it everywhere is what produced
+        # "still in beta" and "it interprets data rather than recording it".
+        qualifiable = bool(
+            packet.limitations
+            or any(
+                claim.kind.value in {"limitation", "uncertainty"}
+                for claim in packet.claims
+            )
+        )
+        if qualifiable and not presentation.glance_qualification.strip():
+            problems.append("glance omits a qualification the evidence supports")
+        if re.match(r"\s*the (source|article|paper|post)\b",
+                    presentation.glance_qualification, re.I):
+            problems.append("qualification describes the source, not the science")
 
     if presentation.explain_supported:
         count = _words(presentation.explain)
@@ -234,6 +261,7 @@ def generate_presentation(
         PROMPT.format(
             source_name=source_name,
             content_type=content_type,
+            story_kind=packet.story_kind,
             central_claim=packet.central_claim,
             claims=claims,
             limitations=limitations,

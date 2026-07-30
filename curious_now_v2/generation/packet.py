@@ -6,7 +6,7 @@ from typing import Any
 from curious_now_v2.core.enums import ClaimKind
 from curious_now_v2.generation.client import Completion, Generator
 
-PROMPT_VERSION = "packet-v1"
+PROMPT_VERSION = "packet-v2"
 
 # Extraction, deliberately: asking which claims the source supports is a task a
 # model does well, where asking whether it feels able to explain something is
@@ -15,8 +15,25 @@ PROMPT_VERSION = "packet-v1"
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["central_claim", "claims", "limitations", "prerequisites"],
+    "required": [
+        "story_kind",
+        "central_claim",
+        "claims",
+        "limitations",
+        "prerequisites",
+    ],
     "properties": {
+        "story_kind": {
+            "type": "string",
+            "enum": [
+                "research_result",
+                "release",
+                "correction",
+                "debate",
+                "announcement",
+                "not_science",
+            ],
+        },
         "central_claim": {"type": "string"},
         "limitations": {"type": "array", "items": {"type": "string"}},
         "prerequisites": {"type": "array", "items": {"type": "string"}},
@@ -65,7 +82,24 @@ Rules that matter more than completeness:
   from the source format. Never treat those markers as content, and never
   describe what the equation says.
 
-central_claim is the single thing this development amounts to, in one sentence.
+story_kind is what this item actually is, which decides how it can be written
+about. Judge the item, not the publisher:
+
+  research_result  a study, experiment, analysis, or proof, with findings
+  release          a model, tool, dataset, or product made available, where the
+                   source describes what it is and how it works
+  correction       a retraction, correction, or revised conclusion
+  debate           disagreement between positions over evidence
+  announcement     an event, podcast, funding award, appointment, or programme —
+                   something happening rather than something found or built
+  not_science      marketing, opinion, or general news with no scientific content
+
+Be strict. A company blog post about a product is a release only if it explains
+what the thing does; if it is mainly promotion, it is an announcement. A podcast
+series, a conference, or a grant is an announcement, however scientific the
+subject matter.
+
+central_claim is the single thing this item amounts to, in one sentence.
 prerequisites are concepts a reader would need in order to follow it.
 
 SOURCE: {source_name} ({content_type})
@@ -84,8 +118,24 @@ class ExtractedClaim:
     excerpt: str
 
 
+VALID_KINDS = frozenset(
+    {
+        "research_result",
+        "release",
+        "correction",
+        "debate",
+        "announcement",
+        "not_science",
+    }
+)
+# Kinds that carry a development worth opening. An announcement reports that
+# something happened; the feed is for what was found or built.
+PUBLISHABLE_KINDS = frozenset({"research_result", "release", "correction", "debate"})
+
+
 @dataclass(frozen=True)
 class ExtractedPacket:
+    story_kind: str
     central_claim: str
     claims: tuple[ExtractedClaim, ...]
     limitations: tuple[str, ...]
@@ -99,6 +149,12 @@ class ExtractedPacket:
     @property
     def usable(self) -> bool:
         return bool(self.central_claim.strip() and self.claims)
+
+    @property
+    def worth_publishing(self) -> bool:
+        """Whether this is a development rather than news of one."""
+
+        return self.story_kind in PUBLISHABLE_KINDS
 
 
 def _grounded(claim: dict[str, Any], source_text: str) -> bool:
@@ -156,7 +212,9 @@ def extract_packet(
             )
         )
 
+    story_kind = str(payload.get("story_kind") or "").strip()
     return ExtractedPacket(
+        story_kind=story_kind if story_kind in VALID_KINDS else "not_science",
         central_claim=str(payload.get("central_claim") or "").strip(),
         claims=tuple(claims),
         limitations=tuple(
