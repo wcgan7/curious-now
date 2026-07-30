@@ -13,6 +13,7 @@ from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation import packet as packet_module
 from curious_now_v2.generation import present as present_module
 from curious_now_v2.generation.client import CodexGenerator, Generator
+from curious_now_v2.generation.judge import declined_reason, judge_mechanism
 from curious_now_v2.generation.packet import extract_packet
 from curious_now_v2.generation.present import generate_presentation
 
@@ -38,6 +39,8 @@ class GenerationRunResult:
     declined_explain: int
     withheld_kind: int
     relabelled: int
+    # Explains withdrawn by the judge for listing capabilities, not mechanism.
+    judged_out: int
     invalid: int
     failed: int
     cost_usd: float
@@ -474,6 +477,7 @@ def run_generation(
     engine = generator or CodexGenerator(model=model or CodexGenerator.model)
     now = datetime.now(UTC)
     generated = declined = invalid = failed = withheld = relabelled = 0
+    judged_out = 0
     cost = 0.0
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -541,6 +545,29 @@ def run_generation(
                 failed += 1
                 continue
 
+            if presentation.explain_supported and presentation.explain.strip():
+                # A third call, and the cheapest of the three: it reads the
+                # Explain alone, not the source. The writer decides whether the
+                # evidence carries a mechanism and, asked to write, tends to
+                # find that it does.
+                judgement = judge_mechanism(
+                    engine,
+                    title=presentation.display_title or story.title,
+                    source_name=story.source_name,
+                    explain=presentation.explain,
+                )
+                cost += judgement.completion.usage.cost(engine.model)
+                if not judgement.explains:
+                    presentation = present_module.Presentation(
+                        **{
+                            **presentation.__dict__,
+                            "explain": "",
+                            "explain_supported": False,
+                            "explain_declined_reason": declined_reason(judgement),
+                        }
+                    )
+                    judged_out += 1
+
             _store(
                 connection,
                 story=story,
@@ -573,6 +600,7 @@ def run_generation(
                             "withheld_kind": withheld,
                             "reopened": reopened,
                             "relabelled": relabelled,
+                            "judged_out": judged_out,
                             "invalid": invalid,
                             "failed": failed,
                             "cost_usd": round(cost, 4),
@@ -588,6 +616,7 @@ def run_generation(
         declined_explain=declined,
         withheld_kind=withheld,
         relabelled=relabelled,
+        judged_out=judged_out,
         invalid=invalid,
         failed=failed,
         cost_usd=round(cost, 4),
