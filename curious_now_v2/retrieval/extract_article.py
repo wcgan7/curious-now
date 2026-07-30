@@ -25,6 +25,20 @@ _TRAILING_HEADINGS = re.compile(
 # Blocks that carry no prose.
 _SKIP_TAGS = frozenset({"graphic", "table", "lb", "comments"})
 
+# Consent and navigation furniture that survives body extraction on some sites
+# and would otherwise be handed to generation as article text.
+_FURNITURE = re.compile(
+    r"accept all cookies|cookie (policy|settings|preferences)"
+    r"|we use cookies|manage (your )?(cookies|preferences)"
+    r"|skip to (main )?content|enable javascript|javascript is disabled"
+    r"|sign up for our newsletter|subscribe to our newsletter",
+    re.I,
+)
+# A client-side redirect page: the body is the notice, not the article.
+_REDIRECT_STUB = re.compile(
+    r"^\s*redirecting( to|\.\.\.)|you should be redirected automatically", re.I
+)
+
 
 def _compact(value: str) -> str:
     return _WHITESPACE.sub(" ", value).strip()
@@ -96,7 +110,7 @@ def extract_article(html: str) -> Document:
         if tag in _SKIP_TAGS:
             continue
         text = _element_text(element)
-        if not text:
+        if not text or _FURNITURE.search(text):
             continue
 
         if tag == "head":
@@ -120,6 +134,10 @@ def extract_article(html: str) -> Document:
     warnings: list[str] = []
     if not sections:
         warnings.append("no article prose recovered")
+    elif _REDIRECT_STUB.match(sections[0].text or ""):
+        # The page is a redirect notice; its target is a different URL.
+        sections = []
+        warnings.append("page is a client-side redirect, not an article")
 
     # A real abstract appears as a heading in the body — preprint landing pages
     # carry one. A page's meta description is search-engine copy that repeats

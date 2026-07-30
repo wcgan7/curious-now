@@ -44,6 +44,26 @@ _LETTER_HEADING = re.compile(r"^\s*(?:appendix\s+)?[A-Z][.):]\s+[A-Z]")
 _CAPTION = re.compile(r"^\s*((?:figure|fig\.?|table)\s*\d+)\s*[.:]\s+(\S.*)", re.I)
 # Hyphen at a line break, but not a real compound.
 _LINE_HYPHEN = re.compile(r"(\w)-\n(\w)")
+# Symbol-font math extracts one character per token, so a subscripted
+# expression lands mid-paragraph as "k i k i" or "e r c". Prose does not run
+# three bare letters together — "a" and "I" are the only single-letter English
+# words — so such a run is mangled notation, and passing it on would hand
+# generation something that looks like mathematics and states nothing.
+_GLYPH_RUN = re.compile(r"(?<![\w-])((?:[a-z] ){2,}[a-z])(?![\w-])", re.I)
+# "a" and "I" are the only single-letter English words, so a run carrying two
+# or more letters that are neither is notation rather than prose. Excluding "i"
+# from the pattern outright would miss the commonest case of all, since maths
+# indexes with i, j and k.
+_REAL_SINGLE_WORDS = frozenset("ai")
+
+
+def _strip_glyph_runs(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        letters = match.group(1).split()
+        notation = sum(1 for c in letters if c.casefold() not in _REAL_SINGLE_WORDS)
+        return "[expression]" if notation >= 2 else match.group(0)
+
+    return _GLYPH_RUN.sub(replace, text)
 _PAGE_NUMBER = re.compile(r"^\s*\d{1,3}\s*$")
 _ARXIV_STAMP = re.compile(r"^\s*arxiv:\s*\d", re.I)
 # Preprint servers stamp every page with licence and status furniture.
@@ -64,6 +84,17 @@ _TITLE_LABEL = re.compile(
     r"|brief communication|perspective|editorial|letter|article)\s+(?=\S)",
     re.I,
 )
+
+# Math set in a PDF's symbol fonts extracts as single characters — an equation
+# becomes "e e e e e e f f f f f f". Keeping it would hand generation something
+# that looks like mathematics and says nothing.
+def _is_glyph_soup(text: str) -> bool:
+    tokens = text.split()
+    if len(tokens) < 6:
+        return False
+    singles = sum(1 for token in tokens if len(token) == 1)
+    return singles / len(tokens) > 0.5
+
 
 MAX_PAGES = 60
 
@@ -102,7 +133,9 @@ def _reflow(text: str) -> str:
     """Rejoin lines broken by layout, keeping real compounds intact."""
 
     text = _LINE_HYPHEN.sub(r"\1\2", text)
-    return _compact(text)
+    # After whitespace is normalised, not before: the letters of a mangled
+    # expression arrive separated by newlines, which the run pattern would miss.
+    return _strip_glyph_runs(_compact(text))
 
 
 def _collect_blocks(document: fitz.Document) -> list[_Block]:
@@ -132,6 +165,7 @@ def _collect_blocks(document: fitz.Document) -> list[_Block]:
                 or _PAGE_NUMBER.match(text)
                 or _ARXIV_STAMP.match(text)
                 or _STAMP.search(text[:160])
+                or _is_glyph_soup(text)
             ):
                 continue
             sizes = Counter(round(span["size"], 1) for span in spans)

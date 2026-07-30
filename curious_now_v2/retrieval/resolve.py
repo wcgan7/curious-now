@@ -247,6 +247,13 @@ def resolve_item_text(
         if assessment.verdict is TextVerdict.SOFT_PAYWALL:
             outcomes.append(f"{candidate.source}: soft paywall")
             continue
+        if assessment.verdict is TextVerdict.TOO_SHORT:
+            # A redirect stub or a stripped page. Storing it as ok would let a
+            # status of "ok" mean text nothing can be grounded on.
+            outcomes.append(
+                f"{candidate.source}: too short ({assessment.words} words)"
+            )
+            continue
 
         entry = score_document(document, source=candidate.source)
         licences[candidate.source] = candidate.licence
