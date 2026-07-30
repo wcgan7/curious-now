@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 """Compare candidate models on the job this product actually needs.
 
-Generates a Glance and an Explain for real stories from the corpus, through
-`codex exec`, and reports speed, cost, and how well each result obeys the
-presentation contract.
+Runs the real generation pipeline — evidence packet, then presentation — over
+stories from the corpus, and reports speed, cost, and how each model fares
+against the contract the pipeline already enforces.
 
-    python scripts/v2_generation_eval.py --models gpt-5.6-luna,gpt-5.6-terra
+    PYTHONPATH=. python scripts/v2_generation_eval.py --models gpt-5.6-luna,gpt-5.6-terra
 
 A generic benchmark cannot answer the question that matters here: whether a
-model explains grounded in the evidence it was given, and declines when the
-evidence will not carry the layer. Both are measured against real retrieved
-text, including a deliberately thin case where declining is the right answer.
+model classifies what an item is, explains grounded in the evidence it was
+given, and declines when the evidence will not carry the layer. All three are
+measured against real retrieved text, including a deliberately thin case where
+declining is the right answer.
+
+The prompts and checks come from `curious_now_v2.generation`, deliberately. An
+eval with its own copy of the prompt measures a pipeline nobody ships.
 """
 
 from __future__ import annotations
@@ -18,94 +22,18 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from curious_now_v2.generation.client import CodexGenerator
+from curious_now_v2.generation.packet import ExtractedPacket, extract_packet
+from curious_now_v2.generation.present import Presentation, generate_presentation
+
 SCRATCH = Path(__file__).parents[1] / ".eval"
-SCHEMA_PATH = SCRATCH / "schema.json"
 
-# Asking for both layers in one call mirrors how the contract allows Title and
-# Glance to be produced together, and keeps the comparison to one variable.
-OUTPUT_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["display_title", "glance", "explain"],
-    "properties": {
-        "display_title": {"type": "string"},
-        "glance": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["text", "qualification", "supported"],
-            "properties": {
-                "text": {"type": "string"},
-                "qualification": {"type": "string"},
-                "supported": {"type": "boolean"},
-            },
-        },
-        "explain": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["text", "mechanism_supported", "declined_reason"],
-            "properties": {
-                "text": {"type": "string"},
-                "mechanism_supported": {"type": "boolean"},
-                "declined_reason": {"type": "string"},
-            },
-        },
-    },
-}
-
-PROMPT = """You are writing for Curious Now, a calm feed of science worth \
-understanding. Work ONLY from the SOURCE TEXT below. Do not use outside \
-knowledge, and do not state anything the source does not support.
-
-Produce three things.
-
-1. display_title: 6-14 words, plain language, describing the actual \
-development. No hype words, no unsupported superlatives, no manufactured \
-question. Attribute the claim if it comes only from an interested party.
-
-2. glance: for someone curious but with no background in this field at all — \
-imagine explaining it to a sharp friend who works in something else. Say what \
-happened, give them one clear mental model for it, and say why it might matter. \
-Put the single most interpretation-changing caveat in `qualification`.
-
-   Carry FEW ideas, not many stated briefly. Any term your reader would not \
-   know must be explained right there or replaced with ordinary language: \
-   never write "a sum of five abelian line bundles on a Calabi-Yau threefold" \
-   and move on. A Glance that reads like a compressed abstract has failed even \
-   if every word is true. Around 30-60 seconds of reading. If the source \
-   cannot support even this, set `supported` to false.
-
-3. explain: an ELI20 for a reader who knows this field, answering ONE \
-question: how does it work? Explain the mechanism and why it produces the \
-claimed effect. Carry the qualification that keeps the mechanism honest. Bring \
-in evidence or comparison only where the mechanism needs them to make sense.
-
-   Write the explanation, not a length. Stop as soon as the mechanism is \
-   clear — 300 words that land are better than 500 that pad. Never exceed 500 \
-   words, and never restate Glance at greater length.
-
-   If the source does not describe a mechanism, set mechanism_supported to \
-   false, put the reason in declined_reason, and leave explain.text empty. \
-   Declining is a correct answer and is preferred over writing something the \
-   source does not support.
-
-SOURCE: {source_name} ({content_type})
-TITLE: {title}
-
-SOURCE TEXT:
-{full_text}
-"""
-
-
-# Published per-million rates, July 2026. Cached input bills at a fraction of
-# the fresh rate, so it is tracked separately: token totals alone say nothing
-# about cost when the tiers are priced 2.5x apart.
-# The shapes the contract treats differently: a dense paper, a lab release
-# with no mechanism, ordinary journalism, and evidence too thin to explain.
+# The shapes the contract treats differently: a dense paper, a lab release with
+# no mechanism, ordinary journalism, and evidence too thin to explain.
 DEFAULT_SOURCES = [
     "arXiv AI",
     "Google DeepMind",
@@ -113,105 +41,34 @@ DEFAULT_SOURCES = [
     "medRxiv",
 ]
 
-PRICING = {
-    "gpt-5.6-sol": {"input": 5.00, "output": 30.00},
-    "gpt-5.6-terra": {"input": 2.50, "output": 15.00},
-    "gpt-5.6-luna": {"input": 1.00, "output": 6.00},
-}
-CACHED_INPUT_DISCOUNT = 0.10
-
-
-@dataclass
-class Usage:
-    input_tokens: int = 0
-    cached_input_tokens: int = 0
-    output_tokens: int = 0
-    reasoning_tokens: int = 0
-
-    @property
-    def total(self) -> int:
-        return self.input_tokens + self.output_tokens
-
-    def cost(self, model: str) -> float:
-        rates = PRICING.get(model)
-        if not rates:
-            return 0.0
-        fresh = max(self.input_tokens - self.cached_input_tokens, 0)
-        return (
-            fresh * rates["input"]
-            + self.cached_input_tokens * rates["input"] * CACHED_INPUT_DISCOUNT
-            + self.output_tokens * rates["output"]
-        ) / 1_000_000
-
 
 @dataclass
 class Result:
     model: str
     story: str
     seconds: float
-    tokens: int
-    payload: dict[str, object] | None
+    cost: float
+    packet: ExtractedPacket | None = None
+    presentation: Presentation | None = None
     error: str | None = None
     checks: dict[str, bool] = field(default_factory=dict)
-    usage: Usage = field(default_factory=Usage)
     separation: dict[str, float] = field(default_factory=dict)
 
-
-def run_model(model: str, effort: str, prompt: str, tag: str) -> Result:
-    SCRATCH.mkdir(exist_ok=True)
-    out = SCRATCH / f"{tag}.json"
-    started = time.monotonic()
-    try:
-        completed = subprocess.run(
-            [
-                "codex", "exec",
-                "-m", model,
-                "-c", f'model_reasoning_effort="{effort}"',
-                "--sandbox", "read-only",
-                "--ephemeral",
-                "--skip-git-repo-check",
-                "--output-schema", str(SCHEMA_PATH),
-                "-o", str(out),
-                "--json",
-                "-",
-            ],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=900,
-        )
-    except subprocess.TimeoutExpired:
-        return Result(model, tag, time.monotonic() - started, 0, None, "timed out")
-
-    seconds = time.monotonic() - started
-
-    usage = Usage()
-    for line in completed.stdout.splitlines():
-        try:
-            event = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(event, dict) or "usage" not in event:
-            continue
-        raw = event["usage"]
-        usage = Usage(
-            input_tokens=int(raw.get("input_tokens", 0)),
-            cached_input_tokens=int(raw.get("cached_input_tokens", 0)),
-            output_tokens=int(raw.get("output_tokens", 0)),
-            reasoning_tokens=int(raw.get("reasoning_output_tokens", 0)),
+    @property
+    def tokens(self) -> tuple[int, int]:
+        stages = [
+            stage.completion.usage
+            for stage in (self.packet, self.presentation)
+            if stage is not None
+        ]
+        return (
+            sum(usage.input_tokens for usage in stages),
+            sum(usage.output_tokens for usage in stages),
         )
 
-    if not out.exists():
-        return Result(model, tag, seconds, usage.total, None, "no output written", usage=usage)
-    try:
-        payload = json.loads(out.read_text())
-    except ValueError as exc:
-        return Result(model, tag, seconds, usage.total, None, f"unparseable: {exc}", usage=usage)
-    return Result(model, tag, seconds, usage.total, payload, usage=usage)
 
-
-def words(value: object) -> int:
-    return len(str(value or "").split())
+def words(value: str) -> int:
+    return len(value.split())
 
 
 _STOPWORDS = frozenset(
@@ -256,40 +113,75 @@ def ladder_separation(glance: str, explain: str) -> dict[str, float]:
     }
 
 
-def check(result: Result, *, expect_mechanism: bool) -> None:
-    """Score one result against the parts of the contract a machine can judge."""
+def run_story(
+    model: str, effort: str, story: dict[str, str], *, expect_mechanism: bool
+) -> Result:
+    """Put one story through both stages, exactly as the pipeline does."""
 
-    payload = result.payload
-    if not payload:
-        return
-    glance = payload.get("glance") or {}
-    explain = payload.get("explain") or {}
-    title = str(payload.get("display_title") or "")
+    generator = CodexGenerator(model=model, effort=effort)
+    started = time.monotonic()
+    tag = story["source_name"]
 
-    hype = ("breakthrough", "revolutionary", "game-chang", "groundbreaking")
-    result.checks = {
-        "title_length_ok": 5 <= len(title.split()) <= 16,
-        "title_no_hype": not any(word in title.casefold() for word in hype),
-        "glance_length_ok": 80 <= words(glance.get("text")) <= 260,
-        "glance_has_qualification": bool(str(glance.get("qualification") or "").strip()),
-        "explain_declined_or_written": (
-            bool(explain.get("mechanism_supported"))
-            != bool(str(explain.get("declined_reason") or "").strip())
-        ),
-    }
-    if explain.get("mechanism_supported"):
-        separation = ladder_separation(
-            str(glance.get("text") or ""), str(explain.get("text") or "")
+    packet = extract_packet(
+        generator,
+        source_name=story["source_name"],
+        content_type=story["content_type"],
+        title=story["title"],
+        text=story["full_text"],
+    )
+    cost = packet.completion.usage.cost(model)
+    if not packet.completion.ok:
+        return Result(
+            model, tag, time.monotonic() - started, cost,
+            packet=packet, error=packet.completion.error,
         )
-        result.separation = separation
-        if separation:
+
+    result = Result(model, tag, 0.0, cost, packet=packet)
+    result.checks["packet_usable"] = packet.usable
+    # Every claim carries a verbatim excerpt or it is dropped in extraction, so
+    # a model that invents evidence shows up as claims lost, not as claims kept.
+    result.checks["packet_kept_claims"] = len(packet.claims) >= 3
+
+    if not packet.usable:
+        result.seconds = time.monotonic() - started
+        return result
+
+    if not packet.worth_publishing:
+        # Withholding is a real outcome, not a failure: the pipeline stops here
+        # and never spends a second call. Whether it was right is a judgement
+        # for the reader of this report.
+        result.checks["withheld_before_second_call"] = True
+        result.seconds = time.monotonic() - started
+        return result
+
+    presentation = generate_presentation(
+        generator,
+        packet,
+        source_name=story["source_name"],
+        content_type=story["content_type"],
+        text=story["full_text"],
+    )
+    result.presentation = presentation
+    result.cost = cost + presentation.completion.usage.cost(model)
+    result.seconds = time.monotonic() - started
+    if not presentation.completion.ok:
+        result.error = presentation.completion.error
+        return result
+
+    # The validator the pipeline runs is the check that matters; anything it
+    # rejects would never reach a reader.
+    result.checks["contract_clean"] = not presentation.violations
+
+    if presentation.explain_supported:
+        result.separation = ladder_separation(presentation.glance, presentation.explain)
+        if result.separation:
             # Explain must go deeper, not longer: no lifted sentences, and a
             # majority of its vocabulary should be new.
             result.checks["explain_reuses_no_glance_sentences"] = (
-                separation["verbatim_sentences_reused"] == 0
+                result.separation["verbatim_sentences_reused"] == 0
             )
             result.checks["explain_adds_new_vocabulary"] = (
-                separation["new_vocabulary_ratio"] >= 0.5
+                result.separation["new_vocabulary_ratio"] >= 0.5
             )
 
     if expect_mechanism:
@@ -297,20 +189,15 @@ def check(result: Result, *, expect_mechanism: bool) -> None:
         # model can see whether the text describes a mechanism. A funding
         # announcement clears the word count and still has nothing to explain,
         # so a reasoned decline is a correct answer here, not a failure.
-        if explain.get("mechanism_supported"):
-            # A ceiling, not a range: an Explain is not worse for being short.
-            result.checks["explain_within_ceiling"] = (
-                80 <= words(explain.get("text")) <= 520
-            )
-        else:
+        if not presentation.explain_supported:
             result.checks["explain_declined_with_reason"] = (
-                len(str(explain.get("declined_reason") or "").split()) >= 8
+                len(presentation.explain_declined_reason.split()) >= 8
             )
     else:
         # The thin case: the right answer is to decline, not to write anyway.
-        result.checks["declined_thin_evidence"] = not explain.get(
-            "mechanism_supported"
-        )
+        result.checks["declined_thin_evidence"] = not presentation.explain_supported
+
+    return result
 
 
 def main() -> int:
@@ -323,20 +210,12 @@ def main() -> int:
         default="",
         help="pipe-separated source names to evaluate, in order",
     )
-    parser.add_argument(
-        "--input",
-        type=Path,
-        default=Path("/tmp/claude-1000/-home-gan-Documents-curious-now")
-        / "27ad0ebc-321f-4577-a3e7-0f6a86854dd3/scratchpad/eval_stories.json",
-    )
+    parser.add_argument("--input", type=Path, required=True,
+                        help="JSON array of stories captured from the corpus")
     args = parser.parse_args()
 
     SCRATCH.mkdir(exist_ok=True)
-    SCHEMA_PATH.write_text(json.dumps(OUTPUT_SCHEMA))
-
     corpus = json.loads(args.input.read_text())
-    # Cover the shapes the contract treats differently: a dense paper, a lab
-    # release, ordinary journalism, and something too thin to explain.
     wanted = args.sources.split("|") if args.sources else DEFAULT_SOURCES
     chosen = [
         story
@@ -344,49 +223,52 @@ def main() -> int:
         for story in corpus
         if story["source_name"] == name
     ]
+    if not chosen:
+        raise SystemExit(f"no stories matched {wanted}")
 
     results: list[Result] = []
     for model in args.models.split(","):
         for story in chosen:
-            expect = "explain" in story["supported_depths"]
-            tag = f"{model}-{story['source_name'].replace(' ', '_')}"
-            prompt = PROMPT.format(
-                source_name=story["source_name"],
-                content_type=story["content_type"],
-                title=story["title"],
-                full_text=story["full_text"],
+            print(f"  running {model} / {story['source_name']} ...", flush=True)
+            results.append(
+                run_story(
+                    model,
+                    args.effort,
+                    story,
+                    expect_mechanism="explain" in story["supported_depths"],
+                )
             )
-            print(f"  running {tag} ...", flush=True)
-            result = run_model(model, args.effort, prompt, tag)
-            check(result, expect_mechanism=expect)
-            results.append(result)
 
     print(
-        f"\n{'model':16s} {'story':22s} {'sec':>6s} {'in':>7s} {'out':>6s} "
-        f"{'US$':>8s}  checks"
+        f"\n{'model':16s} {'story':22s} {'kind':16s} {'sec':>6s} {'in':>7s} "
+        f"{'out':>6s} {'US$':>8s}  checks"
     )
     for result in results:
         passed = sum(1 for value in result.checks.values() if value)
-        total = len(result.checks)
         failed = [name for name, value in result.checks.items() if not value]
-        note = result.error or (f"{passed}/{total}" + (f"  FAILED: {', '.join(failed)}" if failed else ""))
+        note = result.error or (
+            f"{passed}/{len(result.checks)}"
+            + (f"  FAILED: {', '.join(failed)}" if failed else "")
+        )
+        if result.presentation and result.presentation.violations:
+            note += f"  [{'; '.join(result.presentation.violations)}]"
+        incoming, outgoing = result.tokens
         print(
-            f"{result.model:16s} {result.story.split('-', 2)[-1][:22]:22s} "
-            f"{result.seconds:6.1f} {result.usage.input_tokens:7,d} "
-            f"{result.usage.output_tokens:6,d} "
-            f"{result.usage.cost(result.model):8.4f}  {note}"
+            f"{result.model:16s} {result.story[:22]:22s} "
+            f"{(result.packet.story_kind if result.packet else '-'):16s} "
+            f"{result.seconds:6.1f} {incoming:7,d} {outgoing:6,d} "
+            f"{result.cost:8.4f}  {note}"
         )
 
     for model in args.models.split(","):
-        rows = [r for r in results if r.model == model and r.payload]
+        rows = [r for r in results if r.model == model]
         if not rows:
             continue
-        total_cost = sum(r.usage.cost(model) for r in rows)
+        cost = sum(r.cost for r in rows)
         print(
-            f"\n{model}: mean {sum(r.seconds for r in rows)/len(rows):.1f}s, "
-            f"mean {sum(r.tokens for r in rows)//len(rows):,} tokens, "
-            f"US${total_cost/len(rows):.4f}/story "
-            f"(US${total_cost/len(rows)*2000:.2f} per 2,000 stories), "
+            f"\n{model}: mean {sum(r.seconds for r in rows) / len(rows):.1f}s, "
+            f"US${cost / len(rows):.4f}/story "
+            f"(US${cost / len(rows) * 2000:.2f} per 2,000 stories), "
             f"{sum(sum(1 for v in r.checks.values() if v) for r in rows)}"
             f"/{sum(len(r.checks) for r in rows)} checks passed"
         )
@@ -398,16 +280,24 @@ def main() -> int:
                     "model": r.model,
                     "story": r.story,
                     "seconds": round(r.seconds, 2),
-                    "tokens": r.tokens,
-                    "input_tokens": r.usage.input_tokens,
-                    "cached_input_tokens": r.usage.cached_input_tokens,
-                    "output_tokens": r.usage.output_tokens,
-                    "reasoning_tokens": r.usage.reasoning_tokens,
-                    "cost_usd": round(r.usage.cost(r.model), 5),
+                    "cost_usd": round(r.cost, 5),
+                    "story_kind": r.packet.story_kind if r.packet else None,
                     "checks": r.checks,
                     "separation": r.separation,
+                    "violations": (
+                        list(r.presentation.violations) if r.presentation else []
+                    ),
                     "error": r.error,
-                    "payload": r.payload,
+                    "display_title": (
+                        r.presentation.display_title if r.presentation else None
+                    ),
+                    "glance": r.presentation.glance if r.presentation else None,
+                    "qualification_span": (
+                        r.presentation.glance_qualification_span
+                        if r.presentation
+                        else None
+                    ),
+                    "explain": r.presentation.explain if r.presentation else None,
                 }
                 for r in results
             ],
