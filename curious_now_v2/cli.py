@@ -231,8 +231,8 @@ def main() -> None:
         )
         print(  # noqa: T201
             f"gated {gate_result.evaluated} stories: "
-            f"{gate_result.published} publishable, "
-            f"{gate_result.withheld} withheld"
+            f"{gate_result.eligible} eligible, "
+            f"{gate_result.ineligible} ineligible"
             + (f" ({depths})" if depths else "")
         )
         return

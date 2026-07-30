@@ -24,8 +24,12 @@ PRIMARY_TYPES = frozenset(
 @dataclass(frozen=True)
 class GateRunResult:
     evaluated: int
-    published: int
-    withheld: int
+    # Eligible, not published. The gate decides what the text can support;
+    # whether a reader is offered it depends on a presentation existing, which
+    # is generation's call. Calling this `published` described what the gate
+    # used to do, which is how a feed of 295 stories came to hold 8 explanations.
+    eligible: int
+    ineligible: int
     by_depth: dict[str, int]
 
 
@@ -117,19 +121,16 @@ def _store_gate(
               supported_depths = %s,
               publication_reasons = %s,
               gated_at = %s,
-              published_at = CASE
-                WHEN %s AND published_at IS NULL THEN now()
-                ELSE published_at
-              END,
+              -- published_at is not set here either: it marks when a reader
+              -- could first open the story, which is when generation published
+              -- it, not when the gate found the text long enough.
               updated_at = now()
             WHERE id = %s;
             """,
             (
-                gate.publishable,
                 [depth.value for depth in gate.supported_depths],
                 Jsonb(list(gate.reasons[:10])),
                 now,
-                gate.publishable,
                 story_id,
             ),
         )
@@ -148,7 +149,7 @@ def run_publication_gate(
     """
 
     now = datetime.now(UTC)
-    published = 0
+    eligible = 0
     by_depth: dict[str, int] = {}
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -170,7 +171,7 @@ def run_publication_gate(
             gate = gate_story(tuple(items))
             _store_gate(connection, story_id=story_id, gate=gate, now=now)
             if gate.publishable:
-                published += 1
+                eligible += 1
                 for depth in gate.supported_depths:
                     by_depth[depth.value] = by_depth.get(depth.value, 0) + 1
 
@@ -187,8 +188,8 @@ def run_publication_gate(
                     Jsonb(
                         {
                             "evaluated": len(stories),
-                            "published": published,
-                            "withheld": len(stories) - published,
+                            "eligible": eligible,
+                            "ineligible": len(stories) - eligible,
                             **by_depth,
                         }
                     ),
@@ -198,7 +199,7 @@ def run_publication_gate(
 
     return GateRunResult(
         evaluated=len(stories),
-        published=published,
-        withheld=len(stories) - published,
+        eligible=eligible,
+        ineligible=len(stories) - eligible,
         by_depth=by_depth,
     )

@@ -8,7 +8,7 @@ from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation.client import Completion, Generator
 from curious_now_v2.generation.packet import ExtractedPacket
 
-PROMPT_VERSION = "present-v5"
+PROMPT_VERSION = "present-v6"
 
 # Prohibited by the title contract, and cheap to check.
 HYPE = (
@@ -157,9 +157,19 @@ sharp friend who works in something else.
 how does it work? The mechanism, and why it produces the claimed effect. Carry \
 the qualification that keeps the mechanism honest.
 
+   Explain is read on its own. It is not the next section after Glance — it is \
+   the other way in, chosen by a reader who knows the field and may never see \
+   Glance at all. So say what the thing is before you say how it works. Do not \
+   open on a reference back: "The test hinges on...", "The mechanism begins \
+   with...", "The reported gap comes from..." each assume a paragraph the \
+   reader may not have read. Name the subject in your first sentence.
+
+   Standing alone is not repeating. What Explain must never do is reuse \
+   Glance's sentences or stay at Glance's level; re-establishing its own \
+   subject in a clause is not that, and costs almost nothing.
+
    Write the explanation, not a length. Stop when the mechanism is clear — 300 \
-   words that land beat 500 that pad. Never exceed 500 words. Never restate \
-   Glance at greater length.
+   words that land beat 500 that pad. Never exceed 500 words.
 
    A mechanism says how something works. A list of what something can do is \
    not a mechanism, however long: "it fetches information when needed", "it \

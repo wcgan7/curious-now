@@ -105,6 +105,13 @@ Glance and Explain are alternative orientation paths. A reader MAY use either or
 both. Technical is a progressive deep dive after orientation, not the normal
 entry point from the feed.
 
+Because they are alternatives, each MUST read on its own. Explain in particular
+MUST NOT open on a reference back to Glance — "the test hinges on", "the
+mechanism begins with", "the reported gap comes from" all assume a paragraph its
+reader may have skipped, and a reader who chose Explain often did. Naming its own
+subject is not the restatement the ladder prohibits: what Explain must not do is
+reuse Glance's sentences or stay at Glance's level.
+
 ## Title contract
 
 ### Target

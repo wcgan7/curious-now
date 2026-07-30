@@ -155,7 +155,12 @@ def _withhold(
             """
             UPDATE stories SET
               status = 'draft',
-              supported_depths = '{}',
+              -- supported_depths is deliberately untouched. It records what the
+              -- text can carry, which the gate computes and withholding does
+              -- not change: a podcast episode we decline to explain still has
+              -- whatever prose it always had. Clearing it made a reopened story
+              -- invisible to the generation queue, so reconsidering a taxonomy
+              -- decision silently did nothing until the gate happened to run.
               withheld_kind = %s,
               withheld_by = %s,
               publication_reasons = %s,
