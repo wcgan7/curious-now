@@ -83,33 +83,70 @@ def test_a_label_is_matched_past_punctuation_and_case() -> None:
     assert validate(make_technical(citations=(Citation("figure 4:", "x"),)), STRUCTURE) == ()
 
 
-def test_headings_must_follow_the_contract_order() -> None:
-    """The sequence is the argument: approach before evidence before limits."""
+def test_a_walkthrough_may_use_the_headings_the_work_calls_for() -> None:
+    """A proof has a proof strategy; a device has a fabrication process.
+
+    The contract's list is a default, not a vocabulary. Enforcing it would cost
+    a paper of another shape its entire Technical layer over a label.
+    """
 
     problems = validate(
         make_technical(
             sections=(
-                TechnicalSection("Results", BODY),
+                TechnicalSection("Setting and notation", BODY),
+                TechnicalSection("Proof strategy", BODY),
+                TechnicalSection("Where the bound is tight", BODY),
+                TechnicalSection("What remains open", BODY),
+            )
+        ),
+        STRUCTURE,
+    )
+    assert problems == ()
+
+
+def test_a_heading_must_still_be_a_heading() -> None:
+    """It is the reader's map through several thousand words."""
+
+    problems = validate(
+        make_technical(
+            sections=(
+                TechnicalSection("Orientation", BODY),
+                TechnicalSection(
+                    "In this section we describe at some length the manner in "
+                    "which the authors approached the problem",
+                    BODY,
+                ),
+            )
+        ),
+        STRUCTURE,
+    )
+    assert any("not a heading" in problem for problem in problems)
+
+
+def test_rejects_a_missing_heading() -> None:
+    problems = validate(
+        make_technical(
+            sections=(
+                TechnicalSection("Orientation", BODY),
+                TechnicalSection("", BODY),
+            )
+        ),
+        STRUCTURE,
+    )
+    assert any("no heading" in problem for problem in problems)
+
+
+def test_rejects_the_same_heading_twice() -> None:
+    problems = validate(
+        make_technical(
+            sections=(
                 TechnicalSection("Approach", BODY),
-                TechnicalSection("Orientation", BODY),
+                TechnicalSection("approach", BODY),
             )
         ),
         STRUCTURE,
     )
-    assert any("out of contract order" in problem for problem in problems)
-
-
-def test_rejects_a_heading_the_contract_does_not_name() -> None:
-    problems = validate(
-        make_technical(
-            sections=(
-                TechnicalSection("Orientation", BODY),
-                TechnicalSection("My Own Heading", BODY),
-            )
-        ),
-        STRUCTURE,
-    )
-    assert any("unknown heading" in problem for problem in problems)
+    assert any("appears twice" in problem for problem in problems)
 
 
 def test_rejects_unrecovered_maths_reaching_the_reader() -> None:

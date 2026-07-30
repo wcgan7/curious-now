@@ -310,9 +310,17 @@ A paper title and abstract alone are normally insufficient.
 - Targets approximately 8–15 minutes of reading.
 - Remains navigable by a capable reader outside the paper’s narrow specialty.
 
-### Required structure
+### Structure
 
-Technical SHOULD use a predictable structure:
+Technical MUST take the reader through a progression: orient them, say what was
+done, show what it rests on, give what was found, and be clear about what it
+does not settle. That order is the argument, and a walkthrough that reports
+results before saying what was done has summarised rather than inspected.
+
+The headings are the writer's to choose, and SHOULD be the ones the work itself
+calls for — a proof has a proof strategy, a cohort study has a cohort, a
+fabricated device has a fabrication process. This shape is a good default where
+nothing better suggests itself:
 
 1. **Orientation** — the central intuition in one compact paragraph;
 2. **Problem formulation** — what is being solved or tested;
@@ -321,8 +329,15 @@ Technical SHOULD use a predictable structure:
 5. **Results** — quantitative findings with context;
 6. **Ablations or alternatives** — what supports the claimed mechanism;
 7. **Limitations** — scope, assumptions, missing comparisons, and uncertainty;
-8. **Relation to prior work** — only when supported by bibliographic evidence;
-9. **Prerequisites** — reusable concept links needed to follow the walkthrough.
+8. **Relation to prior work** — only when supported by bibliographic evidence.
+
+**Prerequisites** — the concepts a reader needs in order to follow the
+walkthrough — are recorded alongside it rather than written as a section.
+
+A required heading list would be a paper-shaped template imposed on work that is
+not all paper-shaped, and enforcing one costs a walkthrough its whole layer over
+a label. What is checked instead is that a heading is a heading: present, short,
+and not repeated.
 
 Equations, algorithms, and detailed numbers SHOULD appear only when they improve
 understanding of the claim.

@@ -518,6 +518,10 @@ class _Outcome:
     technical_declined: int = 0
     invalid: int = 0
     failed: int = 0
+    # Why it failed. A bare count says a story did not make it and nothing
+    # about whether the model refused, the call timed out, or the text was
+    # unusable — which is the difference between retrying and fixing.
+    reason: str = ""
 
 
 def _present_one(
@@ -545,6 +549,11 @@ def _present_one(
     out.cost += extracted.completion.usage.cost(engine.model)
     if not extracted.usable:
         out.failed = 1
+        out.reason = (
+            f"packet: {extracted.completion.error}"
+            if extracted.completion.error
+            else "packet: no usable claims extracted"
+        )
         return out
 
     if _reconcile_content_type(
@@ -579,6 +588,7 @@ def _present_one(
     out.cost += presentation.completion.usage.cost(engine.model)
     if not presentation.completion.ok:
         out.failed = 1
+        out.reason = f"presentation: {presentation.completion.error}"
         return out
 
     if presentation.explain_supported and presentation.explain.strip():
@@ -699,6 +709,8 @@ def run_generation(
             totals.technical_declined += outcome.technical_declined
             totals.invalid += outcome.invalid
             totals.failed += outcome.failed
+            if outcome.reason:
+                errors.append(f"{story.story_id}: {outcome.reason}")
 
         counters: dict[str, Any] = {
             "attempted": len(pending),

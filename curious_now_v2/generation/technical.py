@@ -24,12 +24,14 @@ from curious_now_v2.generation.client import (
     unescape_newlines,
 )
 
-PROMPT_VERSION = "technical-v1"
+PROMPT_VERSION = "technical-v2"
 
-# The contract's nine roles, in the order a reader inspects them. Any may be
-# omitted where the source cannot support it; none may appear out of order,
-# because the sequence is the argument.
-HEADINGS = (
+# A shape that usually works, offered to the writer and enforced on nobody.
+# The contract says a walkthrough SHOULD be predictable, not that it must use
+# these words: a proof has a proof strategy, a cohort study has a cohort, and a
+# fabricated device has a fabrication process. Requiring these exact eight
+# would have cost such a paper its whole Technical layer over a heading.
+SUGGESTED_HEADINGS = (
     "Orientation",
     "Problem formulation",
     "Approach",
@@ -45,6 +47,11 @@ HEADINGS = (
 # and limitations in under six hundred words has not inspected them.
 MIN_WORDS = 600
 MAX_WORDS = 2500
+
+# A heading names a part; a sentence is not a heading. This is the only shape
+# check left on them, and it exists so the reader's map through several
+# thousand words stays scannable.
+MAX_HEADING_WORDS = 8
 
 _MATH_MARKER = re.compile(r"\[(equation|expression)\]")
 
@@ -97,10 +104,20 @@ itself. The question this layer answers is whether it holds up.
 
 Work ONLY from the SOURCE TEXT. Do not use outside knowledge.
 
-Write 600-2500 words total, split across these headings, in this order, \
-omitting any the source cannot support:
+Write 600-2500 words total under headings of your choosing. Use the headings \
+this work calls for — a proof has a proof strategy, a cohort study has a \
+cohort, a fabricated device has a fabrication process — and keep each to a few \
+words, because they are the reader's map through several thousand.
+
+This shape usually works and is a good default where nothing better suggests \
+itself:
   Orientation, Problem formulation, Approach, Evidence, Results,
   Ablations or alternatives, Limitations, Relation to prior work
+
+What matters is not the labels but the progression: orient the reader, say what \
+was done, show what it rests on, give what was found, and be clear about what \
+it does not settle. However you name them, a reader must be able to find those \
+things, and must meet them in that order — the sequence is the argument.
 
 Remain an intuitive walkthrough, not a compressed paper. The reader knows the \
 field; they do not know this work.
@@ -225,15 +242,16 @@ def validate(technical: Technical, structure: dict[str, Any] | None) -> tuple[st
     if not MIN_WORDS <= count <= MAX_WORDS:
         problems.append(f"technical is {count} words")
 
+    # Headings are the writer's to choose — a proof strategy, a cohort, a
+    # fabrication process — so nothing here checks them against a vocabulary.
+    # What is checked is that they still work as headings.
     headings = [section.heading.strip() for section in technical.sections]
-    unknown = [h for h in headings if h not in HEADINGS]
-    if unknown:
-        problems.append(f"unknown heading: {unknown[0]}")
-    else:
-        order = [HEADINGS.index(h) for h in headings]
-        if order != sorted(order):
-            problems.append("headings are out of contract order")
-    if len(set(headings)) != len(headings):
+    if any(not h for h in headings):
+        problems.append("a section has no heading")
+    over = [h for h in headings if len(h.split()) > MAX_HEADING_WORDS]
+    if over:
+        problems.append(f"heading is a sentence, not a heading: {over[0][:48]}")
+    if len({h.casefold() for h in headings}) != len(headings):
         problems.append("a heading appears twice")
 
     if _MATH_MARKER.search(technical.text):
