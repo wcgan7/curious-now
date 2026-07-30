@@ -247,6 +247,26 @@ reader session.
 - Ranking failure: fall back to reverse chronological order.
 - Read-store failure: show a clear temporary error; do not attempt generation.
 
+### Faults that do not raise
+
+Most of this pipeline's real faults have been silent: text that parsed into
+nonsense, a qualification written to a field nothing rendered, a book review
+labelled peer reviewed. Nothing errored, and each was found by a later consumer
+rather than by the stage that produced it. The checks against that are audits
+over stored data, not assertions in the code path:
+
+| Script | Asks |
+| --- | --- |
+| `v2_extraction_audit.py` | do the extractors still satisfy their invariants on frozen fixtures |
+| `v2_corpus_audit.py` | is the text actually stored sound, and does each path's shape match its peers |
+| `v2_source_audit.py` | does any source claim more than it can support, and is its feed mixed |
+
+`v2_source_audit.py` MUST be run when a source is added. A feed's
+`default_content_type` describes the feed, and a publisher that sends several
+kinds of item down one URL makes that default wrong for most of what arrives —
+which decides a review-status badge, a ranking weight, and whether the item is
+resolved through open-access routes or only its own page.
+
 ## Deployment target
 
 The initial low-cost target is:
