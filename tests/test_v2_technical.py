@@ -296,3 +296,52 @@ def test_a_caption_alone_is_not_a_citation() -> None:
         STRUCTURE,
     )
     assert any("does not have" in problem for problem in problems)
+
+
+SOURCE_TEXT = (
+    "Methods. Stimuli were presented on a calibrated monitor. "
+    "DNA extraction and sequencing library preparation followed a standard "
+    "protocol. Results are shown in Figure 4."
+)
+
+
+def test_a_section_heading_in_the_document_counts_even_if_our_map_missed_it() -> None:
+    """Our capture of headings is uneven; the writer's citation was not wrong.
+
+    eLife's Methods subheadings survive extraction on some articles and not
+    others, and eight of ten eLife walkthroughs were rejected for citing
+    "Stimuli" and "DNA extraction and sequencing library preparation" —
+    headings plainly present in the document we handed the writer.
+    """
+
+    problems = validate(
+        make_technical(
+            citations=(
+                Citation("Stimuli", "how the display was calibrated"),
+                Citation("DNA extraction and sequencing library preparation", "the protocol"),
+            )
+        ),
+        STRUCTURE,
+        SOURCE_TEXT,
+    )
+    assert problems == ()
+
+
+def test_an_invented_figure_is_still_rejected_however_it_appears() -> None:
+    """A fabricated figure number is unfalsifiable to a reader, so it stays strict."""
+
+    problems = validate(
+        make_technical(citations=(Citation("Figure 9", "a curve"),)),
+        STRUCTURE,
+        SOURCE_TEXT + " see Figure 9 of the companion paper",
+    )
+    assert any("does not have" in problem for problem in problems)
+
+
+def test_a_section_heading_absent_from_the_document_is_still_rejected() -> None:
+    problems = validate(
+        make_technical(citations=(Citation("Cryogenic annealing", "x"),)),
+        STRUCTURE,
+        SOURCE_TEXT,
+    )
+    assert any("does not have" in problem for problem in problems)

@@ -24,7 +24,7 @@ from curious_now_v2.generation.client import (
     unescape_newlines,
 )
 
-PROMPT_VERSION = "technical-v5"
+PROMPT_VERSION = "technical-v6"
 
 # A shape that usually works, offered to the writer and enforced on nobody.
 # The contract says a walkthrough SHOULD be predictable, not that it must use
@@ -226,6 +226,16 @@ def known_labels(structure: dict[str, Any] | None) -> frozenset[str]:
     return frozenset(labels)
 
 
+# A float is cited by a number a reader can look for — "Figure 4", "Table 2" —
+# and inventing one is this layer's worst failure because it looks like
+# evidence. A section is cited by its heading, and our own capture of those is
+# uneven: eLife's Methods subheadings survive extraction on some articles and
+# not others, so eight of ten eLife walkthroughs were rejected for citing
+# "Stimuli" and "DNA extraction and sequencing library preparation" — headings
+# plainly present in the document we handed the writer.
+_FLOAT_LABEL = re.compile(r"^\s*(figure|fig\.?|table|tab\.?|scheme|chart)\b", re.I)
+
+
 def _matches(label: str, known: frozenset[str]) -> bool:
     """Whether a cited label names something the document has.
 
@@ -243,7 +253,28 @@ def _matches(label: str, known: frozenset[str]) -> bool:
     )
 
 
-def validate(technical: Technical, structure: dict[str, Any] | None) -> tuple[str, ...]:
+def _cited_something_real(label: str, known: frozenset[str], source_text: str) -> bool:
+    """Whether a citation points at something the document actually contains.
+
+    Strict for floats, because a fabricated figure number is unfalsifiable to a
+    reader and is exactly what this check exists to catch. Tolerant for section
+    headings, where a title present in the document but missing from our map is
+    our extraction's failure and not the writer's invention.
+    """
+
+    if _matches(label, known):
+        return True
+    if _FLOAT_LABEL.match(label):
+        return False
+    heading = " ".join(label.split(LABEL_SEPARATOR, 1)[0].split())
+    return len(heading) >= 4 and heading.casefold() in " ".join(source_text.split()).casefold()
+
+
+def validate(
+    technical: Technical,
+    structure: dict[str, Any] | None,
+    source_text: str = "",
+) -> tuple[str, ...]:
     """Check what a machine can judge about a walkthrough."""
 
     problems: list[str] = []
@@ -278,7 +309,11 @@ def validate(technical: Technical, structure: dict[str, Any] | None) -> tuple[st
     # The layer exists to be checked, so a citation that cannot be checked is
     # the one failure that matters most.
     known = known_labels(structure)
-    invented = [c.label for c in technical.citations if not _matches(c.label, known)]
+    invented = [
+        c.label
+        for c in technical.citations
+        if not _cited_something_real(c.label, known, source_text)
+    ]
     if invented:
         problems.append(
             f"cites {len(invented)} label(s) the document does not have: "
@@ -374,9 +409,11 @@ def generate_technical(
     return Technical(
         **{
             **technical.__dict__,
-            "violations": validate(technical, structure),
+            "violations": validate(technical, structure, full_text),
             "invented_citations": tuple(
-                c.label for c in technical.citations if not _matches(c.label, known)
+                c.label
+                for c in technical.citations
+                if not _cited_something_real(c.label, known, full_text)
             ),
         }
     )
