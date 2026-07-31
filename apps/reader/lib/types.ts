@@ -83,6 +83,8 @@ export interface Claim {
 export interface Explanation {
   depth: ExplanationDepth;
   plainText: string | null;
+  // The same prose with its mathematics typeset, rendered on the server.
+  html: string | null;
   content: Record<string, unknown>;
 }
 

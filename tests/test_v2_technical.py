@@ -250,3 +250,49 @@ def test_a_very_long_caption_cannot_crowd_out_the_document() -> None:
     shown = _labelled({"label": "Figure 2", "caption": "word " * 200})
     assert len(shown) < 330
     assert shown.endswith("...")
+
+
+def test_recovered_mathematics_keeps_its_delimiters() -> None:
+    """Extraction knows where a formula ends; nothing downstream can recover it.
+
+    LaTeXML marks each formula exactly, and splicing its TeX into prose bare
+    left `p\\in(1,2]` after a comma indistinguishable from a typo — to a reader,
+    to the typesetter, and to the model writing about it.
+    """
+
+    from curious_now_v2.retrieval.extract_arxiv import _delimited
+
+    assert _delimited("x^2 + y^2") == r" \(x^2 + y^2\) "
+    assert _delimited("  \\alpha  ") == r" \(\alpha\) "
+    # Already delimited by the source: left exactly as it is.
+    assert _delimited(r"\[E = mc^2\]") == r" \[E = mc^2\] "
+    assert _delimited("$x$") == " $x$ "
+    # Nothing to delimit is a space, not an empty formula.
+    assert _delimited("   ") == " "
+
+
+def test_citing_the_whole_map_line_is_citing_its_label() -> None:
+    """The writer is shown "Figure 4 — what it shows" and may cite it back.
+
+    Adding captions to the structure map changed what the writer sees without
+    changing what the checker accepts, and an entire 8,000-character
+    walkthrough was rejected for citing its four tables correctly.
+    """
+
+    from curious_now_v2.generation.technical import _labelled
+
+    shown = _labelled({"label": "Figure 4", "caption": "Dose-response curves."})
+    problems = validate(
+        make_technical(citations=(Citation(shown, "the curve"),)), STRUCTURE
+    )
+    assert problems == ()
+
+
+def test_a_caption_alone_is_not_a_citation() -> None:
+    """Accepting the line must not become accepting anything that contains a label."""
+
+    problems = validate(
+        make_technical(citations=(Citation("Dose-response curves.", "x"),)),
+        STRUCTURE,
+    )
+    assert any("does not have" in problem for problem in problems)

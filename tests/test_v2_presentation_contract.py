@@ -257,3 +257,28 @@ def test_a_span_too_short_to_mean_anything_is_still_rejected() -> None:
         make_presentation(glance_qualification_span="the"), make_packet()
     )
     assert any("not in the glance" in problem for problem in problems)
+
+
+def test_a_thin_packet_from_a_long_document_is_a_collapse_not_a_finding() -> None:
+    """The same paper gained and lost a rung between runs on identical text.
+
+    Measured over 44 packets, every one carried at least three method claims
+    except two runs on one 15,600-word paper, which returned 3 and 10 claims
+    with no method among them — while its other runs on the same text returned
+    11, 24 and 29. Extraction variance decided whether the story had an Explain.
+    """
+
+    from curious_now_v2.generation.packet import _collapsed
+
+    rich = make_packet(kinds=(ClaimKind.METHOD,) * 10)
+    assert not _collapsed(rich, words=15_000)
+
+    no_method = make_packet(kinds=(ClaimKind.RESULT,) * 10)
+    assert _collapsed(no_method, words=15_000)
+
+    too_few = make_packet(kinds=(ClaimKind.METHOD, ClaimKind.RESULT))
+    assert _collapsed(too_few, words=15_000)
+
+    # A short document honestly carries few claims, and must not be retried.
+    assert not _collapsed(too_few, words=300)
+    assert not _collapsed(no_method, words=300)

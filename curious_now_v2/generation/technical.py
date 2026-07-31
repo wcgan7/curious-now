@@ -24,7 +24,7 @@ from curious_now_v2.generation.client import (
     unescape_newlines,
 )
 
-PROMPT_VERSION = "technical-v3"
+PROMPT_VERSION = "technical-v5"
 
 # A shape that usually works, offered to the writer and enforced on nobody.
 # The contract says a walkthrough SHOULD be predictable, not that it must use
@@ -54,6 +54,13 @@ MAX_WORDS = 2500
 MAX_HEADING_WORDS = 8
 
 _MATH_MARKER = re.compile(r"\[(equation|expression)\]")
+
+# How a float is shown to the writer: "Figure 4 — what it shows". The writer
+# is asked to cite the label alone, and citing the whole line back is a
+# reasonable thing to do when the whole line is what it was shown, so the
+# matcher accepts either. Getting this wrong rejected an entire walkthrough
+# for citing its four tables correctly.
+LABEL_SEPARATOR = " — "
 
 SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -124,7 +131,10 @@ field; they do not know this work.
 
 Mathematics belongs here where it carries the argument — an equation the paper \
 turns on, a rate, a threshold, a magnitude — and nowhere it does not. Quote it \
-as it appears in the source. `[equation]` and `[expression]` mark mathematics \
+as it appears in the source, KEEPING the \\( \\) or \\[ \\] delimiters around \
+it. Those delimiters are how the reader's typesetter knows where a formula \
+starts and ends; without them it prints backslashes at the reader. Never write \
+mathematics outside them. `[equation]` and `[expression]` mark mathematics \
 that could not be recovered from the source format: never pass those markers \
 to the reader and never say what the missing equation states.
 
@@ -133,9 +143,10 @@ know what each one shows. Where a figure carries the argument, say what it \
 shows at the point it matters — a reader who cannot see it should still learn \
 what it demonstrates.
 
-In `citations`, list the sections, figures, and tables you actually drew on, \
-using labels EXACTLY as they appear in that map, each with what you used it \
-for. Do not cite anything absent from that map; an invented \
+In `citations`, list the sections, figures, and tables you actually drew on. \
+Give the LABEL ONLY — the short name at the start of the map entry, before the \
+dash, such as "Figure 4" or "Methods" — never the caption after it. Say what \
+you used each for in `used_for`. Do not cite anything absent from that map; an invented \
 citation is worse than no citation, because this is the layer a reader opened \
 in order to check.
 
@@ -223,7 +234,9 @@ def _matches(label: str, known: frozenset[str]) -> bool:
     this must catch is a citation of something that is not there at all.
     """
 
-    flat = " ".join(label.split()).casefold().rstrip(".:")
+    # A citation of the whole map line is a citation of its label.
+    cited = label.split(LABEL_SEPARATOR, 1)[0]
+    flat = " ".join(cited.split()).casefold().rstrip(".:")
     return any(
         flat == " ".join(candidate.split()).casefold().rstrip(".:")
         for candidate in known
@@ -289,7 +302,7 @@ def _labelled(item: dict[str, Any] | None) -> str:
     # them do not crowd out the document itself.
     if len(caption) > 300:
         caption = caption[:297].rstrip() + "..."
-    return f"{label} — {caption}" if caption else label
+    return f"{label}{LABEL_SEPARATOR}{caption}" if caption else label
 
 
 def generate_technical(

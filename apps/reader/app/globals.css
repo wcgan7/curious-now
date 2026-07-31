@@ -1090,3 +1090,21 @@ button {
   background: rgba(0, 0, 0, 0.55);
   border-radius: 0 4px 0 4px;
 }
+
+/* A formula KaTeX could not parse is shown as the TeX it came from, marked as
+   mathematics rather than silently dropped or silently mangled. */
+.mathRaw {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.9em;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+/* Long display equations must scroll inside their own box rather than push
+   the column sideways. */
+.explanationText .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}

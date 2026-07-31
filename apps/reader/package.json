@@ -9,12 +9,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "katex": "^0.18.1",
     "next": "16.2.12",
     "postgres": "3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "@types/node": "24.10.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",

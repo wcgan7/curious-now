@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+// Self-hosted: the package ships its own fonts and Next bundles them, so
+// nothing is fetched from a CDN at read time.
+import "katex/dist/katex.min.css";
 import "@/app/globals.css";
 
 export const metadata: Metadata = {

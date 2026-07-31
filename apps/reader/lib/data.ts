@@ -1,4 +1,5 @@
 import { database } from "@/lib/database";
+import { renderMath } from "@/lib/math";
 import type {
   Citation,
   Claim,
@@ -259,6 +260,22 @@ export async function searchStories(
   return rows.map(mapFeedRow);
 }
 
+/** Typeset the mathematics inside a Technical walkthrough's sections. */
+function renderContentMath(content: Record<string, unknown>): Record<string, unknown> {
+  const sections = content?.sections;
+  if (!Array.isArray(sections)) {
+    return content;
+  }
+  return {
+    ...content,
+    sections: sections.map((section) =>
+      typeof section === "object" && section !== null && "text" in section
+        ? { ...section, html: renderMath(String((section as { text: string }).text)) }
+        : section,
+    ),
+  };
+}
+
 export async function getStory(id: string): Promise<StoryDetail | null> {
   if (!UUID_PATTERN.test(id)) {
     return null;
@@ -386,7 +403,10 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
   const explanations: Explanation[] = explanationRows.map((value) => ({
     depth: value.depth,
     plainText: value.plain_text,
-    content: value.content ?? {},
+    // Typeset here rather than in the component: KaTeX runs on the server and
+    // stays out of the browser bundle, and the client receives finished HTML.
+    html: value.plain_text ? renderMath(value.plain_text) : null,
+    content: renderContentMath(value.content ?? {}),
   }));
 
   const claimRows = await sql<

@@ -200,6 +200,25 @@ def _grounded(claim: dict[str, Any], source_text: str) -> bool:
     return excerpt.casefold() in " ".join(source_text.split()).casefold()
 
 
+# A long document that yields no mechanism, or almost no claims at all, has
+# not been read — it has been skimmed. Measured over 44 packets: every one
+# carried at least three method claims except two runs on a single 15,600-word
+# paper, which returned 3 and 10 claims with no method among them, while its
+# other three runs on the identical text returned 11, 24 and 29 claims with 4,
+# 5 and 3 methods. That is variance, not a finding, and it decides whether the
+# story gets an Explain at all.
+COLLAPSE_WORDS = 1000
+COLLAPSE_CLAIMS = 8
+
+
+def _collapsed(packet: ExtractedPacket, words: int) -> bool:
+    """Whether a packet is too thin to believe of a document this long."""
+
+    if words < COLLAPSE_WORDS:
+        return False
+    return len(packet.claims) < COLLAPSE_CLAIMS or ClaimKind.METHOD not in packet.kinds
+
+
 def extract_packet(
     generator: Generator,
     *,
@@ -208,8 +227,45 @@ def extract_packet(
     title: str,
     text: str,
 ) -> ExtractedPacket:
-    """Build the factual record a story's presentations must stay inside."""
+    """Build the factual record a story's presentations must stay inside.
 
+    Retried once where the result is implausibly thin for the length of the
+    document, and the richer of the two kept. Extraction is the one stage whose
+    variance propagates: a packet with no method claim makes Explain decline,
+    so the same paper gained and lost a rung between runs on identical text.
+    """
+
+    packet = _extract_once(
+        generator,
+        source_name=source_name,
+        content_type=content_type,
+        title=title,
+        text=text,
+    )
+    words = len(text.split())
+    if packet.completion.ok and _collapsed(packet, words):
+        again = _extract_once(
+            generator,
+            source_name=source_name,
+            content_type=content_type,
+            title=title,
+            text=text,
+        )
+        # Keep whichever read the document more fully. A second thin result is
+        # evidence the document really is thin, and is kept without a third try.
+        if again.completion.ok and len(again.claims) > len(packet.claims):
+            return again
+    return packet
+
+
+def _extract_once(
+    generator: Generator,
+    *,
+    source_name: str,
+    content_type: str,
+    title: str,
+    text: str,
+) -> ExtractedPacket:
     completion = generator.complete(
         PROMPT.format(
             source_name=source_name,

@@ -49,6 +49,22 @@ def _compact(value: str) -> str:
     return _WHITESPACE.sub(" ", value).strip()
 
 
+# LaTeXML knows exactly where a formula starts and ends; splicing its TeX into
+# prose bare threw that away, and nothing downstream could recover it. A reader
+# then has to guess whether "p\in(1,2]" after a comma is mathematics or a typo,
+# and so does the model writing about it. Delimiting costs four characters and
+# makes the boundary a fact rather than an inference.
+def _delimited(tex: str) -> str:
+    """Wrap recovered TeX so its extent survives into the prose."""
+
+    body = _compact(tex).strip()
+    if not body:
+        return " "
+    # Already delimited by the source: leave it exactly as it is.
+    if body.startswith(("\\(", "\\[", "$")):
+        return f" {body} "
+    return f" \\({body}\\) "
+
 def _resolve_math(soup: BeautifulSoup) -> None:
     """Replace each math element with a single textual form.
 
@@ -64,8 +80,7 @@ def _resolve_math(soup: BeautifulSoup) -> None:
                 "annotation", attrs={"encoding": "application/x-tex"}
             )
             tex = annotation.get_text() if annotation else None
-        replacement = f" {_compact(tex)} " if tex else " "
-        node.replace_with(replacement)
+        node.replace_with(_delimited(tex) if tex else " ")
 
 
 def _strip_noise(soup: BeautifulSoup) -> None:

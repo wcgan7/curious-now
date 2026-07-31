@@ -12,7 +12,7 @@ from curious_now_v2.generation.client import (
 )
 from curious_now_v2.generation.packet import ExtractedPacket
 
-PROMPT_VERSION = "present-v6"
+PROMPT_VERSION = "present-v7"
 
 # Prohibited by the title contract, and cheap to check.
 HYPE = (
@@ -197,7 +197,13 @@ the qualification that keeps the mechanism honest.
    story.
 
 `[equation]` and `[expression]` mark mathematics that could not be recovered \
-from the source. Never treat them as content and never say what the equation states.
+from the source. Never treat them as content and never say what the equation \
+states.
+
+Recovered mathematics arrives delimited, as \\( ... \\) or \\[ ... \\]. Where you \
+quote any, keep those delimiters: they are how the reader's typesetter finds \
+the formula, and without them it prints backslashes at the reader. Glance \
+should rarely need any at all.
 
 SOURCE: {source_name} ({content_type})
 THIS ITEM IS A: {story_kind}

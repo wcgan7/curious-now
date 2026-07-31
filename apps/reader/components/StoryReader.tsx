@@ -45,7 +45,7 @@ function estimateMinutes(text: string | null | undefined): number | null {
   return Math.max(1, Math.round(words / 220));
 }
 
-type TechnicalSection = { heading: string; text: string };
+type TechnicalSection = { heading: string; text: string; html?: string };
 type TechnicalCitation = { label: string; used_for: string };
 
 function technicalSections(content: Record<string, unknown>): TechnicalSection[] {
@@ -84,12 +84,14 @@ function technicalCitations(content: Record<string, unknown>): TechnicalCitation
 function TechnicalBody({
   sections,
   plainText,
+  html,
 }: {
   sections: TechnicalSection[];
   plainText: string | null | undefined;
+  html?: string | null;
 }) {
   if (!sections.length) {
-    return <ExplanationBody plainText={plainText} />;
+    return <ExplanationBody html={html} plainText={plainText} />;
   }
   return (
     <div className="technicalBody">
@@ -100,8 +102,12 @@ function TechnicalBody({
             {section.text
               .split("\n")
               .filter(Boolean)
-              .map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
+              .map((paragraph, index) => (
+                <Prose
+                  html={section.html?.split("\n").filter(Boolean)[index]}
+                  key={paragraph}
+                  text={paragraph}
+                />
               ))}
           </div>
         </section>
@@ -110,19 +116,36 @@ function TechnicalBody({
   );
 }
 
-function ExplanationBody({ plainText }: { plainText: string | null | undefined }) {
+function Prose({ html, text }: { html?: string | null; text: string }) {
+  // The html is produced by lib/math on the server: prose escaped, formulas
+  // typeset by KaTeX with trust disabled. Where none was produced the plain
+  // text is rendered as text, never as markup.
+  return html ? (
+    <p dangerouslySetInnerHTML={{ __html: html }} />
+  ) : (
+    <p>{text}</p>
+  );
+}
+
+function ExplanationBody({
+  plainText,
+  html,
+}: {
+  plainText: string | null | undefined;
+  html?: string | null;
+}) {
   if (!plainText) {
     return (
       <p>This explanation is structured but has no plain-text rendering yet.</p>
     );
   }
+  const paragraphs = plainText.split("\n").filter(Boolean);
+  const rendered = html ? html.split("\n").filter(Boolean) : null;
   return (
     <div className="explanationText">
-      {plainText
-        .split("\n")
-        .filter(Boolean)
-        .map((paragraph) => (
-          <p key={paragraph}>{paragraph}</p>
+      {paragraphs
+        .map((paragraph, index) => (
+          <Prose html={rendered?.[index]} key={paragraph} text={paragraph} />
         ))}
     </div>
   );
@@ -222,6 +245,7 @@ export function StoryReader({
               <section className="explanationPanel">
                 <p className="sectionKicker">Technical · Investigate the work</p>
                 <TechnicalBody
+                  html={technical.html}
                   plainText={technical.plainText}
                   sections={technicalSections(technical.content)}
                 />
@@ -267,7 +291,10 @@ export function StoryReader({
                     ? `${orientationMeta[view].name} · ${orientationMeta[view].hint}`
                     : ""}
                 </p>
-                <ExplanationBody plainText={activeExplanation?.plainText} />
+                <ExplanationBody
+                  html={activeExplanation?.html}
+                  plainText={activeExplanation?.plainText}
+                />
               </section>
               {hasTechnical ? (
                 <aside className="goDeeper">
