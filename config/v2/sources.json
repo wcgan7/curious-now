@@ -1,46 +1,154 @@
 {
-  "version": 1,
+  "version": 2,
   "sources": [
     {
-      "name": "arXiv AI",
+      "name": "arXiv machine learning",
       "homepage_url": "https://arxiv.org/",
       "role": "primary_research",
       "feeds": [
         {
-          "url": "https://rss.arxiv.org/rss/cs.AI",
-          "kind": "rss",
-          "default_content_type": "preprint",
-          "fetch_interval_minutes": 60
-        },
-        {
           "url": "https://rss.arxiv.org/rss/cs.LG",
           "kind": "rss",
           "default_content_type": "preprint",
-          "fetch_interval_minutes": 60
+          "fetch_interval_minutes": 180
         }
       ],
       "policy": {
         "counts_as_independent": false,
         "allow_full_text_extraction": true,
-        "notes": "Primary author-submitted research; peer review is not implied."
+        "notes": "Primary author-submitted research; peer review is not implied. cs.AI was retired: 282 entries a fetch of which only 11% were new work, 914 of 1516 corpus items, 4 published. cs.LG is near-disjoint from it (2 shared ids of 570) and is 39% new, so nothing was lost. This feed is still 290 entries a fetch and remains the single largest intake until announce_type filtering lands."
       }
     },
     {
-      "name": "medRxiv",
-      "homepage_url": "https://www.medrxiv.org/",
+      "name": "arXiv physical sciences",
+      "homepage_url": "https://arxiv.org/",
       "role": "primary_research",
       "feeds": [
         {
-          "url": "https://connect.medrxiv.org/medrxiv_xml.php?subject=all",
+          "url": "https://rss.arxiv.org/rss/physics.chem-ph",
           "kind": "rss",
           "default_content_type": "preprint",
-          "fetch_interval_minutes": 60
+          "fetch_interval_minutes": 180
+        },
+        {
+          "url": "https://rss.arxiv.org/rss/astro-ph.EP",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 180
+        },
+        {
+          "url": "https://rss.arxiv.org/rss/physics.geo-ph",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 180
+        },
+        {
+          "url": "https://rss.arxiv.org/rss/physics.ao-ph",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 180
+        },
+        {
+          "url": "https://rss.arxiv.org/rss/cond-mat.soft",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 180
         }
       ],
       "policy": {
         "counts_as_independent": false,
         "allow_full_text_extraction": true,
-        "notes": "Medical preprints require prominent non-peer-reviewed labeling."
+        "notes": "Chemistry, planetary science, geophysics, atmosphere and soft matter. Every feed here was retrieved end to end through resolve_item_text at 5.4k-13.6k words with sections classified, so all five can carry the Technical rung. physics.chem-ph is the only chemistry route that survived testing at all: ChemRxiv, Chemistry World, C&EN and ACS all refuse us. Together these five are ~72 entries a fetch, a quarter of what cs.AI alone cost."
+      }
+    },
+    {
+      "name": "arXiv quantitative biology",
+      "homepage_url": "https://arxiv.org/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://rss.arxiv.org/rss/q-bio.NC",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Neuroscience preprints, ~4 entries a fetch. Retrieved end to end at 5458 words, arxiv_html scored 0.95, sections classified."
+      }
+    },
+    {
+      "name": "eLife",
+      "homepage_url": "https://elifesciences.org/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://elifesciences.org/rss/recent.xml",
+          "kind": "rss",
+          "default_content_type": "peer_reviewed",
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "CC BY. The single best fix for the biology hole: one fetch spans neuroscience, cell biology, microbiology, immunology, developmental biology, genetics, structural and evolutionary biology. Retrieved twice through our own resolver at 7453 and 12993 words, article_html scored 0.87, 3/3 key roles present. Robots allows /articles/ at crawl-delay 10. CAVEAT ON content_type: eLife publishes Reviewed Preprints (public peer review, no accept/reject) alongside Versions of Record, so peer_reviewed here does not mean the same thing it means at Nature and the reader-facing label should say so. Feed carries no per-item image, only the eLife logo, and no DOI, so no OpenAlex enrichment fires; the DOI is mechanically 10.7554/eLife.<article id> if that is ever wanted."
+      }
+    },
+    {
+      "name": "PLOS Biology",
+      "homepage_url": "https://journals.plos.org/plosbiology/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://journals.plos.org/plosbiology/feed/atom",
+          "kind": "atom",
+          "default_content_type": "peer_reviewed",
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "CC BY, ~2 items a day. The DOI is in the feed link so every item reaches the resolver already identified. Fresh items retrieve as article_html at 11384 words; once PMC deposit catches up the same DOI resolves as pmc_jats at score 1.00 with figures and floats, which is the best input the ladder ever gets. Robots crawl-delay is 30s, at our cap, but 2 items a day makes that cheap. FEED IS MIXED: research sits alongside editorials and essays with no type marker in URL or DOI, so default_content_type is a default and not an assertion; the classifier has to settle type from the fetched page."
+      }
+    },
+    {
+      "name": "PLOS Medicine",
+      "homepage_url": "https://journals.plos.org/plosmedicine/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://journals.plos.org/plosmedicine/feed/atom",
+          "kind": "atom",
+          "default_content_type": "peer_reviewed",
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "CC BY, ~0.8 items a day, and the replacement for medRxiv as the medicine source that actually yields text. Research articles resolve via oa_pdf at 9245 words, score 0.96, 3/3 key roles, with the licence recorded; OpenAlex hands us the PDF so journals.plos.org is never fetched and the 30s crawl delay is never paid. Roughly a third of the feed is Perspectives and Essays which retrieve thin (~1200 words) but are legitimate explainer and correction shapes. Same caveat as PLOS Biology: no type marker in URL or DOI."
+      }
+    },
+    {
+      "name": "Beilstein Journal of Organic Chemistry",
+      "homepage_url": "https://www.beilstein-journals.org/bjoc/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.beilstein-journals.org/bjoc/content/rss.xml",
+          "kind": "rss",
+          "default_content_type": "peer_reviewed",
+          "fetch_interval_minutes": 720
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "The only chemistry source that survived testing. Ten of ten feed entries are wet-lab organic chemistry \u2014 synthesis, natural-product isolation, supramolecular assembly \u2014 not the computational-method papers that disqualified arXiv physics.chem-ph. Articles resolve end to end at 2093-8090 words, clearing the technical walkthrough's 2000-word floor. Open access, CC BY, robots permits the feed and articles. Narrow by design: organic chemistry only. Every other route failed \u2014 ChemRxiv and RSC Advances sit behind Cloudflare and ChemRxiv's robots disallows /rss, Chemistry World returns an AWS WAF challenge, Nature Chemistry is paywalled, and PLOS ONE's chemistry subject feed is 15-20% chemistry and the rest biomedical."
       }
     },
     {
@@ -69,99 +177,163 @@
       ],
       "policy": {
         "counts_as_independent": false,
-        "allow_full_text_extraction": false,
-        "notes": "Store metadata and permitted abstracts; do not ingest paywalled text."
+        "allow_full_text_extraction": true,
+        "notes": "KEPT, and the flag flipped to true to match what the pipeline has always done. The premise that Nature yields full text for 0 of 136 items is wrong: 42 of 136 are full_text_status ok, twelve of them real research full text averaging ~9.6k words, every one carrying a recorded cc-by or cc-by-nc-nd licence. Verified again here: s41586-026-10791-2 resolved to 10274 words with sections classified. Nature and arXiv are the only two sources that reach all three rungs, and Nature is the only non-AI one; its published set is exactly the biology, chemistry and physics the corpus lacks. Roughly half of fresh research resolves and the rest is genuinely soft-paywalled."
       }
     },
     {
-      "name": "OpenAI",
-      "homepage_url": "https://openai.com/news/",
-      "role": "lab_announcement",
+      "name": "The Conversation",
+      "homepage_url": "https://theconversation.com/us",
+      "role": "journalism",
       "feeds": [
         {
-          "url": "https://openai.com/news/rss.xml",
-          "kind": "rss",
-          "default_content_type": "lab_announcement",
-          "fetch_interval_minutes": 60
+          "url": "https://theconversation.com/us/health/articles.atom",
+          "kind": "atom",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 180
         }
       ],
       "policy": {
-        "counts_as_independent": false,
-        "allow_full_text_extraction": false,
-        "notes": "First-party lab material; seek paper links and independent coverage."
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Narrowed to us/health. Its value is unusual \u2014 articles written by the researchers themselves, which is native explainer material rather than coverage of someone else's paper at one remove. But no section is clean: measured entry by entry, us/health is 48% scientific, us/technology 52% and overlapping our AI coverage, us/environment 36% and the worst for litigation and land-rights politics, us/business 4%. There is no us/science or global/science feed; both 404. us/environment was dropped on those numbers. The remaining non-science is withheld by the classifier at the cost of one packet call, which is worth paying for the half that lands \u2014 and is four times better than STAT, which was retired at 12%."
+      }
+    },
+    {
+      "name": "ScienceAlert",
+      "homepage_url": "https://www.sciencealert.com/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.sciencealert.com/feed",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 180
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "~9.6 items a day across genetics, palaeontology, marine biology, particle physics and astronomy \u2014 the widest subject spread of any journalism source tested. Four of four resolved as fulltext at 684-730 words, all clearing MIN_WORDS_EXPLAIN. Robots disallows only wp-admin and query strings and names no AI crawlers at all, which is rarer than it should be. Feed links carry utm_ parameters that robots disallows as query strings; strip them before fetching. No feed image."
+      }
+    },
+    {
+      "name": "Eos",
+      "homepage_url": "https://eos.org/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://eos.org/feed",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 180,
+          "exclude_patterns": [
+            "/research-spotlights/"
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "AGU's earth-science outlet, CC BY-NC-ND 3.0 US, ~3.8 items a day, and the best fix for the missing earth science. Every one of 15 entries syndicates an image \u2014 the best image coverage of anything tested, and feed cards need it. Robots disallows nothing, crawl-delay 10. Retrieved at 987 and 746 words. The /research-spotlights/ path is a ~300-word format that resolves as kind=abstract and can never carry an Explain, so it is excluded; /articles/ and /research-and-developments/ carry real body text."
+      }
+    },
+    {
+      "name": "AAS Nova",
+      "homepage_url": "https://aasnova.org/",
+      "role": "institutional",
+      "feeds": [
+        {
+          "url": "https://aasnova.org/feed/",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 360,
+          "exclude_patterns": [
+            "doi.org"
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Deferred, not rejected. The feed returns 600 entries spanning 501 days in a single document, and FeedSpec has no entry cap or date cutoff, so a first fetch would ingest the lot. Enable once the config can bound it."
       },
       "active": false
     },
     {
-      "name": "Google DeepMind",
-      "homepage_url": "https://deepmind.google/blog/",
-      "role": "lab_announcement",
+      "name": "Max Planck Society",
+      "homepage_url": "https://www.mpg.de/en",
+      "role": "institutional",
       "feeds": [
         {
-          "url": "https://deepmind.google/blog/rss.xml",
+          "url": "https://www.mpg.de/en/research.rss",
           "kind": "rss",
-          "default_content_type": "lab_announcement",
-          "fetch_interval_minutes": 60
+          "default_content_type": "press_release",
+          "fetch_interval_minutes": 360
         }
       ],
       "policy": {
         "counts_as_independent": false,
-        "allow_full_text_extraction": false,
-        "notes": "First-party lab material; seek paper links and independent coverage."
+        "allow_full_text_extraction": true,
+        "notes": "0.8 items a day spanning astrophysics, chemistry, brain, climate, ecology, evolution, quantum physics, medicine and human history \u2014 the broadest single institutional feed found. Every entry carries an image enclosure. Robots has no Disallow and no crawl-delay. Five of five retrieved as article_html at 682-901 words. Roughly 20% of entries are awards, grants and research-policy announcements; the URL slugs are numeric ids so exclude_patterns cannot filter them and the classifier has to withhold them."
       }
     },
     {
-      "name": "Google Research",
-      "homepage_url": "https://research.google/blog/",
-      "role": "lab_announcement",
+      "name": "EMBL",
+      "homepage_url": "https://www.embl.org/",
+      "role": "institutional",
       "feeds": [
         {
-          "url": "https://research.google/blog/rss/",
+          "url": "https://www.embl.org/news/feed/",
           "kind": "rss",
-          "default_content_type": "lab_announcement",
-          "fetch_interval_minutes": 60
+          "default_content_type": "press_release",
+          "fetch_interval_minutes": 360,
+          "exclude_patterns": [
+            "/news/connections/",
+            "/news/people-perspectives/"
+          ]
         }
       ],
       "policy": {
         "counts_as_independent": false,
-        "allow_full_text_extraction": false,
-        "notes": "First-party research blog; attach primary papers when available."
+        "allow_full_text_extraction": true,
+        "notes": "0.7 items a day of genuinely explanatory molecular and cell biology plus tool releases. Four of four retrieved at 756-1510 words. Robots allows all bar /static/ and jobs pages, no crawl-delay. Announcement noise is separable by URL path, unlike Max Planck: events sit under /news/connections/ and staff profiles under /news/people-perspectives/, both excluded. No per-category feed exists and no feed image."
       }
     },
     {
-      "name": "Microsoft Research",
-      "homepage_url": "https://www.microsoft.com/en-us/research/",
-      "role": "lab_announcement",
+      "name": "European Southern Observatory",
+      "homepage_url": "https://www.eso.org/public/",
+      "role": "institutional",
       "feeds": [
         {
-          "url": "https://www.microsoft.com/en-us/research/feed/",
+          "url": "https://www.eso.org/public/news/feed/",
           "kind": "rss",
-          "default_content_type": "lab_announcement",
-          "fetch_interval_minutes": 60
+          "default_content_type": "press_release",
+          "fetch_interval_minutes": 720
         }
       ],
       "policy": {
         "counts_as_independent": false,
-        "allow_full_text_extraction": false,
-        "notes": "First-party research blog; attach primary papers when available."
+        "allow_full_text_extraction": true,
+        "notes": "CC BY 4.0, explicitly stated at /public/outreach/copyright/. Only ~0.1 items a day, about two releases a month, but the richest institutional text of anything tested: three of three retrieved at 1866, 1987 and 2643 words, pure result-and-explanation astronomy with no puffery, and every entry carries an image. Use this native URL, not the FeedBurner mirror the site advertises and not /public/rss/news/ which is 404. The Announcements feed was tested separately and rejected: it is ministerial visits and annual reports."
       }
     },
     {
-      "name": "NVIDIA Deep Learning",
-      "homepage_url": "https://blogs.nvidia.com/blog/category/deep-learning/",
-      "role": "lab_announcement",
+      "name": "CERN",
+      "homepage_url": "https://home.cern/",
+      "role": "institutional",
       "feeds": [
         {
-          "url": "https://blogs.nvidia.com/blog/category/deep-learning/feed/",
+          "url": "https://home.cern/category/physics/feed/",
           "kind": "rss",
-          "default_content_type": "lab_announcement",
-          "fetch_interval_minutes": 60
+          "default_content_type": "press_release",
+          "fetch_interval_minutes": 720
         }
       ],
       "policy": {
         "counts_as_independent": false,
-        "allow_full_text_extraction": false,
-        "notes": "First-party company material; do not treat as independent validation."
+        "allow_full_text_extraction": true,
+        "notes": "The only particle-physics primary source that both parses and retrieves. ~0.2 items a day; three of three retrieved at 466-877 words. Use the category feed, not home.cern/feed/, which is 5 a day of staff bulletins about canteen seating and administrative circulars with no category path to filter on. Even here 2 of 10 entries are obituaries and one is a Courier table of contents, so expect the classifier to withhold roughly a third."
       }
     },
     {
@@ -173,12 +345,13 @@
           "url": "https://www.quantamagazine.org/feed/",
           "kind": "rss",
           "default_content_type": "news",
-          "fetch_interval_minutes": 60
+          "fetch_interval_minutes": 180
         }
       ],
       "policy": {
         "counts_as_independent": true,
-        "allow_full_text_extraction": false
+        "allow_full_text_extraction": true,
+        "notes": "Highest quality per item in the corpus and the most under-used: 4 of 5 hydrated items are fulltext averaging 5136 words, max 11806, and its gate reasons read as successes awaiting publication rather than rejections. Shows 0 published only because just 6 items have ever been ingested. Flag flipped to true \u2014 it was false while the pipeline extracted anyway. Every entry syndicates an image. Only weakness is ~5 items a fetch."
       }
     },
     {
@@ -190,12 +363,13 @@
           "url": "https://www.sciencenews.org/feed",
           "kind": "rss",
           "default_content_type": "news",
-          "fetch_interval_minutes": 60
+          "fetch_interval_minutes": 180
         }
       ],
       "policy": {
         "counts_as_independent": true,
-        "allow_full_text_extraction": false
+        "allow_full_text_extraction": true,
+        "notes": "KEPT ON PROBATION. Retrieval is intermittent: 12 of 20 attempted came back not_found with errors like 'too short (31 words)' on perfectly ordinary /article/ URLs, so the site is sometimes serving an interstitial. The 8 that succeed average ~650 words, barely at the gate, and none has section structure. Its real value is as corroboration for a Nature or arXiv paper, which requires clustering that does not exist yet. Re-audit once clustering lands; if it still shows 0 published, retire it."
       }
     },
     {
@@ -216,8 +390,156 @@
       ],
       "policy": {
         "counts_as_independent": true,
-        "allow_full_text_extraction": false
+        "allow_full_text_extraction": true,
+        "notes": "Best published-per-item ratio of any source in the corpus at 3 of 49."
       }
+    },
+    {
+      "name": "Carbon Brief",
+      "homepage_url": "https://www.carbonbrief.org/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.carbonbrief.org/feed/",
+          "kind": "rss",
+          "default_content_type": "news",
+          "fetch_interval_minutes": 180
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Second best published-per-item ratio at 1 of 17."
+      }
+    },
+    {
+      "name": "Google DeepMind",
+      "homepage_url": "https://deepmind.google/blog/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://deepmind.google/blog/rss.xml",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 180
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "First-party lab material; seek paper links and independent coverage."
+      }
+    },
+    {
+      "name": "Google Research",
+      "homepage_url": "https://research.google/blog/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://research.google/blog/rss/",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 180
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "First-party research blog; attach primary papers when available."
+      }
+    },
+    {
+      "name": "Microsoft Research",
+      "homepage_url": "https://www.microsoft.com/en-us/research/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://www.microsoft.com/en-us/research/feed/",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 180
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "First-party research blog; attach primary papers when available."
+      }
+    },
+    {
+      "name": "NASA",
+      "homepage_url": "https://www.nasa.gov/",
+      "role": "government",
+      "feeds": [
+        {
+          "url": "https://www.nasa.gov/news-release/feed/",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "fetch_interval_minutes": 180
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "Authoritative for agency activity, but first-party for agency claims. 0 published from 20 items; left active because space coverage is otherwise thin, but it is the next audit candidate after Science News."
+      }
+    },
+    {
+      "name": "OpenAI",
+      "homepage_url": "https://openai.com/news/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://openai.com/news/rss.xml",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "Retired earlier: 1052 items, all blocked, all gated 'no item yielded any text'."
+      },
+      "active": false
+    },
+    {
+      "name": "medRxiv",
+      "homepage_url": "https://www.medrxiv.org/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://connect.medrxiv.org/medrxiv_xml.php?subject=all",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Kept. Resolves to abstracts only \u2014 28 of 60 items, max 449 words \u2014 so it can never reach Technical, whose floor is 2000 words. It nonetheless produced 3 of the first 20 published stories with valid Glance and Explain, so the ceiling is real and the source is not useless."
+      },
+      "active": true
+    },
+    {
+      "name": "NVIDIA Deep Learning",
+      "homepage_url": "https://blogs.nvidia.com/blog/category/deep-learning/",
+      "role": "lab_announcement",
+      "feeds": [
+        {
+          "url": "https://blogs.nvidia.com/blog/category/deep-learning/feed/",
+          "kind": "rss",
+          "default_content_type": "lab_announcement",
+          "fetch_interval_minutes": 60
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": false,
+        "notes": "RETIRED. A dead archive: 18 posts across 18 months, newest 2026-07-08, all 18 already hydrated, so there is nothing left for it to deliver. 0 published from 18 items despite 100% retrieval \u2014 the worst return of any source that works. First-party GPU marketing that can never validate anything, and the only not_science verdict in the corpus."
+      },
+      "active": false
     },
     {
       "name": "STAT",
@@ -233,43 +555,10 @@
       ],
       "policy": {
         "counts_as_independent": true,
-        "allow_full_text_extraction": false
-      }
-    },
-    {
-      "name": "Carbon Brief",
-      "homepage_url": "https://www.carbonbrief.org/",
-      "role": "journalism",
-      "feeds": [
-        {
-          "url": "https://www.carbonbrief.org/feed/",
-          "kind": "rss",
-          "default_content_type": "news",
-          "fetch_interval_minutes": 60
-        }
-      ],
-      "policy": {
-        "counts_as_independent": true,
-        "allow_full_text_extraction": false
-      }
-    },
-    {
-      "name": "NASA",
-      "homepage_url": "https://www.nasa.gov/",
-      "role": "government",
-      "feeds": [
-        {
-          "url": "https://www.nasa.gov/news-release/feed/",
-          "kind": "rss",
-          "default_content_type": "press_release",
-          "fetch_interval_minutes": 60
-        }
-      ],
-      "policy": {
-        "counts_as_independent": false,
         "allow_full_text_extraction": false,
-        "notes": "Authoritative for agency activity, but first-party for agency claims."
-      }
+        "notes": "RETIRED on three counts. 15 of 20 attempted are paywalled with 'article_html: soft paywall'; the 5 that resolve run 528-835 words with no section structure; and the content is health politics \u2014 podcasts, Senate votes, Medicaid injunctions \u2014 which the ladder cannot carry as a development or result. 0 published from 40 items. Separately, robots explicitly disallows ClaudeBot, GPTBot and anthropic-ai; our generic UA falls under * only because it is not on their list, and the publisher's intent is unambiguous."
+      },
+      "active": false
     },
     {
       "name": "European Space Agency",
@@ -286,8 +575,9 @@
       "policy": {
         "counts_as_independent": false,
         "allow_full_text_extraction": false,
-        "notes": "Authoritative for agency activity, but first-party for agency claims."
-      }
+        "notes": "Kept. A review recommended retiring this as image captions; direct measurement disagrees. 5 of 12 resolved items are full text up to 1154 words, and its picture pages carry real science \u2014 'Webb sniffs methane from interstellar Comet 3I/ATLAS' is a result in 405 words."
+      },
+      "active": true
     }
   ]
 }
