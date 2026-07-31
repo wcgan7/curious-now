@@ -181,8 +181,18 @@ story page so nested interactive controls do not fragment the feed.
 
 The selector contains only:
 
-- `Glance` with the descriptor `New to this`;
+- `The idea` with the descriptor `New to this`;
 - `Explain` with the descriptor `Know the field`.
+
+`Glance` and `Explain` remain the layers' names throughout the contract, the
+schema, and the prompts. Only the label a reader sees changed, because "Glance"
+reads as slight beside "Technical" — most obviously on a story that offers the
+two and nothing between them.
+
+It is not called `Summary`. This layer carries one idea rather than coverage,
+and a reader told to expect a summary would fairly feel short-changed by the
+seventy words that replaced a compressed abstract. `The idea` is what the Glance
+contract asks for, said plainly.
 
 Glance is selected on first open. Selecting Explain replaces the orientation body
 without changing the title, evidence version, or source shelf.

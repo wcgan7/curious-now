@@ -24,7 +24,7 @@ export default async function HomePage() {
             grouped into stories and explained at the depth you need.
           </p>
           <div className="depthLegend" aria-label="Reading depths">
-            <span>Glance</span>
+            <span>The idea</span>
             <i aria-hidden="true" />
             <span>Explain</span>
             <i aria-hidden="true" />

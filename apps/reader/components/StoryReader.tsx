@@ -10,8 +10,12 @@ import type {
 
 type Orientation = "glance" | "explain";
 
+// Reader-facing names only; the layers are `glance` and `explain` everywhere
+// else. "Summary" was considered and rejected: this layer carries ONE idea, not
+// coverage, and promising a summary invites a reader to feel short-changed by
+// the seventy words that replaced a compressed abstract.
 const orientationMeta: Record<Orientation, { name: string; hint: string }> = {
-  glance: { name: "Glance", hint: "New to this" },
+  glance: { name: "The idea", hint: "New to this" },
   explain: { name: "Explain", hint: "Know the field" },
 };
 
