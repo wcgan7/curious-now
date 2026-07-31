@@ -1036,3 +1036,52 @@ button {
   font-weight: 600;
   opacity: 1;
 }
+
+/* The syndicated image. Subordinate to the title by construction: fixed and
+   modest, placed after the rail so the eye still lands on the words first.
+   Its job is to give the eye something to travel by down a long column, not
+   to be the reason a story is opened. */
+.cardImage {
+  flex: 0 0 auto;
+  width: 132px;
+  height: 88px;
+  overflow: hidden;
+  border-radius: 4px;
+  align-self: center;
+  background: rgba(128, 128, 128, 0.08);
+}
+
+.cardImage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (max-width: 720px) {
+  .cardImage {
+    width: 84px;
+    height: 60px;
+  }
+}
+
+/* A stood-in figure says so. Small, plain, and over the image rather than
+   beside it, so the card's shape does not change according to where its
+   picture came from. */
+.cardImage {
+  position: relative;
+}
+
+.cardImageLabel {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  padding: 2px 6px;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 0 4px 0 4px;
+}

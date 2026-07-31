@@ -194,7 +194,10 @@ def discover_candidates(
 
 def _parse(candidate: Candidate, body: bytes, text: str) -> Document:
     if candidate.parser == "arxiv":
-        return extract_arxiv_html(text)
+        # The candidate's URL is what LaTeXML's relative image srcs resolve
+        # against. arXiv serves /html/{id} without redirecting, so the URL we
+        # asked for is the one the paths are relative to.
+        return extract_arxiv_html(text, base_url=candidate.url)
     if candidate.parser == "jats":
         return extract_jats(text)
     if candidate.parser == "pdf":

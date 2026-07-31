@@ -109,8 +109,32 @@ A feed card does not contain:
 - equal Glance, Explain, and Technical buttons;
 - a technical-availability call to action;
 - engagement counts or reactions;
-- urgency styling unrelated to evidence;
-- an image added merely to increase card prominence.
+- urgency styling unrelated to evidence.
+
+### Images on cards
+
+An earlier version of this document prohibited "an image added merely to
+increase card prominence". That rule is withdrawn, because it mistook the
+mechanism for the harm.
+
+The harm it aimed at is a feed that competes for attention. The mechanism it
+banned — a picture — turns out to serve the opposite purpose. Principle 1 says
+the feed optimizes for scanning, and a column of forty text cards is harder to
+scan than one where the eye has something to travel by. Uniformity is not calm;
+it is undifferentiated, and the reader pays for it in effort.
+
+A feed card MAY therefore show the image its source syndicated with the story —
+the `media:content`, `media:thumbnail`, or image `enclosure` a publisher puts in
+its own feed precisely so that a reader can display it.
+
+- The image MUST come from the feed. It MUST NOT be scraped from the page,
+  generated, or substituted from stock.
+- It MUST NOT be the reason to open a story: the display title remains the
+  card's subject, and the image is subordinate to it in size and in position.
+- A story with no syndicated image MUST render as a complete card, not as a card
+  with a hole in it. Around half the corpus has none — no preprint server or
+  journal syndicates one — so the absence is the common case, not the exception.
+- A broken or unreachable image MUST degrade to that same complete card.
 
 The whole semantic card acts as one story link. External source links begin on the
 story page so nested interactive controls do not fragment the feed.

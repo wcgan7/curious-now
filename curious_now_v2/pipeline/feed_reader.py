@@ -57,6 +57,51 @@ def _plain_text(value: object) -> str | None:
     return " ".join(text.split()) or None
 
 
+def _syndicated_image(entry: Any) -> str | None:
+    """The image the publisher put in its own feed entry.
+
+    Media RSS exists so that a reader can show a story's picture, and a
+    publisher populating it is offering exactly that. Nothing here scrapes a
+    page or lifts a figure: if the feed does not carry one — and no preprint
+    server or journal does — the story simply has none.
+    """
+
+    for medium in _entry_value(entry, "media_content") or []:
+        if not isinstance(medium, dict):
+            continue
+        url = str(medium.get("url") or "").strip()
+        kind = str(medium.get("medium") or "").casefold()
+        mime = str(medium.get("type") or "").casefold()
+        if url and (kind == "image" or mime.startswith("image/") or not kind):
+            return url
+
+    for thumbnail in _entry_value(entry, "media_thumbnail") or []:
+        if isinstance(thumbnail, dict):
+            url = str(thumbnail.get("url") or "").strip()
+            if url:
+                return url
+
+    for link in _entry_value(entry, "links") or []:
+        if not isinstance(link, dict):
+            continue
+        if str(link.get("rel") or "").casefold() == "enclosure" and str(
+            link.get("type") or ""
+        ).casefold().startswith("image/"):
+            url = str(link.get("href") or "").strip()
+            if url:
+                return url
+
+    image = _entry_value(entry, "image")
+    if isinstance(image, dict):
+        url = str(image.get("href") or image.get("url") or "").strip()
+        if url:
+            return url
+    elif isinstance(image, str) and image.strip():
+        return image.strip()
+
+    return None
+
+
 def _published_at(entry: Any) -> datetime | None:
     parsed = _entry_value(entry, "published_parsed") or _entry_value(
         entry,
@@ -150,6 +195,7 @@ def fetch_feed(
                 url=url,
                 summary=summary,
                 published_at=_published_at(entry),
+                image_url=_syndicated_image(entry),
                 default_content_type=feed.default_content_type,
                 content_type_rules=feed.content_type_rules,
             )

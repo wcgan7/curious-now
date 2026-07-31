@@ -24,7 +24,7 @@ from curious_now_v2.generation.client import (
     unescape_newlines,
 )
 
-PROMPT_VERSION = "technical-v2"
+PROMPT_VERSION = "technical-v3"
 
 # A shape that usually works, offered to the writer and enforced on nobody.
 # The contract says a walkthrough SHOULD be predictable, not that it must use
@@ -128,9 +128,14 @@ as it appears in the source. `[equation]` and `[expression]` mark mathematics \
 that could not be recovered from the source format: never pass those markers \
 to the reader and never say what the missing equation states.
 
+The STRUCTURE MAP below gives each figure and table with its caption, so you \
+know what each one shows. Where a figure carries the argument, say what it \
+shows at the point it matters — a reader who cannot see it should still learn \
+what it demonstrates.
+
 In `citations`, list the sections, figures, and tables you actually drew on, \
-using labels EXACTLY as they appear in the STRUCTURE MAP below, each with what \
-you used it for. Do not cite anything absent from that map; an invented \
+using labels EXACTLY as they appear in that map, each with what you used it \
+for. Do not cite anything absent from that map; an invented \
 citation is worse than no citation, because this is the layer a reader opened \
 in order to check.
 
@@ -272,6 +277,21 @@ def validate(technical: Technical, structure: dict[str, Any] | None) -> tuple[st
     return tuple(problems)
 
 
+def _labelled(item: dict[str, Any] | None) -> str:
+    """A float as the writer should see it: its label and what it shows."""
+
+    item = item or {}
+    label = str(item.get("label") or "").strip()
+    caption = " ".join(str(item.get("caption") or "").split())
+    if not label:
+        return ""
+    # Long enough to say what the figure shows, short enough that twenty of
+    # them do not crowd out the document itself.
+    if len(caption) > 300:
+        caption = caption[:297].rstrip() + "..."
+    return f"{label} — {caption}" if caption else label
+
+
 def generate_technical(
     generator: Generator,
     *,
@@ -288,14 +308,13 @@ def generate_technical(
         str((s or {}).get("title") or "").strip()
         for s in (structure.get("sections") or [])
     ]
-    figures = [
-        str((f or {}).get("label") or "").strip()
-        for f in (structure.get("figures") or [])
-    ]
-    tables = [
-        str((t or {}).get("label") or "").strip()
-        for t in (structure.get("tables") or [])
-    ]
+    # With the caption, not just the label. A walkthrough that cites "Figure 4"
+    # for "the dose-response curve" was inventing that purpose from a bare
+    # number, in the one layer whose whole point is that a reader can check it.
+    # The captions are already stored, already in the fetched document, and cost
+    # a few hundred words of prompt.
+    figures = [_labelled(f) for f in (structure.get("figures") or [])]
+    tables = [_labelled(t) for t in (structure.get("tables") or [])]
 
     completion = generator.complete(
         PROMPT.format(

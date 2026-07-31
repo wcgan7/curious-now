@@ -189,7 +189,11 @@ def structure_of(document: Document) -> dict[str, Any]:
             for section in document.sections
         ],
         "figures": [
-            {"label": figure.label, "caption": figure.caption}
+            {
+                "label": figure.label,
+                "caption": figure.caption,
+                "image_url": figure.image_url,
+            }
             for figure in document.figures
         ],
         "tables": [

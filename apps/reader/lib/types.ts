@@ -40,6 +40,14 @@ export interface SourceLink {
   // several kinds and none of its rules recognised this one, so nothing about
   // its review status has been established.
   contentTypeBasis: ContentTypeBasis;
+  // The image the publisher syndicated with this story, hotlinked from
+  // their CDN. Null for every paper source — no preprint server or
+  // journal supplies one — so absence is the common case.
+  imageUrl: string | null;
+  // A paper's own first figure, where the source syndicated no image. Shown
+  // with its label, because a diagram from the work is not a photograph of it
+  // and a reader should be able to tell which they are looking at.
+  figureImage: { url: string; label: string | null } | null;
   accessClass: string;
   publishedAt: string | null;
 }

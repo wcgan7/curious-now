@@ -44,6 +44,9 @@ class RawFeedEntry(BaseModel):
     url: str = Field(min_length=1)
     summary: str | None = None
     published_at: datetime | None = None
+    # Hotlinked from the publisher's CDN, never copied. NULL for every paper
+    # source, because no preprint server or journal syndicates one.
+    image_url: str | None = None
     default_content_type: ContentType
     content_type_rules: tuple[ContentTypeRule, ...] = ()
 
@@ -70,8 +73,20 @@ class IngestCandidate(BaseModel):
     content_type_note: str | None = None
     access_class: AccessClass
     published_at: datetime | None
+    image_url: str | None
     doi: str | None
     arxiv_id: str | None
+
+
+def _clean_image_url(url: str | None) -> str | None:
+    """Keep only an absolute HTTP(S) image URL a browser could actually load."""
+
+    if not url or not url.strip():
+        return None
+    parts = urlsplit(url.strip())
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        return None
+    return url.strip()
 
 
 def classify_content_type(
@@ -194,6 +209,7 @@ def normalize_entry(entry: RawFeedEntry) -> IngestCandidate:
         content_type_note=note,
         access_class=AccessClass.SNIPPET if snippet else AccessClass.METADATA_ONLY,
         published_at=entry.published_at,
+        image_url=_clean_image_url(entry.image_url),
         doi=doi,
         arxiv_id=arxiv_id,
     )

@@ -224,3 +224,29 @@ def test_a_double_escaped_newline_never_reaches_the_reader() -> None:
     assert "\n\n" in cleaned, "the paragraph break must be restored"
     assert r"\nabla" in cleaned, "the gradient operator must survive intact"
     assert r"\n\n" not in cleaned
+
+
+def test_the_writer_is_shown_what_each_figure_actually_contains() -> None:
+    """A citation's purpose was being invented from a bare number.
+
+    "Figure 4 — the dose-response curve" is a claim about what Figure 4 shows,
+    and the walkthrough was making it having seen only the string "Figure 4",
+    in the one layer whose whole point is that a reader can check it.
+    """
+
+    from curious_now_v2.generation.technical import _labelled
+
+    shown = _labelled(
+        {"label": "Figure 4", "caption": "Dose-response curves, with 95% intervals."}
+    )
+    assert shown == "Figure 4 — Dose-response curves, with 95% intervals."
+    assert _labelled({"label": "Figure 1", "caption": ""}) == "Figure 1"
+    assert _labelled({"label": "", "caption": "an orphan caption"}) == ""
+
+
+def test_a_very_long_caption_cannot_crowd_out_the_document() -> None:
+    from curious_now_v2.generation.technical import _labelled
+
+    shown = _labelled({"label": "Figure 2", "caption": "word " * 200})
+    assert len(shown) < 330
+    assert shown.endswith("...")

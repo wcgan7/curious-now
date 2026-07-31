@@ -116,6 +116,17 @@ export async function getFeedPage(
             'url', i.url,
             'contentType', i.content_type,
             'contentTypeBasis', i.content_type_basis,
+            'imageUrl', i.image_url,
+            -- A paper syndicates no image, but its own first figure can stand
+            -- in: a thumbnail identifying a work we link to and explain.
+            'figureImage', (
+              SELECT jsonb_build_object('url', f->>'image_url', 'label', f->>'label')
+              FROM jsonb_array_elements(
+                COALESCE(i.text_structure->'figures', '[]'::jsonb)
+              ) f
+              WHERE f->>'image_url' IS NOT NULL
+              LIMIT 1
+            ),
             'accessClass', i.access_class,
             'publishedAt', i.published_at
           )
@@ -219,6 +230,17 @@ export async function searchStories(
             'url', i.url,
             'contentType', i.content_type,
             'contentTypeBasis', i.content_type_basis,
+            'imageUrl', i.image_url,
+            -- A paper syndicates no image, but its own first figure can stand
+            -- in: a thumbnail identifying a work we link to and explain.
+            'figureImage', (
+              SELECT jsonb_build_object('url', f->>'image_url', 'label', f->>'label')
+              FROM jsonb_array_elements(
+                COALESCE(i.text_structure->'figures', '[]'::jsonb)
+              ) f
+              WHERE f->>'image_url' IS NOT NULL
+              LIMIT 1
+            ),
             'accessClass', i.access_class,
             'publishedAt', i.published_at
           )
@@ -283,6 +305,17 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
               'url', i.url,
               'contentType', i.content_type,
             'contentTypeBasis', i.content_type_basis,
+            'imageUrl', i.image_url,
+            -- A paper syndicates no image, but its own first figure can stand
+            -- in: a thumbnail identifying a work we link to and explain.
+            'figureImage', (
+              SELECT jsonb_build_object('url', f->>'image_url', 'label', f->>'label')
+              FROM jsonb_array_elements(
+                COALESCE(i.text_structure->'figures', '[]'::jsonb)
+              ) f
+              WHERE f->>'image_url' IS NOT NULL
+              LIMIT 1
+            ),
               'accessClass', i.access_class,
               'publishedAt', i.published_at
             )

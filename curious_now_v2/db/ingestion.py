@@ -267,6 +267,7 @@ def _upsert_item(
         candidate.content_type_basis,
         candidate.content_type_note,
         candidate.published_at,
+        candidate.image_url,
         candidate.doi,
         candidate.arxiv_id,
         candidate.access_class.value,
@@ -286,13 +287,14 @@ def _upsert_item(
               content_type_basis,
               content_type_note,
               published_at,
+              image_url,
               doi,
               arxiv_id,
               access_class
             )
             VALUES (
               %s, %s, %s, %s, %s, %s, %s,
-              %s, %s, %s, %s, %s, %s, %s
+              %s, %s, %s, %s, %s, %s, %s, %s
             )
             RETURNING id;
             """,
@@ -323,6 +325,10 @@ def _upsert_item(
             WHEN items.content_type_basis IN ('document', 'classifier')
             THEN items.content_type_note ELSE %s END,
           published_at = COALESCE(%s, published_at),
+          -- A publisher that drops the image from a re-listed entry has not
+          -- withdrawn it, and the same COALESCE that protects the DOI protects
+          -- this: a later feed read never blanks what an earlier one found.
+          image_url = COALESCE(%s, image_url),
           doi = COALESCE(%s, doi),
           arxiv_id = COALESCE(%s, arxiv_id),
           -- A feed entry only ever carries a snippet or nothing at all, so

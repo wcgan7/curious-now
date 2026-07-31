@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
 
@@ -127,7 +128,7 @@ def _split_label(caption: str) -> tuple[str | None, str]:
     return label, caption[match.end() :].strip(" .:")
 
 
-def _captions(soup: BeautifulSoup) -> tuple[tuple[Figure, ...], tuple[Table, ...]]:
+def _captions(soup: BeautifulSoup, base_url: str | None = None) -> tuple[tuple[Figure, ...], tuple[Table, ...]]:
     """Collect one entry per citable figure or table.
 
     Nesting means two different things in LaTeXML, and the caption's label
@@ -187,11 +188,39 @@ def _captions(soup: BeautifulSoup) -> tuple[tuple[Figure, ...], tuple[Table, ...
                 )
             )
         else:
-            figures.append(Figure(label=label, caption=caption))
+            figures.append(
+                Figure(
+                    label=label,
+                    caption=caption,
+                    image_url=_figure_image(owner, base_url),
+                )
+            )
     return tuple(figures), tuple(tables)
 
 
-def extract_arxiv_html(html: str) -> Document:
+def _figure_image(owner: Tag, base_url: str | None) -> str | None:
+    """Resolve a figure's image against the page it was fetched from.
+
+    LaTeXML writes every src relative — "2607.26029v1/x1.png" — so without the
+    request URL there is nothing to join it to. Some figures are inline SVG
+    instead, a TikZ picture compiled into the page itself; those have no URL
+    because they need none, and they are simply skipped here.
+
+    The base must not end in a slash: arXiv serves /html/{id} without
+    redirecting, and joining onto a trailing slash silently doubles the path.
+    """
+
+    if not base_url:
+        return None
+    image = owner.find("img")
+    src = (image.get("src") or "").strip() if image else ""
+    if not src:
+        return None
+    resolved = urljoin(base_url.rstrip("/"), src)
+    return resolved if resolved.startswith(("http://", "https://")) else None
+
+
+def extract_arxiv_html(html: str, base_url: str | None = None) -> Document:
     """Extract structure from an arXiv LaTeXML HTML rendering.
 
     This is the highest-quality path available for arXiv papers: sections,
@@ -267,7 +296,7 @@ def extract_arxiv_html(html: str) -> Document:
             Section(title=None, kind=SectionKind.OTHER, paragraphs=loose),
         )
 
-    figures, tables = _captions(soup)
+    figures, tables = _captions(soup, base_url)
     warnings: list[str] = []
     if not sections:
         warnings.append("no LaTeXML sections found")

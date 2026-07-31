@@ -97,11 +97,18 @@ def classify_section(title: str | None) -> SectionKind:
 
 @dataclass(frozen=True)
 class Figure:
-    """A figure's caption. The image itself is not stored; the caption is what
-    an explanation can cite and a reader can be pointed at."""
+    """A figure's caption, and where its image lives if the source says.
+
+    The image itself is still never stored — `image_url` points at the
+    publisher's own copy, which a reader's browser fetches directly. It is
+    deliberately absent from `Document.text`, because that string becomes the
+    prompt and the stored full text, and a URL is not something an explanation
+    should be able to draw on.
+    """
 
     label: str | None
     caption: str
+    image_url: str | None = None
 
 
 @dataclass(frozen=True)
