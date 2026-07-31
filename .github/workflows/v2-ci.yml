@@ -1,0 +1,118 @@
+name: v2 CI
+
+# Nothing has ever run against v2. The existing workflows trigger only on main
+# and check `curious_now`, not `curious_now_v2` or `apps/reader`, so every
+# commit on this branch has been verified by whoever happened to run the tests
+# locally. This runs on the branch as well as on pull requests, because that is
+# where the work is.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - v2
+
+concurrency:
+  group: v2-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    name: pipeline
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Matches compose.v2.yaml, which the integration tests are written for.
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: curious_now_v2_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d curious_now_v2_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CURIOUS_NOW_V2_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/curious_now_v2_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: python -m ruff check curious_now_v2 scripts tests
+
+      - name: Typecheck
+        run: python -m mypy curious_now_v2
+
+      # Integration tests skip themselves without the database URL, so a
+      # missing service would look like a pass. This proves they ran.
+      - name: Test
+        run: python -m pytest -k v2 -q
+
+      - name: Migrations apply twice
+        run: |
+          python -c "
+          from curious_now_v2.db.migrations import apply_migrations
+          import os
+          url = os.environ['CURIOUS_NOW_V2_TEST_DATABASE_URL']
+          first = apply_migrations(url)
+          second = apply_migrations(url)
+          print('applied:', first)
+          assert not second, f'migrations re-applied: {second}'
+          "
+
+      # Every extractor against frozen fixtures. This is what catches the
+      # silent kind of fault — text that parses into nonsense without erroring.
+      - name: Extraction audit
+        run: PYTHONPATH=. python scripts/v2_extraction_audit.py
+
+      - name: Source registry is valid
+        run: |
+          python -c "
+          import json, pathlib
+          from curious_now_v2.core.source_registry import SourceRegistry
+          registry = SourceRegistry.model_validate(
+              json.loads(pathlib.Path('config/v2/sources.json').read_text())
+          )
+          active = [s for s in registry.sources if s.active]
+          print(f'{len(registry.sources)} sources, {len(active)} active, '
+                f'{sum(len(s.feeds) for s in active)} feeds')
+          "
+
+  reader:
+    name: reader
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/reader
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/reader/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # The build is the check that matters: it is what caught a missing
+      # KaTeX stylesheet import and would catch a component that only
+      # typechecks in isolation.
+      - name: Build
+        run: npm run build

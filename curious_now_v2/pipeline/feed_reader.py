@@ -135,7 +135,14 @@ def fetch_feed(
     """Fetch and normalize a configured feed without writing to the database."""
 
     headers = {
-        "Accept": "application/atom+xml, application/rss+xml, application/xml, text/xml",
+        # The trailing */* matters. Naming only the feed types is more precise
+        # and some servers answer it with 406 and an empty body — mpg.de does,
+        # and the feed then simply never appears, with nothing to say why.
+        # Stating a preference and accepting anything is what browsers do.
+        "Accept": (
+            "application/atom+xml, application/rss+xml, application/xml;q=0.9, "
+            "text/xml;q=0.9, */*;q=0.1"
+        ),
         "User-Agent": "CuriousNow/2 (+https://github.com/curious-now)",
     }
     if etag:

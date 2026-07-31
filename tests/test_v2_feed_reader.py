@@ -171,3 +171,30 @@ def test_an_unconfigured_feed_excludes_nothing() -> None:
         default_content_type=ContentType.NEWS,
     )
     assert feed.excludes("https://example.test/sounds/play/anything") is None
+
+
+def test_the_accept_header_does_not_exclude_a_working_feed() -> None:
+    """Naming only the feed types is more precise and loses feeds.
+
+    mpg.de answers an Accept header of feed types alone with 406 and an empty
+    body, so the Max Planck feed simply never appeared and the failure said
+    nothing about why. Stating a preference and accepting anything is what a
+    browser does.
+    """
+
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["accept"] = request.headers.get("accept", "")
+        if "*/*" not in seen["accept"]:
+            return httpx.Response(406, content=b"")
+        return httpx.Response(200, content=RSS,
+                              headers={"content-type": "application/rss+xml"})
+
+    source, feed = make_source()
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        batch = fetch_feed(client=client, source_id=uuid4(), source=source, feed=feed)
+
+    assert "*/*" in seen["accept"]
+    assert batch.status is FeedReadStatus.SUCCEEDED
+    assert len(batch.candidates) == 1
