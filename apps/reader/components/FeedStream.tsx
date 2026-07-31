@@ -83,7 +83,6 @@ function StoryCard({ story, index }: { story: FeedStory; index: number }) {
       <div className="cardRail" aria-hidden="true">
         {String(index + 1).padStart(2, "0")}
       </div>
-      <CardImage source={leadSource} />
       <div className="cardBody">
         <div className="cardMeta">
           <span className={`sourceRole sourceRole--${leadSource?.sourceRole}`}>
@@ -106,6 +105,7 @@ function StoryCard({ story, index }: { story: FeedStory; index: number }) {
           </span>
         </div>
       </div>
+      <CardImage source={leadSource} />
     </Link>
   );
 }

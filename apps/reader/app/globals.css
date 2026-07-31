@@ -254,7 +254,11 @@ button {
 
 .storyCard {
   display: grid;
-  grid-template-columns: 62px 1fr;
+  /* A third column for the syndicated image. It is `auto`, so on the roughly
+     half of cards that have none it collapses to nothing and the card is
+     exactly the two-column card it always was. */
+  grid-template-columns: 62px 1fr auto;
+  gap: 0 24px;
   min-height: 210px;
   border-bottom: 1px solid var(--line);
   color: inherit;
@@ -275,6 +279,7 @@ button {
 }
 
 .cardBody {
+  grid-column: 2;
   padding: 34px 0 32px;
 }
 
@@ -1042,7 +1047,7 @@ button {
    Its job is to give the eye something to travel by down a long column, not
    to be the reason a story is opened. */
 .cardImage {
-  flex: 0 0 auto;
+  grid-column: 3;
   width: 132px;
   height: 88px;
   overflow: hidden;
