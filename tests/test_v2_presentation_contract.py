@@ -282,3 +282,23 @@ def test_a_thin_packet_from_a_long_document_is_a_collapse_not_a_finding() -> Non
     # A short document honestly carries few claims, and must not be retried.
     assert not _collapsed(too_few, words=300)
     assert not _collapsed(no_method, words=300)
+
+
+def test_generation_runs_stories_concurrently_without_sharing_a_connection() -> None:
+    """A psycopg connection is not for sharing between threads.
+
+    Each worker opens its own, which costs nothing beside the minute or more a
+    story spends waiting on a model — and is what makes the speed-up safe
+    rather than merely fast.
+    """
+
+    import inspect
+
+    from curious_now_v2.db import generation
+
+    source = inspect.getsource(generation.run_generation)
+    assert "ThreadPoolExecutor" in source
+    assert "psycopg.connect(database_url" in source, (
+        "each worker must open its own connection"
+    )
+    assert "workers" in inspect.signature(generation.run_generation).parameters

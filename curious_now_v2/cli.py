@@ -89,6 +89,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="rebuild presentations for stories that already have a valid packet",
     )
+    generate.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "stories to generate at once (default 1). Each spends most of its "
+            "time waiting on a model, so this is close to a linear speed-up; "
+            "raise it until the provider starts refusing."
+        ),
+    )
     _add_database_url_argument(generate)
 
     gate = commands.add_parser(
@@ -209,6 +219,7 @@ def main() -> None:
             limit=args.limit,
             model=args.model,
             regenerate=args.regenerate,
+            workers=args.workers,
         )
         print(  # noqa: T201
             f"generated {result.generated}/{result.attempted} stories "

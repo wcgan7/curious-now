@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -659,8 +660,21 @@ def run_generation(
     regenerate: bool = False,
     generator: Generator | None = None,
     story_ids: Sequence[UUID] | None = None,
+    workers: int = 1,
 ) -> GenerationRunResult:
-    """Extract an evidence packet, then write the layers it can support."""
+    """Extract an evidence packet, then write the layers it can support.
+
+    `workers` runs that many stories at once. The work is a subprocess waiting
+    on a model, so threads spend their time blocked rather than computing, and
+    a run of nine hundred stories takes days in sequence against hours in
+    parallel. Nothing about a story depends on another: each one already writes
+    in its own transactions, which is what makes this safe rather than merely
+    faster.
+
+    Every worker opens its own connection. A psycopg connection is not for
+    sharing between threads, and the cost of opening one is nothing beside the
+    minute or more each story spends waiting on a model.
+    """
 
     engine = generator or CodexGenerator(model=model or CodexGenerator.model)
     now = datetime.now(UTC)
@@ -686,31 +700,52 @@ def run_generation(
         pending = list_stories_needing_presentations(
             connection, limit=limit, regenerate=regenerate, story_ids=story_ids
         )
-        for story in pending:
+        def present(story: PendingStory) -> tuple[PendingStory, _Outcome | Exception]:
             try:
-                outcome = _present_one(
-                    connection, engine=engine, story=story, now=now
-                )
+                with psycopg.connect(database_url, autocommit=True) as own:
+                    return story, _present_one(
+                        own, engine=engine, story=story, now=now
+                    )
             except Exception as error:  # noqa: BLE001 — one story cannot end a run
                 # Hours of subprocess calls should not be lost, along with every
                 # counter, because one story raised. It stays unpresented and is
                 # picked up next run.
-                totals.failed += 1
-                errors.append(f"{story.story_id}: {type(error).__name__}: {error}")
-                continue
+                return story, error
 
-            totals.cost += outcome.cost
-            totals.generated += outcome.generated
-            totals.declined += outcome.declined
-            totals.withheld += outcome.withheld
-            totals.relabelled += outcome.relabelled
-            totals.judged_out += outcome.judged_out
-            totals.technical += outcome.technical
-            totals.technical_declined += outcome.technical_declined
-            totals.invalid += outcome.invalid
-            totals.failed += outcome.failed
-            if outcome.reason:
-                errors.append(f"{story.story_id}: {outcome.reason}")
+        done = 0
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = [pool.submit(present, story) for story in pending]
+            for future in as_completed(futures):
+                story, outcome = future.result()
+                done += 1
+                if isinstance(outcome, Exception):
+                    totals.failed += 1
+                    errors.append(
+                        f"{story.story_id}: {type(outcome).__name__}: {outcome}"
+                    )
+                    continue
+
+                totals.cost += outcome.cost
+                totals.generated += outcome.generated
+                totals.declined += outcome.declined
+                totals.withheld += outcome.withheld
+                totals.relabelled += outcome.relabelled
+                totals.judged_out += outcome.judged_out
+                totals.technical += outcome.technical
+                totals.technical_declined += outcome.technical_declined
+                totals.invalid += outcome.invalid
+                totals.failed += outcome.failed
+                if outcome.reason:
+                    errors.append(f"{story.story_id}: {outcome.reason}")
+                if done % 25 == 0 or done == len(pending):
+                    print(  # noqa: T201
+                        f"  {done}/{len(pending)} "
+                        f"generated={totals.generated} "
+                        f"withheld={totals.withheld} "
+                        f"failed={totals.failed} "
+                        f"${totals.cost:.2f}",
+                        flush=True,
+                    )
 
         counters: dict[str, Any] = {
             "attempted": len(pending),
