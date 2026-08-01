@@ -8,6 +8,7 @@ from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation.client import (
     Completion,
     Generator,
+    storable,
     unescape_newlines,
 )
 from curious_now_v2.generation.packet import ExtractedPacket
@@ -419,10 +420,10 @@ def generate_presentation(
         spine_intuition=str(spine.get("core_intuition") or "").strip(),
         spine_qualification=str(spine.get("qualification") or "").strip(),
         display_title=str(payload.get("display_title") or "").strip(),
-        glance=unescape_newlines(str(glance.get("text") or "").strip()),
+        glance=storable(unescape_newlines(str(glance.get("text") or "").strip())),
         glance_qualification_span=str(glance.get("qualification_span") or "").strip(),
         glance_supported=bool(glance.get("supported")),
-        explain=unescape_newlines(str(explain.get("text") or "").strip()),
+        explain=storable(unescape_newlines(str(explain.get("text") or "").strip())),
         explain_supported=bool(explain.get("mechanism_supported")),
         explain_declined_reason=str(explain.get("declined_reason") or "").strip(),
         completion=completion,

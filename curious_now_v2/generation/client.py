@@ -31,10 +31,23 @@ DEFAULT_EFFORT = "high"
 _ESCAPED_NEWLINE = re.compile(r"\\n(?![a-z])")
 
 
+# Postgres text cannot hold a NUL, and a model that has read a PDF will
+# occasionally hand one back. The call has already been paid for by then, so
+# the row is lost at the very last step: five of one hundred and seventy-six
+# stories in one run, every one of them a completed generation.
+_UNSTORABLE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
 def unescape_newlines(text: str) -> str:
     """Turn a literally written newline escape back into a newline."""
 
     return _ESCAPED_NEWLINE.sub("\n", text)
+
+
+def storable(text: str) -> str:
+    """Model text with the characters a text column cannot hold removed."""
+
+    return _UNSTORABLE.sub("", text)
 
 
 @dataclass(frozen=True)

@@ -21,6 +21,7 @@ from typing import Any
 from curious_now_v2.generation.client import (
     Completion,
     Generator,
+    storable,
     unescape_newlines,
 )
 
@@ -397,7 +398,7 @@ def generate_technical(
         sections=tuple(
             TechnicalSection(
                 heading=str((s or {}).get("heading") or "").strip(),
-                text=unescape_newlines(str((s or {}).get("text") or "").strip()),
+                text=storable(unescape_newlines(str((s or {}).get("text") or "").strip())),
             )
             for s in (payload.get("sections") or [])
             if str((s or {}).get("text") or "").strip()

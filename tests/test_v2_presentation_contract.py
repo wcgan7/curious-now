@@ -302,3 +302,20 @@ def test_generation_runs_stories_concurrently_without_sharing_a_connection() -> 
         "each worker must open its own connection"
     )
     assert "workers" in inspect.signature(generation.run_generation).parameters
+
+
+def test_generated_text_cannot_carry_what_a_text_column_rejects() -> None:
+    """Five of one hundred and seventy-six stories were lost this way.
+
+    A model that has read a PDF hands back a NUL now and then. Postgres text
+    cannot hold one, so the row died at the last step — after the call had been
+    made and paid for. The counter said "failed: 5" and nothing more until the
+    stage recorded its reason.
+    """
+
+    from curious_now_v2.generation.client import storable
+
+    assert storable("a formula\x00 and a bell\x07") == "a formula and a bell"
+    # Whitespace a column can hold must survive: paragraphs are load-bearing.
+    assert storable("one\ntwo\tthree\r\nfour") == "one\ntwo\tthree\r\nfour"
+    assert storable("") == ""

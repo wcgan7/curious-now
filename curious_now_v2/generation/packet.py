@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from curious_now_v2.core.enums import ClaimKind
-from curious_now_v2.generation.client import Completion, Generator
+from curious_now_v2.generation.client import Completion, Generator, storable
 
 PROMPT_VERSION = "packet-v4"
 
@@ -285,7 +285,7 @@ def _extract_once(
             kind = ClaimKind(str(raw.get("kind")))
         except ValueError:
             continue
-        statement = str(raw.get("text", "")).strip()
+        statement = storable(str(raw.get("text", "")).strip())
         if not statement:
             continue
         claims.append(
@@ -293,14 +293,14 @@ def _extract_once(
                 kind=kind,
                 text=statement,
                 confidence=min(max(float(raw.get("confidence") or 0.5), 0.0), 1.0),
-                excerpt=" ".join(str(raw.get("excerpt", "")).split()),
+                excerpt=storable(" ".join(str(raw.get("excerpt", "")).split())),
             )
         )
 
     story_kind = str(payload.get("story_kind") or "").strip()
     return ExtractedPacket(
         story_kind=story_kind if story_kind in VALID_KINDS else "not_science",
-        central_claim=str(payload.get("central_claim") or "").strip(),
+        central_claim=storable(str(payload.get("central_claim") or "").strip()),
         claims=tuple(claims),
         limitations=tuple(
             str(value).strip()
