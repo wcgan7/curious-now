@@ -24,7 +24,7 @@ from curious_now_v2.generation.client import (
     unescape_newlines,
 )
 
-PROMPT_VERSION = "technical-v6"
+PROMPT_VERSION = "technical-v7"
 
 # A shape that usually works, offered to the writer and enforced on nobody.
 # The contract says a walkthrough SHOULD be predictable, not that it must use
@@ -236,21 +236,36 @@ def known_labels(structure: dict[str, Any] | None) -> frozenset[str]:
 _FLOAT_LABEL = re.compile(r"^\s*(figure|fig\.?|table|tab\.?|scheme|chart)\b", re.I)
 
 
+# Publishers abbreviate differently and writers expand: a paper labelling its
+# floats "Fig. 1" is cited as "Figure 1" by anyone writing prose, and rejecting
+# that says the figure does not exist when it plainly does. The suffixes are
+# artefacts of the page — a table continued across a page break keeps its
+# number and gains a parenthesis.
+_ABBREVIATIONS = ((r"^fig\b\.?", "figure"), (r"^tab\b\.?", "table"),
+                  (r"^eq\b\.?", "equation"), (r"^sec\b\.?", "section"))
+_LABEL_SUFFIX = re.compile(r"\s*\((?:cont(?:inued)?|part \w+)\.?\)\s*$", re.I)
+
+
+def _normalise_label(label: str) -> str:
+    """Reduce a label to what identifies it, so two spellings meet."""
+
+    flat = " ".join(label.split(LABEL_SEPARATOR, 1)[0].split())
+    flat = _LABEL_SUFFIX.sub("", flat).casefold().rstrip(".:,;")
+    for pattern, full in _ABBREVIATIONS:
+        flat = re.sub(pattern, full, flat)
+    return " ".join(flat.split())
+
+
 def _matches(label: str, known: frozenset[str]) -> bool:
     """Whether a cited label names something the document has.
 
-    Compared loosely on case and spacing, because a walkthrough that writes
-    "Figure 4" for a float labelled "Figure 4:" has cited it correctly. What
-    this must catch is a citation of something that is not there at all.
+    Compared on what identifies a float rather than how it is spelled, because
+    "Fig. 1" and "Figure 1" are the same figure. What this must catch is a
+    citation of something that is not there at all.
     """
 
-    # A citation of the whole map line is a citation of its label.
-    cited = label.split(LABEL_SEPARATOR, 1)[0]
-    flat = " ".join(cited.split()).casefold().rstrip(".:")
-    return any(
-        flat == " ".join(candidate.split()).casefold().rstrip(".:")
-        for candidate in known
-    )
+    target = _normalise_label(label)
+    return any(target == _normalise_label(candidate) for candidate in known)
 
 
 def _cited_something_real(label: str, known: frozenset[str], source_text: str) -> bool:

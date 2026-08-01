@@ -345,3 +345,37 @@ def test_a_section_heading_absent_from_the_document_is_still_rejected() -> None:
         SOURCE_TEXT,
     )
     assert any("does not have" in problem for problem in problems)
+
+
+def test_a_float_is_the_same_float_however_it_is_spelled() -> None:
+    """Papers label floats "Fig. 1"; prose calls them "Figure 1".
+
+    Rejecting that told the reader the figure does not exist when it plainly
+    does, and it would have failed systematically — arXiv physics abbreviates
+    where the writer naturally expands.
+    """
+
+    structure = {
+        "figures": [{"label": "Fig. 1"}, {"label": "Fig. 3"}],
+        "tables": [{"label": "Table 2"}],
+        "sections": [{"title": "Methods"}],
+    }
+    for cited in ("Figure 1", "Fig. 1", "fig 1", "Table 2", "Table 2 (Continued)"):
+        assert validate(
+            make_technical(citations=(Citation(cited, "x"),)), structure, ""
+        ) == (), f"{cited} should match"
+
+
+def test_normalising_spelling_does_not_make_a_missing_float_match() -> None:
+    """Figure 2 is absent whether it is written Fig. 2 or Figure 2."""
+
+    structure = {
+        "figures": [{"label": "Fig. 1"}, {"label": "Fig. 3"}],
+        "tables": [],
+        "sections": [{"title": "Methods"}],
+    }
+    for cited in ("Figure 2", "Fig. 2", "Figure 9"):
+        problems = validate(
+            make_technical(citations=(Citation(cited, "x"),)), structure, ""
+        )
+        assert any("does not have" in p for p in problems), f"{cited} should fail"
