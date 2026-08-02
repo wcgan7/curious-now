@@ -111,6 +111,11 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # The reader carries real logic — maths rendering, feed assembly, card
+      # images — and nothing exercised any of it until now.
+      - name: Test
+        run: npm test
+
       # The build is the check that matters: it is what caught a missing
       # KaTeX stylesheet import and would catch a component that only
       # typechecks in isolation.

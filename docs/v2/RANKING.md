@@ -123,7 +123,10 @@ behaved than it. For contrast, the current additive score changes **12 of its
 top 12 positions in a month**.
 
 The time base is the **item's** publication date — how recent the science is —
-not `stories.published_at`, which records when we got round to it.
+not `stories.published_at`. The two coincide for most of this corpus, because
+ingestion already sets the story's date from its item; they diverge for four of
+168 by up to two days. Small, but they are different quantities, and only one of
+them is about the science.
 
 ## Where it is computed
 
