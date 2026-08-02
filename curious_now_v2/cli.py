@@ -278,9 +278,11 @@ def main() -> None:
             _database_url(args.database_url),
             limit=args.limit,
         )
+        newest = ranking_result.newest_effective_at
         print(  # noqa: T201
-            f"scored {ranking_result.stories_scored} stories; "
-            f"top score {ranking_result.top_score:.3f}"
+            f"recomputed {ranking_result.stories_scored} sort keys; "
+            f"newest effective_at "
+            f"{newest.isoformat(timespec='minutes') if newest else 'none'}"
         )
         return
 

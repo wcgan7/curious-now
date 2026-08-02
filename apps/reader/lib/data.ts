@@ -12,8 +12,10 @@ import type {
   StoryDetail,
 } from "@/lib/types";
 
+// Two fields, not three: effective_at already carries quality, so there is no
+// separate score to page on. A cursor minted before that change simply fails to
+// decode and the reader starts from the top, which is the right degradation.
 interface Cursor {
-  score: number;
   sortAt: string;
   id: string;
 }
@@ -25,7 +27,8 @@ interface FeedRow {
   id: string;
   reader_title: string;
   sort_at: Date;
-  feed_score: number;
+  quality_score: number | null;
+  significance: string | null;
   sources: SourceLink[];
 }
 
@@ -49,14 +52,12 @@ export function decodeCursor(value: string | null): Cursor | null {
     if (
       typeof decoded.sortAt !== "string" ||
       typeof decoded.id !== "string" ||
-      typeof decoded.score !== "number" ||
-      !Number.isFinite(decoded.score) ||
       !UUID_PATTERN.test(decoded.id) ||
       Number.isNaN(Date.parse(decoded.sortAt))
     ) {
       return null;
     }
-    return { score: decoded.score, sortAt: decoded.sortAt, id: decoded.id };
+    return { sortAt: decoded.sortAt, id: decoded.id };
   } catch {
     return null;
   }
@@ -76,12 +77,15 @@ export async function getFeedPage(
   pageSize = 20,
 ): Promise<FeedPage> {
   const sql = database();
-  // Ranked order, with reverse chronological as the tiebreak so an unranked
-  // or failed ranking pass degrades to newest-first rather than a broken feed.
+  // effective_at is the story's publication date shifted earlier by what its
+  // quality cost it, so ordering by it alone is the ranked order. It is
+  // time-invariant, which is what makes keyset pagination stable here: the key
+  // cannot move under a reader mid-scroll the way a decaying score would.
+  // Stories without one fall back to their publication date.
   const cursorFilter = cursor
     ? sql`
-        AND (s.feed_score, COALESCE(s.published_at, s.created_at), s.id)
-          < (${cursor.score}::double precision, ${cursor.sortAt}::timestamptz, ${cursor.id}::uuid)
+        AND (COALESCE(s.effective_at, s.published_at, s.created_at), s.id)
+          < (${cursor.sortAt}::timestamptz, ${cursor.id}::uuid)
       `
     : sql``;
 
@@ -90,8 +94,9 @@ export async function getFeedPage(
       SELECT
         s.id,
         COALESCE(dt.text, s.working_title) AS reader_title,
-        COALESCE(s.published_at, s.created_at) AS sort_at,
-        s.feed_score
+        COALESCE(s.effective_at, s.published_at, s.created_at) AS sort_at,
+        s.quality_score,
+        s.significance
       FROM stories s
       LEFT JOIN display_titles dt
         ON dt.id = s.current_display_title_id
@@ -99,8 +104,7 @@ export async function getFeedPage(
       WHERE s.status = 'published'
       ${cursorFilter}
       ORDER BY
-        s.feed_score DESC,
-        COALESCE(s.published_at, s.created_at) DESC,
+        COALESCE(s.effective_at, s.published_at, s.created_at) DESC,
         s.id DESC
       LIMIT ${pageSize}
     )
@@ -143,8 +147,9 @@ export async function getFeedPage(
       p.id,
       p.reader_title,
       p.sort_at,
-      p.feed_score
-    ORDER BY p.feed_score DESC, p.sort_at DESC, p.id DESC;
+      p.quality_score,
+      p.significance
+    ORDER BY p.sort_at DESC, p.id DESC;
   `;
 
   const stories = rows.map(mapFeedRow);
@@ -154,7 +159,6 @@ export async function getFeedPage(
     nextCursor:
       rows.length === pageSize && lastRow
         ? encodeCursor({
-            score: lastRow.feed_score,
             sortAt: lastRow.sort_at.toISOString(),
             id: lastRow.id,
           })
@@ -208,14 +212,15 @@ export async function searchStories(
         s.id,
         COALESCE(dt.text, s.working_title) AS reader_title,
         COALESCE(s.published_at, s.created_at) AS sort_at,
-        s.feed_score,
+        COALESCE(s.effective_at, s.published_at, s.created_at) AS sort_at,
         m.relevance
       FROM matches m
       JOIN stories s ON s.id = m.id
       LEFT JOIN display_titles dt
         ON dt.id = s.current_display_title_id
        AND dt.status = 'valid'
-      ORDER BY m.relevance DESC, s.feed_score DESC, s.id DESC
+      ORDER BY m.relevance DESC,
+               COALESCE(s.effective_at, s.published_at, s.created_at) DESC, s.id DESC
       LIMIT ${limit}
     )
     SELECT
@@ -253,8 +258,8 @@ export async function searchStories(
     JOIN story_items si ON si.story_id = p.id
     JOIN items i ON i.id = si.item_id
     JOIN sources src ON src.id = i.source_id
-    GROUP BY p.id, p.reader_title, p.sort_at, p.feed_score, p.relevance
-    ORDER BY p.relevance DESC, p.feed_score DESC, p.id DESC;
+    GROUP BY p.id, p.reader_title, p.sort_at, p.relevance
+    ORDER BY p.relevance DESC, p.sort_at DESC, p.id DESC;
   `;
 
   return rows.map(mapFeedRow);
@@ -287,7 +292,6 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
       s.id,
       COALESCE(dt.text, s.working_title) AS reader_title,
       COALESCE(s.published_at, s.created_at) AS sort_at,
-      s.feed_score,
       CASE WHEN dp.packet_id IS NOT NULL
         THEN 'enriched' ELSE 'evidence_only' END AS mode,
       COALESCE(

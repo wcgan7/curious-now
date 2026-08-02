@@ -1,3 +1,16 @@
+"""Recomputing the feed's sort key.
+
+The key is written once, when a story is published, and does not go stale: it
+is time-invariant by construction, so there is nothing here for a scheduler to
+run. What remains is a recompute, for the one thing that invalidates every key
+at once -- a change to the quality tables or to the half-life.
+
+That is a deliberate operator action rather than a cron. The previous
+arrangement was the opposite: a periodic pass nothing invoked, leaving 113 of
+168 published stories at zero, and which could not have stayed correct anyway
+because 35% of the score decayed on an 18-hour half-life.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,116 +21,49 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
-from curious_now_v2.core.enums import (
-    AccessClass,
-    ContentType,
-    SourceRole,
-    StoryItemRole,
-)
-from curious_now_v2.core.models import SourceItem, StoryDraft
-from curious_now_v2.pipeline.ranking import rank_stories
+from curious_now_v2.pipeline import scoring
 
 
 @dataclass(frozen=True)
 class RankingRunResult:
     stories_scored: int
-    top_score: float
+    newest_effective_at: datetime | None
 
 
-def load_story_drafts(
-    connection: psycopg.Connection[Any],
-    *,
-    limit: int | None = None,
-) -> tuple[StoryDraft, ...]:
-    """Load published stories with their source items for scoring."""
+def published_inputs(
+    connection: psycopg.Connection[Any], *, limit: int | None = None
+) -> list[tuple[UUID, datetime, int, str]]:
+    """What every published story earned, and when its science appeared.
 
-    query = """
-        SELECT
-          s.id,
-          s.working_title,
-          s.current_evidence_packet_id,
-          i.id,
-          i.source_id,
-          src.name,
-          src.role,
-          si.role,
-          i.title,
-          i.url,
-          i.content_type,
-          i.access_class,
-          i.published_at,
-          ip.paper_id
-        FROM stories s
-        JOIN story_items si ON si.story_id = s.id
-        JOIN items i ON i.id = si.item_id
-        JOIN sources src ON src.id = i.source_id
-        LEFT JOIN item_papers ip ON ip.item_id = i.id
-        WHERE s.status = 'published'
-        ORDER BY s.published_at DESC NULLS LAST, s.id, i.published_at DESC
+    The publication date is the item's, not the story's: freshness measures how
+    recent the work is, where `stories.published_at` records when we got round
+    to showing it.
     """
-    parameters: tuple[object, ...] = ()
-    if limit is not None:
-        query = f"""
-            WITH ranked AS (
-              SELECT id FROM stories
-              WHERE status = 'published'
-              ORDER BY published_at DESC NULLS LAST, id
-              LIMIT %s
-            )
-            {query.replace("WHERE s.status = 'published'", "WHERE s.id IN (SELECT id FROM ranked)")}
-        """
-        parameters = (limit,)
 
-    grouped: dict[UUID, list[SourceItem]] = {}
-    titles: dict[UUID, str] = {}
-    packets: dict[UUID, UUID | None] = {}
     with connection.cursor() as cursor:
-        cursor.execute(query, parameters)
-        for row in cursor:
-            (
-                story_id,
-                working_title,
-                packet_id,
-                item_id,
-                source_id,
-                source_name,
-                source_role,
-                story_role,
-                title,
-                url,
-                content_type,
-                access_class,
-                published_at,
-                paper_id,
-            ) = row
-            titles[story_id] = working_title
-            packets[story_id] = packet_id
-            grouped.setdefault(story_id, []).append(
-                SourceItem(
-                    item_id=item_id,
-                    source_id=source_id,
-                    source_name=source_name,
-                    source_role=SourceRole(source_role),
-                    role=StoryItemRole(story_role),
-                    title=title,
-                    url=url,
-                    content_type=ContentType(content_type),
-                    access_class=AccessClass(access_class),
-                    published_at=published_at,
-                    paper_id=paper_id,
-                )
-            )
-
-    return tuple(
-        StoryDraft(
-            story_id=story_id,
-            working_title=titles[story_id],
-            items=tuple(items),
-            current_evidence_packet_id=packets[story_id],
+        cursor.execute(
+            f"""
+            SELECT
+              s.id,
+              COALESCE(
+                (SELECT max(i.published_at) FROM story_items si
+                   JOIN items i ON i.id = si.item_id
+                  WHERE si.story_id = s.id),
+                s.created_at
+              ) AS published,
+              (SELECT count(*) FROM explanations e
+                WHERE e.story_id = s.id
+                  AND e.evidence_packet_id = s.current_evidence_packet_id
+                  AND e.status = 'valid') AS rungs,
+              COALESCE(s.significance, 'unclear')
+            FROM stories s
+            WHERE s.status = 'published'
+            ORDER BY s.id
+            {"LIMIT %s" if limit else ""};
+            """,
+            (limit,) if limit else (),
         )
-        for story_id, items in grouped.items()
-        if items
-    )
+        return [(row[0], row[1], int(row[2]), str(row[3])) for row in cursor.fetchall()]
 
 
 def run_ranking(
@@ -126,13 +72,16 @@ def run_ranking(
     limit: int | None = None,
     now: datetime | None = None,
 ) -> RankingRunResult:
-    """Score every published story and persist inspectable reasons.
+    """Recompute every published story's sort key from what it earned.
 
-    Ranking is idempotent: rerunning with the same data and clock produces the
-    same scores.
+    Idempotent by construction: the key depends only on the story's publication
+    date, its rungs and its significance, none of which move. Running this twice
+    writes the same values, and running it a year later writes them again.
     """
 
     moment = now or datetime.now(UTC)
+    scored: list[tuple[UUID, scoring.StoryScore]] = []
+
     with psycopg.connect(database_url, autocommit=True) as connection:
         with connection.transaction(), connection.cursor() as cursor:
             cursor.execute(
@@ -148,35 +97,48 @@ def run_ranking(
             run_id = cast(UUID, row[0])
 
         try:
-            stories = load_story_drafts(connection, limit=limit)
-            ranked = rank_stories(stories, now=moment)
-            with connection.transaction(), connection.cursor() as cursor:
-                cursor.executemany(
-                    """
-                    UPDATE stories SET
-                      feed_score = %s,
-                      ranking_reasons = %s,
-                      ranked_at = %s,
-                      updated_at = now()
-                    WHERE id = %s;
-                    """,
-                    [
-                        (
-                            entry.score,
-                            Jsonb(
-                                {
-                                    "base_score": round(entry.base_score, 6),
-                                    "variety_factor": round(entry.variety_factor, 6),
-                                    "principal_source": entry.principal_source,
-                                    "reasons": list(entry.reasons),
-                                }
-                            ),
-                            moment,
-                            entry.story_id,
-                        )
-                        for entry in ranked
-                    ],
+            scored = [
+                (
+                    story_id,
+                    scoring.score_story(
+                        published_at=published,
+                        rungs_earned=rungs,
+                        significance=verdict,
+                    ),
                 )
+                for story_id, published, rungs, verdict in published_inputs(
+                    connection, limit=limit
+                )
+            ]
+            if scored:
+                with connection.transaction(), connection.cursor() as cursor:
+                    cursor.executemany(
+                        """
+                        UPDATE stories SET
+                          quality_score = %s,
+                          effective_at = %s,
+                          ranking_reasons = %s,
+                          ranked_at = %s,
+                          updated_at = now()
+                        WHERE id = %s;
+                        """,
+                        [
+                            (
+                                entry.quality,
+                                entry.effective_at,
+                                Jsonb(
+                                    {
+                                        "quality": round(entry.quality, 6),
+                                        "offset_hours": round(entry.offset_hours, 2),
+                                        "reasons": list(entry.reasons),
+                                    }
+                                ),
+                                moment,
+                                story_id,
+                            )
+                            for story_id, entry in scored
+                        ],
+                    )
         except Exception as exc:
             with connection.transaction(), connection.cursor() as cursor:
                 cursor.execute(
@@ -200,10 +162,12 @@ def run_ranking(
                   counters = %s
                 WHERE id = %s;
                 """,
-                (Jsonb({"stories_scored": len(ranked)}), run_id),
+                (Jsonb({"stories_scored": len(scored)}), run_id),
             )
 
     return RankingRunResult(
-        stories_scored=len(ranked),
-        top_score=ranked[0].score if ranked else 0.0,
+        stories_scored=len(scored),
+        newest_effective_at=max(
+            (entry.effective_at for _, entry in scored), default=None
+        ),
     )

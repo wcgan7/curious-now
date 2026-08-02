@@ -13,12 +13,14 @@ from psycopg.types.json import Jsonb
 from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.generation import packet as packet_module
 from curious_now_v2.generation import present as present_module
+from curious_now_v2.generation import significance as significance_module
 from curious_now_v2.generation import technical as technical_module
 from curious_now_v2.generation.client import CodexGenerator, Generator
 from curious_now_v2.generation.judge import declined_reason, judge_mechanism
 from curious_now_v2.generation.packet import extract_packet
 from curious_now_v2.generation.present import generate_presentation
 from curious_now_v2.generation.technical import generate_technical
+from curious_now_v2.pipeline import scoring
 
 
 def _one(cursor: psycopg.Cursor[Any]) -> tuple[Any, ...]:
@@ -273,6 +275,7 @@ def _store(
     extracted: packet_module.ExtractedPacket,
     presentation: present_module.Presentation,
     technical: technical_module.Technical | None,
+    significance: str,
     model: str,
     now: datetime,
 ) -> None:
@@ -485,6 +488,33 @@ def _store(
             # breaks the contract falls back to the source's own headline —
             # an attributed fact rather than our editorial text — while the
             # explanation it belongs to goes out unaffected.
+            #
+            # The sort key is written here too, and only here. It is
+            # time-invariant by construction, so publication is both the first
+            # moment it can be computed — rungs earned are known only now — and
+            # the last moment it needs to be.
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT count(*) FROM explanations e
+                    WHERE e.story_id = %s AND e.evidence_packet_id = %s
+                      AND e.status = 'valid'),
+                  COALESCE(
+                    (SELECT max(i.published_at) FROM story_items si
+                       JOIN items i ON i.id = si.item_id
+                      WHERE si.story_id = %s),
+                    s.created_at
+                  )
+                FROM stories s WHERE s.id = %s;
+                """,
+                (story.story_id, packet_id, story.story_id, story.story_id),
+            )
+            rungs_earned, published_at = _one(cursor)
+            scored = scoring.score_story(
+                published_at=published_at,
+                rungs_earned=rungs_earned,
+                significance=significance,
+            )
             cursor.execute(
                 """
                 UPDATE stories SET
@@ -492,12 +522,21 @@ def _store(
                   published_at = COALESCE(published_at, now()),
                   current_evidence_packet_id = %s,
                   current_display_title_id = %s,
+                  quality_score = %s,
+                  significance = %s,
+                  effective_at = %s,
+                  ranking_reasons = %s,
+                  ranked_at = now(),
                   updated_at = now()
                 WHERE id = %s AND status <> 'hidden';
                 """,
                 (
                     packet_id,
                     title_id if presentation.title_valid else None,
+                    scored.quality,
+                    significance,
+                    scored.effective_at,
+                    Jsonb(list(scored.reasons)),
                     story.story_id,
                 ),
             )
@@ -634,12 +673,33 @@ def _present_one(
         elif written.completion.ok:
             out.technical_declined = 1
 
+    # Whether the result would change what someone in the field does next. Its
+    # own call rather than a question bolted onto an existing one: the packet
+    # pass would be grading its own extraction, which is the failure the
+    # mechanism judge exists to prevent, and the mechanism judge reads our
+    # prose where this must read the evidence.
+    verdict = significance_module.judge_significance(
+        engine,
+        title=presentation.display_title or story.title,
+        source_name=story.source_name,
+        claims=[
+            significance_module.CandidateClaim(
+                claim_kind=claim.kind.value,
+                claim_text=claim.text,
+                excerpt=claim.excerpt,
+            )
+            for claim in extracted.claims
+        ],
+    )
+    out.cost += verdict.completion.usage.cost(engine.model)
+
     _store(
         connection,
         story=story,
         extracted=extracted,
         presentation=presentation,
         technical=written,
+        significance=verdict.verdict,
         model=engine.model,
         now=now,
     )
