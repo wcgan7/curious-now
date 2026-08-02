@@ -29,7 +29,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from math import log
 
-FRESHNESS_HALF_LIFE_HOURS = 18.0
+# One week. Inherited as 18 hours from the additive score and wrong there:
+# freshness was 35% of a weighted sum then, and is the entire ordering backbone
+# now, so the parameter had to be re-derived rather than carried across. At 18
+# hours the whole quality range was worth 33 hours against a corpus spanning
+# months, and the age bands did not overlap at all -- a three-rung
+# practice-changing paper sat below every two-day-old story regardless of what
+# it said. A week makes quality worth about thirteen days of age, which is the
+# right trade for a feed that is calm rather than breaking.
+FRESHNESS_HALF_LIFE_HOURS = 168.0
 
 # How many rungs the story earned. Not asserted: three rungs means the Explain
 # survived a judge that had to quote its mechanism sentence, and the Technical

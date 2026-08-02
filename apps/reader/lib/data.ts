@@ -1,4 +1,5 @@
 import { database } from "@/lib/database";
+import { spreadSources } from "@/lib/spread";
 import { renderMath } from "@/lib/math";
 import type {
   Citation,
@@ -152,8 +153,11 @@ export async function getFeedPage(
     ORDER BY p.sort_at DESC, p.id DESC;
   `;
 
-  const stories = rows.map(mapFeedRow);
+  // The cursor is minted from the SQL order, before interleaving, so every
+  // story falls on exactly one page and the keyset stays stable. Interleaving
+  // only changes the reading order within the page it was already on.
   const lastRow = rows.at(-1);
+  const stories = spreadSources(rows.map(mapFeedRow));
   return {
     stories,
     nextCursor:

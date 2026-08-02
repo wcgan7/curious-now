@@ -53,10 +53,17 @@ def test_the_stored_key_orders_exactly_as_the_live_score(hours_later: int) -> No
 
 
 def test_the_key_does_not_underflow_where_the_live_score_does() -> None:
-    """exp(-age/h) reaches 0.0 in double precision at about 532 days."""
+    """exp(-age/h) reaches 0.0 in double precision at about 745 half-lives.
 
-    ancient = WHEN - timedelta(days=900)
-    assert exp(-(900 * 24) / FRESHNESS_HALF_LIFE_HOURS) == 0.0
+    Where that falls depends on the half-life -- 532 days at 18 hours, and
+    about 13 years at a week -- so it is derived rather than written down. Log
+    space has no such limit at any horizon.
+    """
+
+    underflow_hours = 760 * FRESHNESS_HALF_LIFE_HOURS
+    ancient = WHEN - timedelta(hours=underflow_hours)
+
+    assert exp(-underflow_hours / FRESHNESS_HALF_LIFE_HOURS) == 0.0
     assert key(3, "changes_practice", ancient) > key(1, "unclear", ancient)
 
 
@@ -83,12 +90,26 @@ def test_every_shortcoming_costs_time_never_gains_it() -> None:
             assert key(rungs, significance) <= WHEN
 
 
-def test_the_worst_story_is_beaten_by_a_day_and_a_half_of_freshness() -> None:
-    """The spread has to be readable: quality is worth about this much age."""
+def test_quality_is_worth_roughly_a_fortnight_of_age() -> None:
+    """The spread has to reach across the corpus or quality is decoration.
+
+    At an 18-hour half-life it was worth 33 hours against a corpus spanning
+    months, and the age bands did not overlap at all: a three-rung
+    practice-changing paper sat below every two-day-old story whatever it said.
+    """
 
     penalty = WHEN - key(1, "unclear")
 
-    assert timedelta(hours=30) < penalty < timedelta(hours=40)
+    assert timedelta(days=11) < penalty < timedelta(days=15)
+
+
+def test_quality_can_outrank_several_days_of_freshness() -> None:
+    """The concrete claim: the best beats routine work published days later."""
+
+    best_today = key(3, "changes_practice", WHEN - timedelta(days=4))
+    routine_now = key(3, "incremental", WHEN)
+
+    assert best_today > routine_now
 
 
 # --- unknown values ---------------------------------------------------------
