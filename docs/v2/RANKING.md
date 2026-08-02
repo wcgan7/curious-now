@@ -42,7 +42,8 @@ the corpus behaves as though it were 41 hours older.
 Because the key is a time, it is stored as one:
 
 ```
-effective_at = COALESCE(published_at, created_at) + (h · ln Q) hours
+effective_at = COALESCE(max(item.published_at), stories.created_at)
+                 + (h · ln Q) hours
 ORDER BY effective_at DESC, id DESC
 ```
 
@@ -81,9 +82,23 @@ function of the story, which is what makes the whole scheme work.
 
 ## Where it is computed
 
-At publication, in the gate — `_store` is already the only writer of
-`status = 'published'`, so computing the key there gives every published story
-one, exactly once, with no pass to schedule and nothing to go stale.
+**No model is involved.** All four components read stored metadata —
+`source_role` from the registry, `content_type` from ingestion, `access_class`
+from retrieval — so the whole score is arithmetic over fields already in the
+row. There is no pass to add, LLM or otherwise.
+
+It belongs in `db/generation.py`, in the same statement that writes
+`status = 'published'` — that is the only place a story becomes published, and
+the gate deliberately is not: the gate decides eligibility and sets `draft`,
+leaving publication to whether a validated presentation exists. Computing the
+key there gives every published story one, exactly once, inside a transaction
+that already runs.
+
+The time base is the **item's** publication date, `max(item.published_at)`,
+which is what freshness measures today: how recent the science is, not how
+recently we got round to it. `stories.published_at` records the latter and is
+the wrong clock for this. Where no item carries a date, the story's own
+timestamp is the fallback.
 
 `run_ranking` stops being a periodic job. It stays as a **recompute** command
 for the one case that genuinely needs it: a change to the weights or the
@@ -124,7 +139,8 @@ the reason it is the fallback rather than the plan.
    `ranking_reasons`. Retire `feed_score` only after the reader has moved.
 2. **`pipeline/ranking.py`**: `score_story` returns `Q` and the offset;
    `rank_stories` loses the variety damper and becomes a plain map.
-3. **`db/publication.py`**: compute and write the key as a story is published.
+3. **`db/generation.py`**: compute and write the key in the statement that
+   sets `status = 'published'`. Not the gate, which only ever sets `draft`.
 4. **`db/ranking.py`**: `run_ranking` becomes an explicit recompute over all
    published stories.
 5. **`apps/reader/lib/data.ts`**: order and paginate on
