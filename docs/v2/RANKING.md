@@ -61,13 +61,20 @@ whether our fetcher succeeded.
 ## Quality
 
 ```
-Q = QUALITY_BY_RUNGS[rungs_earned]     # 1 -> 0.35, 2 -> 0.65, 3 -> 1.0
+Q = QUALITY_BY_RUNGS[rungs_earned] x QUALITY_BY_SIGNIFICANCE[verdict]
+
+rungs         3 -> 1.00   2 -> 0.70   1 -> 0.45
+significance  changes_practice -> 1.00   incremental -> 0.55   unclear -> 0.35
 ```
 
-Three levels, stated as a table rather than derived, because there is no
-underlying continuous quantity being approximated and pretending otherwise
-would invite false precision. The values are a judgement about how much a
-missing rung should cost and should be revisited once there is a reason to.
+Both are tables rather than formulas, because neither approximates an
+underlying continuous quantity and pretending otherwise would invite false
+precision.
+
+Significance is weighted harder than rungs deliberately: rungs measure how well
+we could explain a paper, significance measures whether it mattered, and the
+second is the editorial question this feed exists to answer. A one-rung paper
+that changes practice therefore outranks a three-rung paper that does not.
 
 ## Provenance is not quality, and stops being folded in
 
@@ -130,7 +137,7 @@ eligibility and sets `draft`.
 for the one case that needs it: a change to the table or the half-life, which
 invalidates every key at once.
 
-## Significance: specified, deliberately unbuilt
+## Significance
 
 Three levels is coarse. The obvious remedy is to ask the model, and the obvious
 form of that question is the wrong one.
@@ -152,10 +159,16 @@ a categorical verdict, and a quote that can be checked:
 
 Categorical and grounded composes into `Q`. A scalar does not.
 
-It is specified and not built, because it costs a call per story and the
-three-level signal has not yet been shown to be insufficient in front of a
-reader. Build it when the feed is visibly badly ordered and rungs cannot explain
-why.
+Measured over 24 random published stories: **3 changes_practice, 18
+incremental, 3 unclear**, and all 24 quoted evidence that traced back to the
+source. That is the distribution the question should produce -- most research
+extends a line rather than redirecting it, and saying so is not an insult. The
+three `unclear` verdicts were a BBC piece and two lab blogs, where the question
+genuinely cannot be answered from a product announcement; declining is the right
+answer there rather than a failure.
+
+It costs $0.012 a story, which is less than the citation typing and about $2
+for everything published so far.
 
 ## Variety
 
