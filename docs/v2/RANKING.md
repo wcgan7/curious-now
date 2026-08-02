@@ -1,45 +1,100 @@
-# Curious Now v2 — Ranking without a ranking pass
+# Curious Now v2 — Ranking on what we learned by reading
 
-## The problem
+## The problem, stated properly
 
-113 of 168 published stories sit at `feed_score = 0`, every one of them
-published since `run_ranking` last ran. `run_ranking` has one caller and nothing
-invokes it after generation.
+113 of 168 published stories sit at `feed_score = 0`, every one published since
+`run_ranking` last ran. That is the visible defect. Two deeper ones sit under
+it.
 
-Scheduling it after generation would fix today's symptom and not the cause. The
-score is 35% freshness on an 18-hour half-life, so a stored value is wrong
-within hours of being written. Running the pass more often shortens the window
-in which the feed is wrong; it does not close it.
+**The score measures our plumbing, not the science.** Its four components are
+evidence quality (what *kind* of document this is), primary availability
+(whether **we** obtained the paper), text sufficiency (how much text **our
+retrieval** captured), and corroboration (how many outlets picked it up). Three
+of the four describe our own machinery. None of them read the paper.
 
-There is a second defect in the same number. The variety damper multiplies a
-story's score by `0.45 ** repetition`, where `repetition` counts same-source
-stories **in that ranking pass**. Two stories of identical merit therefore
-receive different permanent scores depending on which batch they were ranked
-in. That is not a property of a story.
+Meanwhile the pipeline read every word: it extracted claims against evidence,
+ran a second judge over whether Explain states a mechanism, and wrote a
+Technical walkthrough whose citations were validated against recoverable figure
+labels. Ranking consults none of it. A story that earned all four rungs and one
+that managed two are indistinguishable to the feed unless their content types
+happen to differ.
 
-## The key idea
+**And freshness cannot be stored.** At an 18-hour half-life a written score is
+wrong within hours, so scheduling `run_ranking` after generation shortens the
+window in which the feed is wrong without closing it.
+
+## What ranking may read, measured
+
+Only signals the pipeline already produced and already validated. Each was
+checked against the 168 published stories before being kept.
+
+**Rungs earned — kept.** The one signal that discriminates.
+
+```
+1 depth:  20 stories (12%)
+2 depths: 96 stories (57%)
+3 depths: 52 stories (31%)
+
+explain    138 valid,  30 failed
+technical   62 valid,  10 failed
+```
+
+This is earned, not asserted. A story reaches three rungs only if its Explain
+survived a judge that had to quote the mechanism sentence verbatim, and its
+Technical cited figures that exist in the document. The thirty failures are
+recorded with their reasons — "judged a capability list rather than a
+mechanism" — which is a real editorial verdict about the source's substance.
+
+**Claim kinds — rejected.** 165 of 168 packets carry a `result` claim. At 98%
+prevalence it separates nothing. `limitation` (73%) and `uncertainty` (79%)
+looked more promising and are still too flat to carry weight, and both plausibly
+measure the extractor rather than the paper.
+
+**Claim count — rejected.** It runs from 3 to 104 across published packets and
+tracks how long the document was. A 104-claim packet is a long paper, not a
+good one.
+
+So the free signals amount to **one three-level variable**. That is coarser
+than anyone would want, and it is still far better aligned than ranking on
+whether our fetcher succeeded.
+
+## Quality
+
+```
+Q = QUALITY_BY_RUNGS[rungs_earned]     # 1 -> 0.35, 2 -> 0.65, 3 -> 1.0
+```
+
+Three levels, stated as a table rather than derived, because there is no
+underlying continuous quantity being approximated and pretending otherwise
+would invite false precision. The values are a judgement about how much a
+missing rung should cost and should be revisited once there is a reason to.
+
+## Provenance is not quality, and stops being folded in
+
+`content_type` was doing duty as "evidence quality" and it is nothing of the
+kind. Whether a paper is peer-reviewed or a preprint is a **fact about
+provenance**, useful and worth knowing, and not a claim about whether the
+science is interesting. Folding it into a single number both overstates it —
+a dull peer-reviewed paper outranks a striking preprint on type alone — and
+hides it, because the reader never sees the fact that actually mattered.
+
+It leaves the score and becomes a badge on the story. `access_class` and
+corroboration leave too: the first is a property of our retrieval, and the
+second is a proxy for press pickup, which is not what this feed is for.
+
+## The sort key
 
 Combine quality and freshness by multiplication rather than addition, and the
-ordering becomes computable once and correct forever.
-
-With `score = Q · exp(-(now - t) / h)` for quality `Q`, publication time `t` and
-half-life `h`, take logarithms and multiply by `h`:
+ordering becomes computable once and correct forever. With
+`score = Q · exp(-(now - t) / h)`, take logarithms and multiply by `h`:
 
 ```
-h · ln(score)  =  h · ln Q  −  now  +  t
-               =  (t + h · ln Q)  −  now
-                                    ^^^^^ identical for every story
+h · ln(score)  =  (t + h · ln Q)  −  now
+                                     ^^^^^ identical for every story
 ```
 
-The time term is common to all stories, so it cancels out of any comparison.
-**`t + h · ln Q` is a sort key that never needs recomputing.**
-
-It has a reading that operators can hold in their heads: a story ranks *as if
-published earlier* by an amount its quality earns it. At `h = 18h`, a story of
-half quality behaves as though it were 12.5 hours older; the weakest story in
-the corpus behaves as though it were 41 hours older.
-
-Because the key is a time, it is stored as one:
+The clock term is common to all stories and cancels out of every comparison, so
+**`t + h · ln Q` never needs recomputing**. Stored as a time:
 
 ```
 effective_at = COALESCE(max(item.published_at), stories.created_at)
@@ -47,119 +102,106 @@ effective_at = COALESCE(max(item.published_at), stories.created_at)
 ORDER BY effective_at DESC, id DESC
 ```
 
-The equivalence was checked over 400 synthetic stories at horizons from one
-hour to five years, and it holds exactly — with one instructive exception.
-Beyond about **532 days** the live score underflows: `exp(-age/h)` reaches
-`0.0` in double precision at an age of 709 half-lives, so every older story
-scores exactly zero and ties with every other. Working in log space has no such
-limit. The stored key is therefore not merely equivalent to the live
-computation but strictly better behaved than it.
+It reads plainly: a story ranks as if published earlier by an amount its quality
+earns. At `h = 18h` and the table above, a two-rung story behaves as though it
+were 7.7 hours older than a three-rung one, and a one-rung story 18.9 hours
+older.
 
-For contrast, the current additive score was checked the same way: **12 of its
-top 12 positions change after a month**. The drift is not a rounding detail.
+The equivalence was checked over 400 synthetic stories at horizons from one hour
+to five years and holds exactly, with one instructive exception: beyond about
+**532 days** the live score underflows, because `exp(-age/h)` reaches `0.0` in
+double precision, tying every older story together. Log space has no such limit,
+so the stored key is not merely equivalent to the live computation but better
+behaved than it. For contrast, the current additive score changes **12 of its
+top 12 positions in a month**.
 
-## Quality
-
-`Q` keeps the existing intrinsic components and their relative weights,
-renormalised over the 0.65 that is not freshness:
-
-| Component | Current weight | Renormalised |
-| --- | --- | --- |
-| Evidence quality | 0.25 | 0.385 |
-| Primary availability | 0.15 | 0.231 |
-| Corroboration | 0.15 | 0.231 |
-| Text sufficiency | 0.10 | 0.154 |
-
-An arithmetic weighted mean is kept rather than a geometric one. A product
-would be zeroed by either `primary_availability` or `corroboration`, both of
-which legitimately reach 0.0, and a geometric mean would need arbitrary floors
-to avoid it. The arithmetic mean cannot reach zero on its own: the existing
-tables floor evidence at 0.2 and text at 0.15, so **`Q ≥ 0.1`** and
-`h · ln Q ∈ [−41h, 0]`.
-
-Nothing about `Q` refers to another story or to the clock. It is a pure
-function of the story, which is what makes the whole scheme work.
+The time base is the **item's** publication date — how recent the science is —
+not `stories.published_at`, which records when we got round to it.
 
 ## Where it is computed
 
-**No model is involved.** All four components read stored metadata —
-`source_role` from the registry, `content_type` from ingestion, `access_class`
-from retrieval — so the whole score is arithmetic over fields already in the
-row. There is no pass to add, LLM or otherwise.
+**No model call.** Rungs earned is a count of valid explanations, known in the
+same transaction that publishes the story. The key goes in `db/generation.py`,
+in the statement that sets `status = 'published'` — the only place a story
+becomes published. The gate is deliberately not that place: it decides
+eligibility and sets `draft`.
 
-It belongs in `db/generation.py`, in the same statement that writes
-`status = 'published'` — that is the only place a story becomes published, and
-the gate deliberately is not: the gate decides eligibility and sets `draft`,
-leaving publication to whether a validated presentation exists. Computing the
-key there gives every published story one, exactly once, inside a transaction
-that already runs.
+`run_ranking` stops being a periodic job and survives as an explicit recompute,
+for the one case that needs it: a change to the table or the half-life, which
+invalidates every key at once.
 
-The time base is the **item's** publication date, `max(item.published_at)`,
-which is what freshness measures today: how recent the science is, not how
-recently we got round to it. `stories.published_at` records the latter and is
-the wrong clock for this. Where no item carries a date, the story's own
-timestamp is the fallback.
+## Significance: specified, deliberately unbuilt
 
-`run_ranking` stops being a periodic job. It stays as a **recompute** command
-for the one case that genuinely needs it: a change to the weights or the
-half-life, which invalidates every stored key at once. That is a deliberate,
-infrequent operator action, not a cron.
+Three levels is coarse. The obvious remedy is to ask the model, and the obvious
+form of that question is the wrong one.
 
-## Variety, honestly
+**Not a rating.** Independent scalar scores do not calibrate — an 8 from one
+call means nothing against an 8 from another, and the model sees no corpus to
+compare against. This project already learned the general form of that lesson:
+the writer decided for itself whether it had explained, and "a writer asked to
+write will generally find that it does". Two metrics were tried against real
+output and both failed; a judge with a required verbatim quote agreed with an
+independently framed second judge on twelve of thirteen.
 
-The damper cannot stay in the score, because it makes the score depend on
-batching. Removing it leaves a real problem unsolved: the corpus has
-source-days of up to 10 published stories, so a bulk arXiv drop can occupy half
-a page.
+So if significance is wanted, it takes the judge's shape — a specific question,
+a categorical verdict, and a quote that can be checked:
 
-**Phase one removes it and does nothing else.** The feed will clump. At 168
-published stories and a worst case of 10 from one source in a day, that is
-visible but not disabling, and it is worth seeing the real shape before
-designing against a guess.
+> Does this report a result that would change what someone working in this
+> field does next? Quote the sentence that establishes it.
+> → `changes_practice | incremental | unclear`
 
-**Phase two diversifies at assembly**, not in the score: paginate by
-`effective_at` so each story falls on exactly one page, then interleave by
-source *within* the page. The page boundary stays keyset-stable while the
-reading order inside it spreads sources out.
+Categorical and grounded composes into `Q`. A scalar does not.
 
-If clumping proves worse than per-page interleaving can absorb — likely at a
-much larger corpus — the escalation is **source-day density**: shift
-`effective_at` back by `h · ln(1 / (1 + λ(n − 1)))` where `n` is the number of
-same-source stories published that day. That is a stable property of a story's
-context rather than of a batch. It carries one wrinkle worth stating now: the
-day's output is not fully known until the day closes, so it would need
-finalising once, after the fact, reintroducing a small periodic job. That is
-the reason it is the fallback rather than the plan.
+It is specified and not built, because it costs a call per story and the
+three-level signal has not yet been shown to be insufficient in front of a
+reader. Build it when the feed is visibly badly ordered and rungs cannot explain
+why.
+
+## Variety
+
+The damper leaves the score. It multiplies by `0.45 ** repetition` counted
+**within a ranking pass**, so two stories of identical merit take different
+permanent scores depending on which batch ranked them. That is not a property
+of a story.
+
+Removing it leaves real clumping — the corpus has source-days of up to 10
+published stories. **Phase one removes it and does nothing else**, so the shape
+can be seen before it is designed against.
+
+**Phase two diversifies at assembly**: paginate by `effective_at` so each story
+falls on exactly one page, then interleave by source within the page. The page
+boundary stays keyset-stable while reading order spreads sources out.
+
+If that proves insufficient, the escalation is **source-day density** — shift
+`effective_at` back by `h · ln(1 / (1 + λ(n − 1)))` for `n` same-source stories
+published that day. It is a stable property of a story's context rather than of
+a batch, but the day's output is not known until the day closes, so it would
+need finalising once after the fact. That is why it is the fallback.
 
 ## What changes
 
 1. **Migration**: add `quality_score DOUBLE PRECISION` and
-   `effective_at TIMESTAMPTZ` to `stories`; index
-   `(effective_at DESC, id DESC) WHERE status = 'published'`. Keep
-   `ranking_reasons`. Retire `feed_score` only after the reader has moved.
-2. **`pipeline/ranking.py`**: `score_story` returns `Q` and the offset;
-   `rank_stories` loses the variety damper and becomes a plain map.
-3. **`db/generation.py`**: compute and write the key in the statement that
-   sets `status = 'published'`. Not the gate, which only ever sets `draft`.
-4. **`db/ranking.py`**: `run_ranking` becomes an explicit recompute over all
-   published stories.
-5. **`apps/reader/lib/data.ts`**: order and paginate on
-   `(effective_at, id)` instead of `(feed_score, published_at, id)`.
-6. **Backfill**: one recompute for the 168 stories already published.
+   `effective_at TIMESTAMPTZ`; index `(effective_at DESC, id DESC)
+   WHERE status = 'published'`. Retire `feed_score` after the reader moves.
+2. **`pipeline/ranking.py`**: `Q` from rungs earned; drop evidence, primary,
+   corroboration, text, and the variety damper.
+3. **`db/generation.py`**: write the key alongside `status = 'published'`.
+4. **`db/ranking.py`**: `run_ranking` becomes an explicit recompute.
+5. **Reader**: order and paginate on `(effective_at, id)`; show provenance as a
+   badge rather than as an input to the score.
+6. **Backfill**: one recompute over the 168 already published.
 
 ## What this costs
 
-**Old stories never resurface.** Under the current additive score, freshness
-decays toward zero for everything, so ordering drifts toward quality alone and
-a good old story climbs back. Under a product, the ordering fixed at
-publication is permanent. For a calm feed this is the better behaviour, but it
-is a behaviour change and not a refactor.
+**Ranking gets coarser before it gets better.** Three levels times freshness is
+less expressive than five weighted components — but four of those five measured
+the wrong thing, so the resolution being lost was mostly noise. The significance
+judge is the route back to resolution, when it is needed.
 
-**A weight change means a full recompute.** Today it happens implicitly on the
-next pass. It becomes an explicit command, which is more honest and easier to
-get wrong by forgetting.
+**Old stories never resurface.** Under addition, freshness decays toward zero
+for everything and ordering drifts back toward quality, so a good old story
+climbs. Under a product the ordering fixed at publication is permanent. For a
+calm feed that is the better behaviour, but it is a change and not a refactor.
 
-**Freshness stops being visible in the score.** `quality_score` is intrinsic and
-`effective_at` folds the rest in, so "why is this ranked here" is answered by
-two numbers rather than one. `ranking_reasons` should record the quality
-components and the offset in hours, which reads better than the current list.
+**A table change means a full recompute**, explicitly, rather than implicitly on
+the next pass. More honest, and easier to forget.
