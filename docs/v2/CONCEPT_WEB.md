@@ -1,9 +1,9 @@
 # Curious Now v2 — Concepts: what was measured, and what is still open
 
-**Status: not built.** `concepts`, `concept_aliases`, `concept_edges` and
-`story_concepts` exist and hold nothing. This is a record of what was learned
-while designing them, kept because the measurements cost real work and are
-still true, and because the want they serve has not gone away.
+**Status: not built, and now measured as not worth building in this form.**
+`concepts`, `concept_aliases`, `concept_edges` and `story_concepts` exist and
+hold nothing. This records what was learned, including the experiment that
+settled it.
 
 ## The want
 
@@ -57,14 +57,43 @@ nothing.
 Generic concepts make poor destinations. Anything at OpenAlex level 0 or 1 is a
 category wearing a concept's clothes.
 
-## What is untested
+## The proposed fix was tried, and it does not work
 
-Fixing it at the source — asking extraction for concepts named as a textbook
-index would name them, capped at a few per story, each with the next rung up —
-was proposed and never tried. It is not refuted; it was passed over because the
-citation graph was more tractable and served the ingestion-queue motivation
-immediately. If concepts are picked up again, that is where to start, and the
-measurement to take first is whether names actually recur across stories.
+Asking extraction for concepts named as a textbook index would name them --
+capped at four per story, each with the next rung up, and told explicitly that a
+name is useful only if another paper on a different subject would be listed
+under it -- was the remaining hope. It was run over 100 published stories for
+about a dollar.
+
+**95% of the names were used exactly once.** Slightly worse than the 93%
+baseline it was meant to beat.
+
+```
+350 distinct names from 100 stories
+334 used exactly once   (95%)     3 used by 3+ stories
+```
+
+The reason is not the prompt. It is that **reuse requires topical density this
+corpus does not have and should not have.** Curious Now reads thirteen
+categories on purpose; two papers rarely turn on the same specific idea. At
+1.06 uses per name, adding stories does not fix it -- extrapolating to the full
+corpus gives perhaps 33 concepts reaching three stories, which is not a web.
+
+What did recur is the level above:
+
+```
+9  machine learning        4  public health
+7  artificial intelligence 4  galaxy evolution
+```
+
+Field-level names repeat because fields repeat. But only **17 of 303** broader
+names appear as anyone's concept, so the two do not chain into a ladder: asked
+for one step up, the model reaches straight for a field.
+
+That is the finding. The upper rungs are real and we already get them free from
+OpenAlex topics via an identifier. The rung the original request actually wanted
+-- residual attention to attention, one step of genuine abstraction -- is the one
+the corpus cannot support.
 
 ## What was built instead
 
