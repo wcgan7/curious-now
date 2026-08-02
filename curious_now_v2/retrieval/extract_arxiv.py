@@ -6,14 +6,18 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup, Tag
 
 from curious_now_v2.retrieval.document import (
+    CitationContext,
     Document,
     Figure,
+    Reference,
     Section,
     SectionKind,
     Table,
     classify_section,
+    find_identifiers,
     infer_method_sections,
     inherit_section_kinds,
+    split_sentences,
 )
 
 _WHITESPACE = re.compile(r"\s+")
@@ -98,6 +102,115 @@ def _strip_noise(soup: BeautifulSoup) -> None:
     ):
         for node in soup.select(selector):
             node.decompose()
+
+
+def _section_kind_at(node: Tag) -> SectionKind:
+    """The role of the section a node sits in.
+
+    Where a citation appears is a signal about what it is for: a reference cited
+    in the methods is a dependency almost by definition, where the same
+    reference in the introduction may only be setting the scene.
+    """
+
+    owner = node.find_parent(_is_emitted_section)
+    if owner is None:
+        return SectionKind.OTHER
+    if "ltx_appendix" in (owner.get("class") or []):
+        return SectionKind.APPENDIX
+    return classify_section(_heading_of(owner))
+
+
+def _citation_contexts(
+    soup: BeautifulSoup,
+) -> dict[str, list[CitationContext]]:
+    """Map each bibliography anchor to the sentences that cited it.
+
+    LaTeXML links every in-text marker to its entry — <cite> wraps an <a>
+    pointing at "#bib.bib12" — so the marker never has to be parsed or matched
+    by number. That link is what makes the mapping exact rather than heuristic.
+    """
+
+    contexts: dict[str, list[CitationContext]] = {}
+    # One text extraction per block, reused by every citation inside it.
+    block_text: dict[int, str] = {}
+    consumed: dict[int, int] = {}
+
+    for cite in soup.select("cite.ltx_cite"):
+        keys = [
+            href.removeprefix("#")
+            for anchor in cite.find_all("a", href=True)
+            if (href := anchor["href"]).startswith("#bib")
+        ]
+        if not keys:
+            continue
+
+        block = cite.find_parent(
+            lambda tag: tag.name in {"p", "li", "blockquote", "div"}
+        )
+        if block is None:
+            continue
+
+        text = block_text.setdefault(id(block), _compact(block.get_text(" ")))
+        marker = _compact(cite.get_text(" "))
+        # Advance past markers already matched so a paragraph citing the same
+        # entry twice attributes each mention to its own sentence.
+        start = text.find(marker, consumed.get(id(block), 0)) if marker else -1
+        if start >= 0:
+            consumed[id(block)] = start + len(marker)
+
+        sentence = text
+        if start >= 0:
+            offset = 0
+            for candidate in split_sentences(text):
+                offset = text.find(candidate, offset)
+                if offset <= start < offset + len(candidate):
+                    sentence = candidate
+                    break
+                offset += len(candidate)
+
+        kind = _section_kind_at(cite)
+        for key in keys:
+            contexts.setdefault(key, []).append(
+                CitationContext(section=kind, sentence=sentence)
+            )
+    return contexts
+
+
+def _references(soup: BeautifulSoup) -> tuple[Reference, ...]:
+    """Read the bibliography before _strip_noise removes it."""
+
+    bibliography = soup.select_one(".ltx_bibliography")
+    if bibliography is None:
+        return ()
+
+    contexts = _citation_contexts(soup)
+    references: list[Reference] = []
+    for entry in bibliography.select(".ltx_bibitem"):
+        key = entry.get("id")
+        if not key:
+            continue
+        tag_node = entry.select_one(".ltx_tag_bibitem")
+        label = _compact(tag_node.get_text(" ")) if tag_node else None
+        text = _compact(entry.get_text(" "))
+        # The tag repeats at the head of the entry text; it is the label, not
+        # part of the citation string.
+        if label and text.startswith(label):
+            text = text[len(label) :].strip()
+        hrefs = tuple(
+            anchor["href"] for anchor in entry.find_all("a", href=True)
+        )
+        doi, arxiv_id = find_identifiers(text, hrefs)
+        references.append(
+            Reference(
+                key=key,
+                label=label,
+                text=text,
+                doi=doi,
+                arxiv_id=arxiv_id,
+                contexts=tuple(contexts.get(key, ())),
+            )
+        )
+    return tuple(references)
 
 
 def _heading_of(node: Tag) -> str | None:
@@ -245,6 +358,9 @@ def extract_arxiv_html(html: str, base_url: str | None = None) -> Document:
 
     soup = BeautifulSoup(html, "html.parser")
     _resolve_math(soup)
+    # Before _strip_noise, which decomposes .ltx_bibliography: the entries and
+    # the in-text links to them both have to be read while they still exist.
+    references = _references(soup)
     _strip_noise(soup)
 
     title_node = soup.select_one("h1.ltx_title_document, h1.ltx_title")
@@ -323,5 +439,6 @@ def extract_arxiv_html(html: str, base_url: str | None = None) -> Document:
         sections=inherit_section_kinds(infer_method_sections(tuple(sections))),
         figures=figures,
         tables=tables,
+        references=references,
         warnings=tuple(warnings),
     )

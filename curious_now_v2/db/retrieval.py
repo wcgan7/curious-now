@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -8,8 +9,9 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
+from curious_now_v2.core import blobs
 from curious_now_v2.core.enums import AccessClass, ContentType
-from curious_now_v2.retrieval.document import Document
+from curious_now_v2.retrieval.document import Document, Reference
 from curious_now_v2.retrieval.fetch import Fetcher
 from curious_now_v2.retrieval.resolve import (
     Resolution,
@@ -203,6 +205,126 @@ def structure_of(document: Document) -> dict[str, Any]:
     }
 
 
+# Postgres text cannot hold a NUL, and one arriving from a publisher's markup
+# would abort the transaction that also carries the item's full text.
+_UNSTORABLE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _storable(value: str) -> str:
+    return _UNSTORABLE.sub("", value)
+
+
+def _store_fetches(
+    cursor: psycopg.Cursor[Any], *, item_id: UUID, resolution: Resolution
+) -> None:
+    """Record what this resolution fetched, and put the bodies in the store.
+
+    The blob is written before the row that points at it. A crash between the
+    two leaves an orphaned file, which a sweep can collect; the reverse order
+    would leave a row pointing at nothing, which every reader would then have to
+    treat as corruption.
+
+    A body that cannot be stored is skipped rather than raised on. The blob root
+    is an external disk, and an unmounted drive must not cost an item the text
+    and references that were successfully extracted from it.
+    """
+
+    cursor.execute("DELETE FROM item_fetches WHERE item_id = %s;", (item_id,))
+    if not resolution.fetches:
+        return
+
+    rows = []
+    for fetch in resolution.fetches:
+        if not fetch.body:
+            continue
+        try:
+            stored = blobs.put(fetch.body)
+        except OSError:
+            continue
+        rows.append(
+            (
+                item_id,
+                fetch.source,
+                fetch.parser,
+                fetch.url,
+                fetch.final_url,
+                fetch.status_code,
+                fetch.content_type,
+                stored.digest,
+                stored.raw_bytes,
+            )
+        )
+    if not rows:
+        return
+
+    cursor.executemany(
+        """
+        INSERT INTO item_fetches (
+          item_id, source, parser, url, final_url, status_code,
+          content_type, body_sha256, body_bytes
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (item_id, source) DO NOTHING;
+        """,
+        rows,
+    )
+
+
+def _store_references(
+    cursor: psycopg.Cursor[Any], *, item_id: UUID, resolution: Resolution
+) -> None:
+    """Replace an item's bibliography with what this resolution recovered.
+
+    Deleting first makes re-extraction idempotent: a re-fetch that recovers
+    more references, or renumbers them, must not leave the previous run's rows
+    behind to be counted twice by the ranking that reads `mentions`.
+    """
+
+    cursor.execute("DELETE FROM item_references WHERE item_id = %s;", (item_id,))
+    if not resolution.references or not resolution.reference_source:
+        return
+
+    # A document that hands us the same anchor twice must not cost the item its
+    # full text: this insert shares a transaction with the text above, so one
+    # duplicate key would roll back the whole retrieval. Extractors are expected
+    # to emit unique keys, and this is the backstop for when one does not.
+    unique: dict[str, Reference] = {}
+    for reference in resolution.references:
+        unique.setdefault(reference.key, reference)
+    references = list(unique.values())
+
+    cursor.executemany(
+        """
+        INSERT INTO item_references (
+          item_id, reference_source, ref_key, label, citation_text,
+          doi, arxiv_id, mentions, cited_sections, contexts
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+        """,
+        [
+            (
+                item_id,
+                resolution.reference_source,
+                _storable(reference.key),
+                _storable(reference.label) if reference.label else None,
+                _storable(reference.text),
+                reference.doi,
+                reference.arxiv_id,
+                reference.mentions,
+                sorted(kind.value for kind in reference.cited_in),
+                Jsonb(
+                    [
+                        {
+                            "section": context.section.value,
+                            "sentence": _storable(context.sentence),
+                        }
+                        for context in reference.contexts
+                    ]
+                ),
+            )
+            for reference in references
+        ],
+    )
+
+
 def store_resolution(
     connection: psycopg.Connection[Any],
     *,
@@ -267,6 +389,8 @@ def store_resolution(
                 item_id,
             ),
         )
+        _store_references(cursor, item_id=item_id, resolution=resolution)
+        _store_fetches(cursor, item_id=item_id, resolution=resolution)
 
 
 def run_retrieval(

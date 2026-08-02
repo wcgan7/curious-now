@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 import trafilatura
 
 from curious_now_v2.retrieval.document import (
+    CitationContext,
     Document,
+    Reference,
     Section,
     SectionKind,
     classify_section,
+    find_identifiers,
     inherit_section_kinds,
+    split_sentences,
 )
+
+if TYPE_CHECKING:
+    from bs4 import BeautifulSoup
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -40,8 +48,103 @@ _REDIRECT_STUB = re.compile(
 )
 
 
+# Springer Nature's platform — nature.com, Nature Communications, Scientific
+# Reports — renders its bibliography into the delivered HTML. Trafilatura
+# discards it along with the rest of the page furniture, so it is read
+# separately from the raw markup. The substring is checked before parsing
+# because most pages through this extractor are journalism with no
+# bibliography, and they should not pay for a second parse.
+_SPRINGER_MARKER = "c-article-references__item"
+_SPRINGER_ENTRY = "li.c-article-references__item"
+_SPRINGER_TEXT = "p.c-article-references__text"
+_REF_ANCHOR = re.compile(r"#(ref-CR\d+)$")
+
+
 def _compact(value: str) -> str:
     return _WHITESPACE.sub(" ", value).strip()
+
+
+def _springer_contexts(soup: BeautifulSoup) -> dict[str, list[CitationContext]]:
+    """Map each reference anchor to the sentences citing it.
+
+    Nature links markers to entries, but writes the href two ways on the same
+    page — "#ref-CR3" and "/articles/s41586-026-10821-z#ref-CR3" — so the
+    fragment is what identifies the target, not the whole href.
+    """
+
+    contexts: dict[str, list[CitationContext]] = {}
+    block_text: dict[int, str] = {}
+    consumed: dict[int, int] = {}
+
+    for anchor in soup.find_all("a", href=True):
+        match = _REF_ANCHOR.search(anchor["href"])
+        if match is None:
+            continue
+        block = anchor.find_parent("p")
+        if block is None or block.select_one(_SPRINGER_TEXT) is not None:
+            # A link inside the bibliography itself is not a citation of it.
+            continue
+
+        text = block_text.setdefault(id(block), _compact(block.get_text(" ")))
+        marker = _compact(anchor.get_text(" "))
+        start = text.find(marker, consumed.get(id(block), 0)) if marker else -1
+        if start >= 0:
+            consumed[id(block)] = start + len(marker)
+
+        sentence = text
+        if start >= 0:
+            offset = 0
+            for candidate in split_sentences(text):
+                offset = text.find(candidate, offset)
+                if offset <= start < offset + len(candidate):
+                    sentence = candidate
+                    break
+                offset += len(candidate)
+
+        contexts.setdefault(match.group(1), []).append(
+            # Springer's article body carries no section roles a marker can be
+            # attributed to, so position is recorded as unknown rather than
+            # guessed at.
+            CitationContext(section=SectionKind.OTHER, sentence=sentence)
+        )
+    return contexts
+
+
+def _springer_references(html: str) -> tuple[Reference, ...]:
+    if _SPRINGER_MARKER not in html:
+        return ()
+
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "lxml")
+    entries = soup.select(_SPRINGER_ENTRY)
+    if not entries:
+        return ()
+
+    contexts = _springer_contexts(soup)
+    references: list[Reference] = []
+    for index, entry in enumerate(entries, start=1):
+        body = entry.select_one(_SPRINGER_TEXT)
+        if body is None:
+            continue
+        key = body.get("id") or f"ref-CR{index}"
+        text = _compact(body.get_text(" "))
+        if not text:
+            continue
+        label = _compact(entry.get("data-counter") or "").rstrip(".") or None
+        hrefs = tuple(link["href"] for link in entry.find_all("a", href=True))
+        doi, arxiv_id = find_identifiers(text, hrefs)
+        references.append(
+            Reference(
+                key=str(key),
+                label=label,
+                text=text,
+                doi=doi,
+                arxiv_id=arxiv_id,
+                contexts=tuple(contexts.get(str(key), ())),
+            )
+        )
+    return tuple(references)
 
 
 def _element_text(element: object) -> str:
@@ -69,9 +172,12 @@ def extract_article(html: str) -> Document:
     )
     # bare_extraction is typed as returning a Document or a plain dict; only
     # the Document form carries the parsed body this extractor needs.
+    references = _springer_references(html)
+
     if parsed is None or isinstance(parsed, dict) or parsed.body is None:
         return Document(
             extraction_method="article_html",
+            references=references,
             warnings=("trafilatura recovered no article body",),
         )
 
@@ -154,6 +260,7 @@ def extract_article(html: str) -> Document:
         title=title,
         abstract=abstract,
         sections=inherit_section_kinds(tuple(sections)),
+        references=references,
         warnings=tuple(warnings),
     )
 

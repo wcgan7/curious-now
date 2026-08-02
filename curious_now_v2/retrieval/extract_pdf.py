@@ -7,14 +7,18 @@ from dataclasses import dataclass, replace
 import fitz
 
 from curious_now_v2.retrieval.document import (
+    CitationContext,
     Document,
     Figure,
+    Reference,
     Section,
     SectionKind,
     Table,
     classify_section,
+    find_identifiers,
     infer_method_sections,
     inherit_section_kinds,
+    split_sentences,
 )
 
 _WHITESPACE = re.compile(r"\s+")
@@ -329,6 +333,193 @@ def _is_heading(block: _Block, body_size: float) -> bool:
     return marked and words <= 8 and block.text.upper() == block.text
 
 
+# A numbered entry opens with its own number. Both common styles are accepted;
+# an author-year bibliography matches neither and is split by block instead.
+_ENTRY_NUMBER = re.compile(r"(?:^|(?<=\s))\[(\d{1,3})\]\s*(?=\S)")
+_ENTRY_DOTTED = re.compile(r"(?:^|(?<=\s))(\d{1,3})\.\s+(?=[A-Z])")
+_BRACKET_MARKER = re.compile(r"\[(\d{1,3}(?:\s*[,–-]\s*\d{1,3})*)\]")
+_MIN_ENTRY_CHARS = 24
+
+
+def _split_entries(paragraph: str) -> list[tuple[str | None, str]]:
+    """Break one block of reference text into (number, entry) pairs.
+
+    PyMuPDF usually emits one block per entry, which is why a whole paragraph
+    is a reasonable default. Numbered bibliographies sometimes arrive several
+    to a block, and there the number is a dependable delimiter.
+    """
+
+    for pattern in (_ENTRY_NUMBER, _ENTRY_DOTTED):
+        matches = list(pattern.finditer(paragraph))
+        if len(matches) < 2:
+            continue
+        entries: list[tuple[str | None, str]] = []
+        for index, match in enumerate(matches):
+            end = (
+                matches[index + 1].start()
+                if index + 1 < len(matches)
+                else len(paragraph)
+            )
+            body = paragraph[match.end() : end].strip()
+            if len(body) >= _MIN_ENTRY_CHARS:
+                entries.append((match.group(1), body))
+        if entries:
+            return entries
+
+    # A single entry, possibly still carrying its own number.
+    for pattern in (_ENTRY_NUMBER, _ENTRY_DOTTED):
+        leading = pattern.match(paragraph)
+        if leading:
+            body = paragraph[leading.end() :].strip()
+            if len(body) >= _MIN_ENTRY_CHARS:
+                return [(leading.group(1), body)]
+    text = paragraph.strip()
+    return [(None, text)] if len(text) >= _MIN_ENTRY_CHARS else []
+
+
+_YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def _merge_continuations(
+    entries: list[tuple[str | None, str]],
+) -> list[tuple[str | None, str]]:
+    """Rejoin an entry that the page layout broke across blocks.
+
+    Chemistry styles emit one block per printed LINE, so a single reference
+    arrives as four: three of authors and one carrying the journal and the DOI.
+    Stored unmerged they become four references, none resolvable, and the DOI is
+    stranded in a fragment that looks like a citation and is not one.
+
+    Where the bibliography is numbered the numbers are the delimiters, and any
+    block without one continues the entry above it. Where nothing is numbered
+    there is no delimiter to trust, so completeness stands in for one: a
+    finished citation names its year, and a block lacking one is read as the
+    head of what follows.
+    """
+
+    numbered = any(number for number, _ in entries)
+    merged: list[tuple[str | None, str]] = []
+    for number, text in entries:
+        continuation = number is None and bool(merged) and (
+            numbered or not _YEAR.search(merged[-1][1])
+        )
+        if continuation:
+            previous_number, previous_text = merged.pop()
+            merged.append((previous_number, f"{previous_text} {text}".strip()))
+            continue
+        merged.append((number, text))
+    return merged
+
+
+def _drop_fragments(
+    entries: list[tuple[str | None, str]],
+) -> list[tuple[str | None, str]]:
+    """Discard anything still not recognisable as a citation.
+
+    A PDF gives no guarantee that the reference section was recovered whole, and
+    a half-entry cannot be resolved to a work or shown to a reader. Keeping it
+    would put junk in the citation graph that looks like evidence.
+    """
+
+    return [
+        (number, text)
+        for number, text in entries
+        if number is not None
+        or _YEAR.search(text)
+        or any(token in text for token in ("doi", "arXiv", "10."))
+    ]
+
+
+def _pdf_contexts(
+    sections: list[Section], numbers: set[str]
+) -> dict[str, list[CitationContext]]:
+    """Find in-text citations, but only where numbering makes them unambiguous.
+
+    A PDF carries no link from a marker to its entry, so the marker text is all
+    there is. "[12]" can be matched to entry 12 with confidence. Superscript
+    numerals lose their superscripting in the text layer and become digits
+    glued to a word, and an author-year citation needs name matching that would
+    invent edges as often as it found them; neither is attempted.
+
+    A reference recovered without any context is still a reference and still
+    resolves to a work. It simply carries no evidence of why it was cited, so
+    it can join a citation graph but cannot support a typed edge.
+    """
+
+    contexts: dict[str, list[CitationContext]] = {}
+    if not numbers:
+        return contexts
+
+    for section in sections:
+        if section.kind is SectionKind.REFERENCES:
+            continue
+        for paragraph in section.paragraphs:
+            for match in _BRACKET_MARKER.finditer(paragraph):
+                sentence = paragraph
+                offset = 0
+                for candidate in split_sentences(paragraph):
+                    offset = paragraph.find(candidate, offset)
+                    if offset <= match.start() < offset + len(candidate):
+                        sentence = candidate
+                        break
+                    offset += len(candidate)
+                for part in re.split(r"[,–-]", match.group(1)):
+                    number = part.strip()
+                    if number in numbers:
+                        contexts.setdefault(number, []).append(
+                            CitationContext(
+                                section=section.kind, sentence=sentence
+                            )
+                        )
+    return contexts
+
+
+def _pdf_references(sections: list[Section]) -> tuple[Reference, ...]:
+    """Recover a bibliography from the section the heading identified.
+
+    Often there is none to recover: a truncated download, or a reference list
+    the heading detector never saw, leaves the section absent entirely. That is
+    a limit of reading a PDF, not a failure to be worked around here.
+    """
+
+    entries: list[tuple[str | None, str]] = []
+    for section in sections:
+        if section.kind is not SectionKind.REFERENCES:
+            continue
+        for paragraph in section.paragraphs:
+            entries.extend(_split_entries(paragraph))
+    entries = _drop_fragments(_merge_continuations(entries))
+    if not entries:
+        return ()
+
+    numbered = [number for number, _ in entries if number]
+    # Partial numbering means the split misfired on prose; trust it only when
+    # effectively every entry carries a number.
+    use_numbers = len(numbered) >= max(2, int(0.8 * len(entries)))
+    contexts = _pdf_contexts(sections, set(numbered) if use_numbers else set())
+
+    references: list[Reference] = []
+    for index, (number, text) in enumerate(entries, start=1):
+        doi, arxiv_id = find_identifiers(text)
+        # Keyed by position, never by the printed number. A bibliography that
+        # mixes numbered and unnumbered entries collides otherwise: entry 1
+        # labelled "5" and entry 5 labelled nothing both want "pdf-ref-5". The
+        # number is a label, and the contexts are looked up by it separately.
+        references.append(
+            Reference(
+                key=f"pdf-ref-{index}",
+                label=number if use_numbers else None,
+                text=text,
+                doi=doi,
+                arxiv_id=arxiv_id,
+                contexts=tuple(
+                    contexts.get(number, ()) if (use_numbers and number) else ()
+                ),
+            )
+        )
+    return tuple(references)
+
+
 def extract_pdf(data: bytes) -> Document:
     """Extract a paper from PDF, the last-resort path.
 
@@ -506,5 +697,6 @@ def extract_pdf(data: bytes) -> Document:
         sections=inherit_section_kinds(infer_method_sections(tuple(sections))),
         figures=tuple(figures),
         tables=tuple(tables),
+        references=_pdf_references(sections),
         warnings=tuple(warnings),
     )

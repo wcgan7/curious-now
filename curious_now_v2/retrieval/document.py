@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from urllib.parse import unquote
 
 
 class SectionKind(StrEnum):
@@ -82,6 +83,51 @@ _SECTION_PATTERNS: tuple[tuple[SectionKind, re.Pattern[str]], ...] = tuple(
 # Numbered headings arrive as "3 Methodology" or "3.1. Preliminaries".
 _LEADING_NUMBER = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+")
 
+# A DOI runs to the first whitespace, but bibliographies end entries with a
+# full stop and wrap them in brackets, and those characters are not part of it.
+_DOI = re.compile(r"\b(10\.\d{4,9}/[^\s\"<>]+)")
+_DOI_TRAILING = ".,;:)]}>'\""
+_ARXIV = re.compile(
+    r"(?:arxiv[.\s:/]*(?:org/abs/)?|abs/)(\d{4}\.\d{4,5})(?:v\d+)?", re.I
+)
+# Sentence boundaries, kept deliberately simple: an abbreviation such as "et
+# al." splits a sentence early, which costs a little context and never
+# fabricates any.
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+")
+
+
+def split_sentences(text: str) -> list[str]:
+    return [part for part in _SENTENCE_BREAK.split(text.strip()) if part]
+
+
+def find_identifiers(
+    text: str, hrefs: tuple[str, ...] = ()
+) -> tuple[str | None, str | None]:
+    """Recover a DOI and an arXiv id from a bibliography entry.
+
+    Links are searched before prose because a publisher's own href is
+    unambiguous, where prose may quote a DOI belonging to a dataset the entry
+    merely mentions. Nothing is inferred from author and year: an entry that
+    carries no identifier returns none, and resolving it is a separate step
+    that is allowed to fail visibly.
+    """
+
+    doi: str | None = None
+    arxiv_id: str | None = None
+
+    # Springer Nature percent-encodes the slash in its DOI links —
+    # "10.1038%2Fbjc.2012.581" — which no DOI pattern matches as delivered.
+    decoded = tuple(unquote(href) for href in hrefs)
+
+    for href in (*decoded, text):
+        if doi is None and (match := _DOI.search(href)):
+            doi = match.group(1).rstrip(_DOI_TRAILING) or None
+        if arxiv_id is None and (match := _ARXIV.search(href)):
+            arxiv_id = match.group(1)
+        if doi and arxiv_id:
+            break
+    return doi, arxiv_id
+
 
 def classify_section(title: str | None) -> SectionKind:
     """Map a heading to the role it plays in a paper."""
@@ -116,6 +162,60 @@ class Table:
     label: str | None
     caption: str | None
     body: str = ""
+
+
+@dataclass(frozen=True)
+class CitationContext:
+    """One place a reference was cited, and the sentence that cited it.
+
+    The sentence is the whole point. A reference's role in a paper is stated in
+    the prose around the marker — "we use the method of", "in contrast to" —
+    and that sentence is what makes a typed edge checkable rather than asserted.
+    """
+
+    section: SectionKind
+    sentence: str
+
+
+@dataclass(frozen=True)
+class Reference:
+    """A bibliography entry, with every place the body cited it.
+
+    `key` is the document's own anchor (LaTeXML's "bib.bib12", JATS' ref id),
+    which is how in-text markers are matched to entries without parsing the
+    marker text. Identifiers are recorded when the entry carries them and left
+    absent when it does not; resolving the remainder is a later, separate
+    problem, and guessing here would launder a guess into a fact.
+    """
+
+    key: str
+    label: str | None
+    text: str
+    doi: str | None = None
+    arxiv_id: str | None = None
+    contexts: tuple[CitationContext, ...] = ()
+
+    @property
+    def mentions(self) -> int:
+        """How many times the body cited this entry.
+
+        A frequency signal only: a reference cited once in the methods can
+        matter more than one cited eight times while positioning the work.
+        """
+
+        return len(self.contexts)
+
+    @property
+    def identifier(self) -> str | None:
+        if self.doi:
+            return f"doi:{self.doi}"
+        if self.arxiv_id:
+            return f"arxiv:{self.arxiv_id}"
+        return None
+
+    @property
+    def cited_in(self) -> frozenset[SectionKind]:
+        return frozenset(context.section for context in self.contexts)
 
 
 @dataclass(frozen=True)
@@ -253,6 +353,7 @@ class Document:
     sections: tuple[Section, ...] = ()
     figures: tuple[Figure, ...] = ()
     tables: tuple[Table, ...] = ()
+    references: tuple[Reference, ...] = ()
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
     @property

@@ -5,14 +5,18 @@ import re
 from bs4 import BeautifulSoup, Tag
 
 from curious_now_v2.retrieval.document import (
+    CitationContext,
     Document,
     Figure,
+    Reference,
     Section,
     SectionKind,
     Table,
     classify_section,
+    find_identifiers,
     infer_method_sections,
     inherit_section_kinds,
+    split_sentences,
 )
 
 _WHITESPACE = re.compile(r"\s+")
@@ -171,6 +175,110 @@ def _figures_and_tables(
     return tuple(figures), tuple(tables)
 
 
+def _jats_section_kind(node: Tag) -> SectionKind:
+    section = node.find_parent("sec")
+    if section is None:
+        return SectionKind.OTHER
+    title = section.find("title", recursive=False)
+    return classify_section(_compact(title.get_text(" ")) if title else None)
+
+
+def _jats_contexts(soup: BeautifulSoup) -> dict[str, list[CitationContext]]:
+    """Map each <ref> id to the sentences citing it.
+
+    JATS links markers to entries explicitly: <xref ref-type="bibr" rid="ref12">
+    names its target, so nothing has to be inferred from the rendered number.
+    """
+
+    contexts: dict[str, list[CitationContext]] = {}
+    block_text: dict[int, str] = {}
+    consumed: dict[int, int] = {}
+
+    for xref in soup.find_all("xref", attrs={"ref-type": "bibr"}):
+        rid = xref.get("rid")
+        if not rid:
+            continue
+        block = xref.find_parent("p")
+        if block is None:
+            continue
+
+        text = block_text.setdefault(id(block), _compact(block.get_text(" ")))
+        marker = _compact(xref.get_text(" "))
+        start = text.find(marker, consumed.get(id(block), 0)) if marker else -1
+        if start >= 0:
+            consumed[id(block)] = start + len(marker)
+
+        sentence = text
+        if start >= 0:
+            offset = 0
+            for candidate in split_sentences(text):
+                offset = text.find(candidate, offset)
+                if offset <= start < offset + len(candidate):
+                    sentence = candidate
+                    break
+                offset += len(candidate)
+
+        kind = _jats_section_kind(xref)
+        # A single xref may carry several space-separated targets.
+        for key in rid.split():
+            contexts.setdefault(key, []).append(
+                CitationContext(section=kind, sentence=sentence)
+            )
+    return contexts
+
+
+def _jats_references(soup: BeautifulSoup) -> tuple[Reference, ...]:
+    """Read <ref-list>, which lives in <back> and so is outside the body scan."""
+
+    refs = soup.find_all("ref")
+    if not refs:
+        return ()
+
+    contexts = _jats_contexts(soup)
+    references: list[Reference] = []
+    for entry in refs:
+        key = entry.get("id")
+        if not key:
+            continue
+        label_node = entry.find("label")
+        label = _compact(label_node.get_text(" ")) if label_node else None
+
+        citation = entry.find(["element-citation", "mixed-citation", "citation"])
+        source = citation if citation is not None else entry
+        text = _compact(source.get_text(" "))
+
+        # JATS states identifiers outright; prefer them over anything parsed
+        # out of the rendered citation string.
+        doi = arxiv_id = None
+        for pub_id in source.find_all("pub-id"):
+            kind = (pub_id.get("pub-id-type") or "").casefold()
+            value = _compact(pub_id.get_text(" "))
+            if kind == "doi" and not doi:
+                doi = value
+            elif kind == "arxiv" and not arxiv_id:
+                arxiv_id = value
+        if not (doi and arxiv_id):
+            hrefs = tuple(
+                link.get("xlink:href") or link.get("href") or ""
+                for link in source.find_all(["ext-link", "uri"])
+            )
+            found_doi, found_arxiv = find_identifiers(text, hrefs)
+            doi = doi or found_doi
+            arxiv_id = arxiv_id or found_arxiv
+
+        references.append(
+            Reference(
+                key=key,
+                label=label,
+                text=text,
+                doi=doi,
+                arxiv_id=arxiv_id,
+                contexts=tuple(contexts.get(key, ())),
+            )
+        )
+    return tuple(references)
+
+
 def extract_jats(xml: str) -> Document:
     """Extract structure from a JATS full-text XML article.
 
@@ -244,5 +352,6 @@ def extract_jats(xml: str) -> Document:
         sections=inherit_section_kinds(infer_method_sections(tuple(sections))),
         figures=figures,
         tables=tables,
+        references=_jats_references(soup),
         warnings=tuple(warnings),
     )

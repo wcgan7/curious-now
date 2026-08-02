@@ -6,6 +6,7 @@ from pathlib import Path
 
 import psycopg
 
+from curious_now_v2.core import blobs
 from curious_now_v2.core.source_registry import load_source_registry
 from curious_now_v2.db.generation import run_generation
 from curious_now_v2.db.hydration import run_hydration
@@ -76,6 +77,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     retrieve.add_argument("--limit", type=int, default=50)
     retrieve.add_argument("--timeout-seconds", type=float, default=30)
+    # The normal queue selects on `full_text IS NULL`, so a fix to an extractor
+    # reaches only what arrives afterwards. These reopen what is already stored.
+    retrieve.add_argument(
+        "--refetch-source",
+        help="re-resolve items from this source even if they already have text",
+    )
+    retrieve.add_argument(
+        "--refetch-path",
+        help=(
+            "re-resolve items whose text came from this path "
+            "(article_html, arxiv_html, oa_pdf, ...)"
+        ),
+    )
     _add_database_url_argument(retrieve)
 
     generate = commands.add_parser(
@@ -197,10 +211,19 @@ def main() -> None:
     if args.command == "retrieve":
         if args.limit < 1:
             raise SystemExit("--limit must be positive")
+        # The blob root is usually an external disk. Checked here so an
+        # unmounted drive stops the run at the start, rather than being found
+        # out after an hour of fetching whose bodies all went nowhere.
+        writable, detail = blobs.usable()
+        if not writable:
+            raise SystemExit(f"blob store unusable: {detail}")
+        print(f"blob store: {detail}")  # noqa: T201
         retrieval = run_retrieval(
             _database_url(args.database_url),
             limit=args.limit,
             timeout_seconds=args.timeout_seconds,
+            refetch_source=args.refetch_source,
+            refetch_path=args.refetch_path,
         )
         print(  # noqa: T201
             f"resolved {retrieval.retrieved}/{retrieval.attempted} items "
