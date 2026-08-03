@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { reviewBadge, vettingSource } from "@/lib/provenance";
 import type {
   ExplanationDepth,
   SourceLink,
@@ -203,6 +204,12 @@ export function StoryReader({
       ? "Technical walkthrough"
       : `Technical walkthrough · ${technicalMinutes} min`;
 
+  // Whether the work was reviewed belongs here as much as on the card. A reader
+  // arriving from search or a shared link never saw the card, and "preprint" is
+  // the single most load-bearing fact about how much weight to give a result.
+  const vettingFrom = vettingSource(story.sources);
+  const vetting = vettingFrom ? reviewBadge(vettingFrom) : undefined;
+
   return (
     <>
       <header className="storyHeader">
@@ -225,6 +232,7 @@ export function StoryReader({
             {formatDate(story.publishedAt)}
           </time>
           <span>{story.sources.length} source{story.sources.length === 1 ? "" : "s"}</span>
+          {vetting ? <span className="reviewBadge">{vetting}</span> : null}
         </div>
       </header>
 

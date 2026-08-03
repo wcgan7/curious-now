@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { CardImage } from "@/components/CardImage";
+import { PAPER_TYPES, reviewBadge } from "@/lib/provenance";
 import type { FeedPage, FeedStory, SourceLink } from "@/lib/types";
 
 const roleLabels: Record<SourceLink["sourceRole"], string> = {
@@ -15,32 +16,6 @@ const roleLabels: Record<SourceLink["sourceRole"], string> = {
   press_release: "Press release",
   discovery: "Discovery",
 };
-
-const reviewLabels: Partial<Record<SourceLink["contentType"], string>> = {
-  preprint: "Preprint",
-  peer_reviewed: "Peer reviewed",
-  report: "Report",
-  dataset: "Dataset",
-};
-
-const PAPER_TYPES: ReadonlyArray<SourceLink["contentType"]> = [
-  "preprint",
-  "peer_reviewed",
-];
-
-// "Peer reviewed" and "Preprint" are claims about how a piece of work was
-// vetted, so they are withheld where nothing establishes them. That is narrower
-// than it sounds: arXiv's feed carries preprints and nothing else, so its
-// default describes every item on it. Only a feed known to carry several kinds
-// — Nature sends research, news, comment and book reviews down one URL — leaves
-// an unmatched item unclassified, and there the source's role is shown instead,
-// which is true of every item and claims nothing unestablished.
-function reviewBadge(source: SourceLink): string | undefined {
-  if (source.contentTypeBasis === "feed_unmatched") {
-    return undefined;
-  }
-  return reviewLabels[source.contentType];
-}
 
 function formatRelativeTime(value: string): string {
   const elapsedMs = Date.now() - new Date(value).getTime();

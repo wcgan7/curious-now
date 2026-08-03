@@ -37,10 +37,11 @@ export default async function HomePage() {
         <div className="sectionHeading">
           <div>
             <p className="sectionKicker">The live shelf</p>
-            <h2 id="latest-heading">Latest stories</h2>
+            <h2 id="latest-heading">What to read</h2>
           </div>
           <p className="sectionNote">
-            No outrage score. No engagement bait. Just the newest evidence.
+            No outrage score. No engagement bait. Ordered by what the work
+            establishes, and how recently.
           </p>
         </div>
         <FeedStream initialPage={initialPage} />

@@ -1108,3 +1108,15 @@ button {
   overflow-y: hidden;
   padding: 4px 0;
 }
+
+/* Vetting status in the story header. Deliberately quiet: it is a fact a reader
+   should be able to find, not a claim competing with the headline. */
+.storyHeaderMeta .reviewBadge {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 999px;
+}
