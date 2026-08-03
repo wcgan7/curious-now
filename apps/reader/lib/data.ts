@@ -1,4 +1,5 @@
 import { database } from "@/lib/database";
+import { orderLineage } from "@/lib/lineage";
 import { spreadSources } from "@/lib/spread";
 import { renderMath } from "@/lib/math";
 import type {
@@ -9,6 +10,7 @@ import type {
   ExplanationDepth,
   FeedPage,
   FeedStory,
+  LineageEdge,
   SourceLink,
   StoryDetail,
 } from "@/lib/types";
@@ -377,6 +379,33 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
     return null;
   }
 
+  // What this story's paper builds on. Read separately rather than joined into
+  // the story row: most stories have no edges, and a lateral aggregate would
+  // pay for the join on every one of them.
+  const lineageRows = await sql<
+    Array<{
+      relation: LineageEdge["relation"];
+      title: string;
+      doi: string | null;
+      arxiv_id: string | null;
+      quote: string | null;
+    }>
+  >`
+    SELECT DISTINCT ON (r.to_paper_id, r.relation)
+      r.relation,
+      target.title,
+      target.doi,
+      target.arxiv_id,
+      r.provenance->>'quote' AS quote
+    FROM story_items si
+    JOIN item_papers ip ON ip.item_id = si.item_id
+    JOIN paper_relations r ON r.from_paper_id = ip.paper_id
+    JOIN papers target ON target.id = r.to_paper_id
+    WHERE si.story_id = ${id}::uuid
+      AND r.provenance->>'quote' IS NOT NULL
+    ORDER BY r.to_paper_id, r.relation, r.created_at DESC;
+  `;
+
   const explanationRows = await sql<
     Array<{
       depth: ExplanationDepth;
@@ -497,5 +526,14 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
     claims,
     explanations,
     concepts: [...concepts],
+    lineage: orderLineage(
+      lineageRows.map((edge) => ({
+        relation: edge.relation,
+        title: edge.title,
+        doi: edge.doi,
+        arxivId: edge.arxiv_id,
+        quote: edge.quote ?? "",
+      })),
+    ),
   };
 }

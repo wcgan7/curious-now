@@ -94,10 +94,25 @@ export interface ConceptLink {
   relevance: string;
 }
 
+/** A typed citation this paper made, and the sentence that established it.
+ *
+ * The quote is the point. A citation graph records that A cites B; only reading
+ * A tells you why, and the sentence is what makes that checkable rather than
+ * asserted.
+ */
+export interface LineageEdge {
+  relation: "contradicts" | "extends" | "replicates" | "applies";
+  title: string;
+  doi: string | null;
+  arxivId: string | null;
+  quote: string;
+}
+
 export interface StoryDetail extends FeedStory {
   mode: ReaderMode;
   availableDepths: ExplanationDepth[];
   claims: Claim[];
   explanations: Explanation[];
   concepts: ConceptLink[];
+  lineage: LineageEdge[];
 }

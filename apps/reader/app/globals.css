@@ -1120,3 +1120,112 @@ button {
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   border-radius: 999px;
 }
+
+/* --- What this paper builds on -------------------------------------------
+   The relation is the information, so it leads: a reader scanning the left
+   column reads "Argues against / Builds on / Uses" before anything else.
+   The quote is the thing no citation index has, so it gets the width the rail
+   could not have given it. Everything else stays quiet. */
+
+.lineage {
+  margin-top: 56px;
+  padding-top: 34px;
+  border-top: 1px solid var(--ink);
+}
+
+.lineage h2 {
+  margin: 8px 0 4px;
+  font-family: var(--serif);
+  font-size: 1.55rem;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+
+.lineageNote {
+  margin: 0 0 26px;
+  max-width: 46ch;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.lineageList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 22px;
+}
+
+.lineageItem {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.lineageRelation {
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding-top: 0.2rem;
+}
+
+/* Disagreement is the rarest relation and the most worth noticing: 14 of 454
+   edges in this corpus. It is the one place this panel raises its voice. */
+.lineageRelation--contradicts {
+  color: var(--blue);
+}
+
+.lineageTitle {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+a.lineageTitle:hover,
+a.lineageTitle:focus-visible {
+  border-bottom-color: var(--ink);
+}
+
+.lineageQuote {
+  margin: 10px 0 0;
+  max-width: 62ch;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.lineageQuote::before {
+  content: "“";
+}
+
+.lineageQuote::after {
+  content: "”";
+}
+
+@media (max-width: 720px) {
+  .lineageItem {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+/* Several works can share one statement, so they stack above the sentence that
+   covers them all. */
+.lineageWorks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}

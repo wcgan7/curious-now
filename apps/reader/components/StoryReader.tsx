@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { citedWorkUrl, groupLineage, relationVerb } from "@/lib/lineage";
 import { reviewBadge, vettingSource } from "@/lib/provenance";
 import type {
   ExplanationDepth,
@@ -338,6 +339,57 @@ export function StoryReader({
             </section>
           )}
 
+          {/* Lineage sits under the explanation, not in the rail: the quote is
+              the whole point of it and a narrow column cannot carry a sentence.
+              Withheld at "The idea", where someone new to the field is being
+              given one idea and does not need the paper's citation history. */}
+          {view !== "glance" && story.lineage.length > 0 ? (
+            <section className="lineage">
+              <p className="sectionKicker">What this paper builds on</p>
+              <h2>Its own sources, and why</h2>
+              <p className="lineageNote">
+                Taken from the paper itself. Each line quotes the sentence that
+                establishes the relationship.
+              </p>
+              <ul className="lineageList">
+                {groupLineage(story.lineage).map((statement) => (
+                  <li
+                    className="lineageItem"
+                    key={`${statement.relation}-${statement.quote}`}
+                  >
+                    <span
+                      className={`lineageRelation lineageRelation--${statement.relation}`}
+                    >
+                      {relationVerb[statement.relation]}
+                    </span>
+                    <div className="lineageBody">
+                      <ul className="lineageWorks">
+                        {statement.works.map((work) => {
+                          const href = citedWorkUrl(work);
+                          return (
+                            <li key={work.title}>
+                              {href ? (
+                                <a
+                                  className="lineageTitle"
+                                  href={href}
+                                  rel="noreferrer"
+                                >
+                                  {work.title}
+                                </a>
+                              ) : (
+                                <span className="lineageTitle">{work.title}</span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <p className="lineageQuote">{statement.quote}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
 
         <aside className="evidenceShelf">
