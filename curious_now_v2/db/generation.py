@@ -536,7 +536,15 @@ def _store(
                     scored.quality,
                     significance,
                     scored.effective_at,
-                    Jsonb(list(scored.reasons)),
+                    # Same shape run_ranking writes, so a row means the
+                    # same thing whichever writer last touched it.
+                    Jsonb(
+                        {
+                            "quality": round(scored.quality, 6),
+                            "offset_hours": round(scored.offset_hours, 2),
+                            "reasons": list(scored.reasons),
+                        }
+                    ),
                     story.story_id,
                 ),
             )
