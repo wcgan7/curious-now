@@ -1,439 +1,245 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
-import { citedWorkUrl, groupLineage, relationVerb } from "@/lib/lineage";
-import { reviewBadge, vettingSource } from "@/lib/provenance";
-import type {
-  ExplanationDepth,
-  SourceLink,
-  StoryDetail,
-} from "@/lib/types";
+import { StoryImage } from "@/components/StoryImage";
+import { reviewBadge, sourceLinkLabel, vettingSource } from "@/lib/provenance";
+import type { Explanation, ExplanationDepth, StoryDetail } from "@/lib/types";
 
-type Orientation = "glance" | "explain";
+const RUNGS: { depth: ExplanationDepth; label: string }[] = [
+  { depth: "glance", label: "The idea" },
+  { depth: "explain", label: "Explain" },
+  { depth: "technical", label: "Technical" },
+];
 
-// Reader-facing names only; the layers are `glance` and `explain` everywhere
-// else. "Summary" was considered and rejected: this layer carries ONE idea, not
-// coverage, and promising a summary invites a reader to feel short-changed by
-// the seventy words that replaced a compressed abstract.
-const orientationMeta: Record<Orientation, { name: string; hint: string }> = {
-  glance: { name: "The idea", hint: "New to this" },
-  explain: { name: "Explain", hint: "Know the field" },
-};
+/**
+ * A story, at whichever depth the reader asks for.
+ *
+ * The page this replaced put "Read the originals" directly under the headline,
+ * so the first thing after the title told the reader to leave; made Technical a
+ * "GO DEEPER" box at the foot rather than a rung, so a product built on three
+ * depths rendered as two and an advertisement; and set the whole thing in a
+ * serif nothing else in the reader uses, so arriving from the feed felt like
+ * leaving the product.
+ *
+ * What is here instead, in order: the picture, the headline, the explanation,
+ * the paper. Nothing between the prose and the way out.
+ *
+ * Three sections were built to sit in that gap and all three were cut. The
+ * paper's own results and its own limitations both repeated the ladder — the
+ * technical rung's headings already include 'results', 'evidence' and
+ * 'limitations', and 63% of glances and 76% of explains state a limit without
+ * being asked. A lineage panel repeated it too, and worse: papers write "this
+ * agrees with X" for referees inside the methods, so lifting that sentence
+ * verbatim can only produce a methodology section. It reached 110 of 974
+ * stories; the technical rung's 'relation to prior work' answers the same
+ * question on 412, in prose written for a reader.
+ *
+ * The evidence packet still earns its place, upstream. 28,759 claims, each
+ * carrying the verbatim span it came from, are what the generator writes from —
+ * a constraint on generation rather than a feature of a page. Showing three of
+ * twenty-eight never verified the prose; it verified three arbitrary sentences
+ * while looking like it verified all of it.
+ */
+export function StoryReader({
+  initialView,
+  story,
+}: {
+  initialView?: string;
+  story: StoryDetail;
+}) {
+  const available = new Set(story.availableDepths);
+  // Only the rungs this story earned. A greyed-out control invites a tap that
+  // does nothing, and there is nothing a reader can do about a paper that
+  // carried no walkthrough — 213 stories have no technical rung because their
+  // source is already written for readers and has no paper to walk through.
+  const rungs = RUNGS.filter((rung) => available.has(rung.depth));
+  const [depth, setDepth] = useState<ExplanationDepth>(() => {
+    const asked = rungs.find((rung) => rung.depth === initialView);
+    return asked?.depth ?? rungs[0]?.depth ?? "glance";
+  });
+  const bar = useRef<HTMLDivElement>(null);
+  const source = vettingSource(story.sources);
+  const chosen = story.explanations.find((entry) => entry.depth === depth);
 
-const roleNames: Record<SourceLink["sourceRole"], string> = {
-  primary_research: "Primary research",
-  journalism: "Independent reporting",
-  lab_announcement: "Lab announcement",
-  institutional: "Institution",
-  government: "Government",
-  press_release: "Press release",
-  discovery: "Discovery source",
-};
+  const choose = useCallback((next: ExplanationDepth) => {
+    setDepth(next);
+    // The depths run 1,800px and 7,000px, so changing depth from halfway down
+    // would leave a reader past the end of a shorter text, staring at the
+    // source block. Every change starts the new text at its beginning.
+    bar.current?.scrollIntoView({ block: "start" });
+    // In the URL so a depth can be linked to and survives a reload, and
+    // replaceState so moving between depths does not fill the back button
+    // with a trail a reader has to walk out of.
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", next);
+    window.history.replaceState(null, "", url);
+  }, []);
 
-function formatDate(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(value));
+  return (
+    <article className="article">
+      {/* First, above the headline, which is where every publication that runs
+          pictures puts them. A reader who arrived by tapping a card saw this
+          picture on the card; anywhere lower and it reads as having gone
+          missing on the way. */}
+      <StoryImage source={source} title={story.title} />
+
+      <header className="articleHead">
+        <p className="articleMeta">
+          {/* The publisher's name is the link. It costs no row, because the
+              word was already on the page: a reader was reading "Nature", and
+              now that word is the way to Nature. A filled pill on its own row
+              was tried first and read as an interruption — the loudest object
+              on the page, between the headline and the explanation, telling
+              someone who had just arrived to leave. */}
+          {source ? (
+            <a
+              className="articleByline"
+              href={source.url}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {source.sourceName}
+              <span aria-hidden="true">↗</span>
+            </a>
+          ) : null}
+          <time dateTime={story.publishedAt}>
+            {new Date(story.publishedAt).toLocaleDateString("en", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+              timeZone: "UTC",
+            })}
+          </time>
+        </p>
+        <h1 className="articleTitle">{story.title}</h1>
+      </header>
+
+      {/* Pinned, and the same height at every depth so switching rungs does
+          not shift the prose under it. The active rung is underlined against
+          the hairline the bar already draws, which means the control adds
+          nothing to the page but a thickening of a line that was there. Three
+          bordered boxes with a black fill were tried and were 20px taller and
+          the only filled object in a design that has no fills. */}
+      <div className="articleRungs" ref={bar} role="tablist">
+        {rungs.map((rung) => (
+          <button
+            aria-selected={depth === rung.depth}
+            className={depth === rung.depth ? "articleRung articleRung--on" : "articleRung"}
+            key={rung.depth}
+            onClick={() => choose(rung.depth)}
+            role="tab"
+            type="button"
+          >
+            {rung.label}
+          </button>
+        ))}
+      </div>
+
+      <Body explanation={chosen} />
+
+      {/* The last thing on the page, and the loud thing.
+
+          The byline at the top is deliberately quiet — it costs no row because
+          it is a word that was already there — and quiet is missable. This is
+          the other end: a reader who has finished is deciding what to do next,
+          and the answer we want to give is "read the actual paper". A pill
+          here interrupts nothing, because there is nothing after it.
+
+          It names the source's own title as well as ours. 629 of the corpus's
+          titles were rewritten because the original was unreadable without a
+          doctorate, which is right for a feed and leaves a reader unable to
+          recognise the paper when they arrive at it. */}
+      {story.sources.map((entry) => (
+        <aside className="articleOriginal" key={entry.itemId}>
+          <p className="articleOriginalName">
+            {entry.sourceName}
+            {/* Whether the work was reviewed, said once, where it bears on a
+                decision the reader is about to make. */}
+            {reviewBadge(entry) ? <span> · {reviewBadge(entry)}</span> : null}
+          </p>
+          <p className="articleOriginalTitle">{entry.title}</p>
+          <a
+            className="articleCta"
+            href={entry.url}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {sourceLinkLabel(entry)}
+            <span aria-hidden="true">↗</span>
+          </a>
+        </aside>
+      ))}
+    </article>
+  );
 }
 
-function estimateMinutes(text: string | null | undefined): number | null {
-  if (!text) {
-    return null;
-  }
-  const words = text.trim().split(/\s+/).length;
-  return Math.max(1, Math.round(words / 220));
-}
+type Section = { heading: string; text: string; html?: string };
 
-type TechnicalSection = { heading: string; text: string; html?: string };
-type TechnicalCitation = { label: string; used_for: string };
-
-function technicalSections(content: Record<string, unknown>): TechnicalSection[] {
+function sectionsOf(content: Record<string, unknown> | undefined): Section[] {
   const raw = content?.sections;
   if (!Array.isArray(raw)) {
     return [];
   }
-  return raw
-    .filter(
-      (s): s is TechnicalSection =>
-        typeof s === "object" &&
-        s !== null &&
-        typeof (s as TechnicalSection).heading === "string" &&
-        typeof (s as TechnicalSection).text === "string",
-    )
-    .filter((s) => s.text.trim().length > 0);
-}
-
-function technicalCitations(content: Record<string, unknown>): TechnicalCitation[] {
-  const raw = content?.citations;
-  if (!Array.isArray(raw)) {
-    return [];
-  }
   return raw.filter(
-    (c): c is TechnicalCitation =>
-      typeof c === "object" &&
-      c !== null &&
-      typeof (c as TechnicalCitation).label === "string",
+    (entry): entry is Section =>
+      typeof entry === "object" &&
+      entry !== null &&
+      typeof (entry as Section).heading === "string" &&
+      typeof (entry as Section).text === "string" &&
+      (entry as Section).text.trim().length > 0,
   );
 }
 
-// The walkthrough's headings are the order in which the work is inspected —
-// problem, approach, evidence, results, limitations — so they are the reader's
-// map through it. Flattening them into one column, which is what this did
-// before, throws that away and leaves several thousand words undifferentiated.
-function TechnicalBody({
-  sections,
-  plainText,
-  html,
-}: {
-  sections: TechnicalSection[];
-  plainText: string | null | undefined;
-  html?: string | null;
-}) {
-  if (!sections.length) {
-    return <ExplanationBody html={html} plainText={plainText} />;
+/** The prose at one depth.
+ *
+ * The technical walkthrough arrives already divided — orientation, problem
+ * formulation, approach, evidence, results, limitations — and those headings
+ * are the reader's map through several thousand words. Flattening them into one
+ * column throws the map away.
+ */
+function Body({ explanation }: { explanation?: Explanation }) {
+  if (!explanation) {
+    return <p className="articleProse articleProse--none">Not written for this story.</p>;
   }
-  return (
-    <div className="technicalBody">
-      {sections.map((section) => (
-        <section className="technicalSection" key={section.heading}>
-          <h3>{section.heading}</h3>
-          <div className="explanationText">
-            {section.text
-              .split("\n")
-              .filter(Boolean)
-              .map((paragraph, index) => (
-                <Prose
-                  html={section.html?.split("\n").filter(Boolean)[index]}
-                  key={paragraph}
-                  text={paragraph}
-                />
-              ))}
-          </div>
-        </section>
-      ))}
-    </div>
-  );
-}
-
-function Prose({ html, text }: { html?: string | null; text: string }) {
-  // The html is produced by lib/math on the server: prose escaped, formulas
-  // typeset by KaTeX with trust disabled. Where none was produced the plain
-  // text is rendered as text, never as markup.
-  return html ? (
-    <p dangerouslySetInnerHTML={{ __html: html }} />
-  ) : (
-    <p>{text}</p>
-  );
-}
-
-function ExplanationBody({
-  plainText,
-  html,
-}: {
-  plainText: string | null | undefined;
-  html?: string | null;
-}) {
-  if (!plainText) {
+  const sections = sectionsOf(explanation.content);
+  if (sections.length > 0) {
     return (
-      <p>This explanation is structured but has no plain-text rendering yet.</p>
+      <div className="articleProse">
+        {sections.map((section) => (
+          <section key={section.heading}>
+            <h2 className="articleSectionHead">{section.heading}</h2>
+            <Paragraphs html={section.html} text={section.text} />
+          </section>
+        ))}
+      </div>
     );
   }
-  const paragraphs = plainText.split("\n").filter(Boolean);
-  const rendered = html ? html.split("\n").filter(Boolean) : null;
   return (
-    <div className="explanationText">
-      {paragraphs
-        .map((paragraph, index) => (
-          <Prose html={rendered?.[index]} key={paragraph} text={paragraph} />
-        ))}
+    <div className="articleProse">
+      <Paragraphs html={explanation.html} text={explanation.plainText} />
     </div>
   );
 }
 
-export function StoryReader({
-  story,
-  initialView,
-}: {
-  story: StoryDetail;
-  initialView?: string;
-}) {
-  const orientations = story.availableDepths.filter(
-    (depth): depth is Orientation => depth !== "technical",
-  );
-  const hasTechnical = story.availableDepths.includes("technical");
-  const defaultOrientation: Orientation | null = orientations.includes("glance")
-    ? "glance"
-    : (orientations[0] ?? null);
-
-  const [view, setView] = useState<ExplanationDepth | null>(() => {
-    if (initialView === "technical" && hasTechnical) {
-      return "technical";
-    }
-    if (
-      (initialView === "glance" || initialView === "explain") &&
-      orientations.includes(initialView)
-    ) {
-      return initialView;
-    }
-    return defaultOrientation ?? (hasTechnical ? "technical" : null);
-  });
-
-  const selectView = (next: ExplanationDepth) => {
-    setView(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("view", next);
-    window.history.replaceState(null, "", url);
-  };
-
-  const activeExplanation = useMemo(
-    () => story.explanations.find((value) => value.depth === view),
-    [view, story.explanations],
-  );
-  const technical = story.explanations.find(
-    (value) => value.depth === "technical",
-  );
-  const technicalMinutes = estimateMinutes(technical?.plainText);
-  const technicalLabel =
-    technicalMinutes === null
-      ? "Technical walkthrough"
-      : `Technical walkthrough · ${technicalMinutes} min`;
-
-  // Whether the work was reviewed belongs here as much as on the card. A reader
-  // arriving from search or a shared link never saw the card, and "preprint" is
-  // the single most load-bearing fact about how much weight to give a result.
-  const vettingFrom = vettingSource(story.sources);
-  const vetting = vettingFrom ? reviewBadge(vettingFrom) : undefined;
-
+function Paragraphs({ html, text }: { html?: string | null; text?: string | null }) {
+  if (!text) {
+    return <p className="articleProse--none">Not written for this story.</p>;
+  }
+  const paragraphs = text.split("\n").filter(Boolean);
+  // Produced by lib/math on the server: prose escaped, formulas typeset by
+  // KaTeX with trust disabled. Where none was produced the text is rendered as
+  // text, never as markup.
+  const rendered = html ? html.split("\n").filter(Boolean) : null;
   return (
     <>
-      <header className="storyHeader">
-        <div className="storyMode">
-          <span
-            className={
-              story.mode === "enriched"
-                ? "statusDot statusDot--ready"
-                : "statusDot"
-            }
-            aria-hidden="true"
-          />
-          {story.mode === "enriched"
-            ? "Evidence-grounded explanation"
-            : "Sources available · explanation pending"}
-        </div>
-        <h1>{story.title}</h1>
-        <div className="storyHeaderMeta">
-          <time dateTime={story.publishedAt}>
-            {formatDate(story.publishedAt)}
-          </time>
-          <span>{story.sources.length} source{story.sources.length === 1 ? "" : "s"}</span>
-          {vetting ? <span className="reviewBadge">{vetting}</span> : null}
-        </div>
-      </header>
-
-      <div className="storyGrid">
-        <div className="storyMain">
-          {view === "technical" && technical ? (
-            <>
-              <div className="techBar">
-                {defaultOrientation ? (
-                  <button
-                    onClick={() => selectView(defaultOrientation)}
-                    type="button"
-                  >
-                    <span aria-hidden="true">←</span> Back to{" "}
-                    {orientationMeta[defaultOrientation].name}
-                  </button>
-                ) : (
-                  <span />
-                )}
-                <span className="techLabel">{technicalLabel}</span>
-              </div>
-              <section className="explanationPanel">
-                <p className="sectionKicker">Technical · Investigate the work</p>
-                <TechnicalBody
-                  html={technical.html}
-                  plainText={technical.plainText}
-                  sections={technicalSections(technical.content)}
-                />
-                {technicalCitations(technical.content).length ? (
-                  <div className="technicalCitations">
-                    <p className="sectionKicker">Drawn from</p>
-                    <ul>
-                      {technicalCitations(technical.content).map((citation) => (
-                        <li key={citation.label}>
-                          <strong>{citation.label}</strong>
-                          {citation.used_for ? ` — ${citation.used_for}` : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </section>
-            </>
-          ) : orientations.length ? (
-            <>
-              <div
-                aria-label="Orientation"
-                className="depthSelector"
-                role="tablist"
-              >
-                {orientations.map((value) => (
-                  <button
-                    aria-selected={view === value}
-                    className={view === value ? "active" : ""}
-                    key={value}
-                    onClick={() => selectView(value)}
-                    role="tab"
-                    type="button"
-                  >
-                    <span>{orientationMeta[value].name}</span>
-                    <span className="tabHint">{orientationMeta[value].hint}</span>
-                  </button>
-                ))}
-              </div>
-              <section className="explanationPanel">
-                <p className="sectionKicker">
-                  {view === "glance" || view === "explain"
-                    ? `${orientationMeta[view].name} · ${orientationMeta[view].hint}`
-                    : ""}
-                </p>
-                <ExplanationBody
-                  html={activeExplanation?.html}
-                  plainText={activeExplanation?.plainText}
-                />
-              </section>
-              {hasTechnical ? (
-                <aside className="goDeeper">
-                  <div>
-                    <p className="sectionKicker">
-                      Want to investigate the actual work?
-                    </p>
-                    <h2>{technicalLabel}</h2>
-                    <p>Methods, experiments, results, and limitations</p>
-                  </div>
-                  <button
-                    className="primaryButton"
-                    onClick={() => selectView("technical")}
-                    type="button"
-                  >
-                    Go deeper →
-                  </button>
-                </aside>
-              ) : null}
-            </>
-          ) : (
-            <section className="pendingPanel">
-              <p className="sectionKicker">Sources available</p>
-              <h2>A grounded explanation is not available yet.</h2>
-              <p>
-                Read the original sources on the shelf, or return later once the
-                evidence has been processed.
-              </p>
-            </section>
-          )}
-
-          {/* Lineage sits under the explanation, not in the rail: the quote is
-              the whole point of it and a narrow column cannot carry a sentence.
-              Withheld at "The idea", where someone new to the field is being
-              given one idea and does not need the paper's citation history. */}
-          {view !== "glance" && story.lineage.length > 0 ? (
-            <section className="lineage">
-              <p className="sectionKicker">What this paper builds on</p>
-              <h2>Its own sources, and why</h2>
-              <p className="lineageNote">
-                Taken from the paper itself. Each line quotes the sentence that
-                establishes the relationship.
-              </p>
-              <ul className="lineageList">
-                {groupLineage(story.lineage).map((statement) => (
-                  <li
-                    className="lineageItem"
-                    key={`${statement.relation}-${statement.quote}`}
-                  >
-                    <span
-                      className={`lineageRelation lineageRelation--${statement.relation}`}
-                    >
-                      {relationVerb[statement.relation]}
-                    </span>
-                    <div className="lineageBody">
-                      <ul className="lineageWorks">
-                        {statement.works.map((work) => {
-                          const href = citedWorkUrl(work);
-                          return (
-                            <li key={work.title}>
-                              {href ? (
-                                <a
-                                  className="lineageTitle"
-                                  href={href}
-                                  rel="noreferrer"
-                                >
-                                  {work.title}
-                                </a>
-                              ) : (
-                                <span className="lineageTitle">{work.title}</span>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      <p className="lineageQuote">{statement.quote}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-        </div>
-
-        <aside className="evidenceShelf">
-          <p className="sectionKicker">Source shelf</p>
-          <h2>Read the originals</h2>
-          <div className="sourceList">
-            {story.sources.map((source, index) => (
-              <a
-                className="sourceItem"
-                href={source.url}
-                key={source.itemId}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <span className="sourceNumber">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <div>
-                  <span className="sourceType">{roleNames[source.sourceRole]}</span>
-                  <h3>{source.title}</h3>
-                  <p>
-                    {source.sourceName}
-                    {formatDate(source.publishedAt)
-                      ? ` · ${formatDate(source.publishedAt)}`
-                      : ""}
-                  </p>
-                </div>
-                <span aria-hidden="true">↗</span>
-              </a>
-            ))}
-          </div>
-
-          {story.concepts.length ? (
-            <div className="conceptShelf">
-              <p className="sectionKicker">Useful prerequisites</p>
-              <div>
-                {story.concepts.map((concept) => (
-                  <span key={concept.slug}>{concept.name}</span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </aside>
-      </div>
+      {paragraphs.map((paragraph, index) =>
+        rendered?.[index] ? (
+          <p dangerouslySetInnerHTML={{ __html: rendered[index] }} key={paragraph} />
+        ) : (
+          <p key={paragraph}>{paragraph}</p>
+        ),
+      )}
     </>
   );
 }

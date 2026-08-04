@@ -258,563 +258,6 @@ button {
   display: inline-block;
   margin-top: 20px;
 }
-
-.storyShell {
-  width: min(1180px, calc(100% - 40px));
-  padding: 40px 0 120px;
-  margin: 0 auto;
-}
-
-.backLink {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  color: var(--ink-soft);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-
-.storyHeader {
-  max-width: 980px;
-  padding: clamp(64px, 9vw, 120px) 0 70px;
-}
-
-.storyMode {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 24px;
-  color: var(--ink-soft);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.statusDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #c08d31;
-  box-shadow: 0 0 0 5px rgba(192, 141, 49, 0.13);
-}
-
-.statusDot--ready {
-  background: #2d7b55;
-  box-shadow: 0 0 0 5px rgba(45, 123, 85, 0.13);
-}
-
-.storyHeader h1 {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: clamp(3rem, 7vw, 6.7rem);
-  font-weight: 400;
-  letter-spacing: -0.06em;
-  line-height: 0.95;
-}
-
-.storyHeaderMeta {
-  flex-wrap: wrap;
-  margin-top: 36px;
-  color: var(--ink-soft);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.storyHeaderMeta span + span::before,
-.storyHeaderMeta time + span::before {
-  margin-right: 16px;
-  color: var(--line);
-  content: "·";
-}
-
-.storyGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-  gap: clamp(50px, 8vw, 110px);
-  padding-top: 50px;
-  border-top: 2px solid var(--ink);
-}
-
-.depthSelector {
-  display: flex;
-  gap: 5px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--line);
-}
-
-.depthSelector button {
-  display: inline-flex;
-  gap: 8px;
-  align-items: baseline;
-  padding: 10px 15px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-soft);
-  cursor: pointer;
-  font-size: 0.67rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.depthSelector button.active {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
-}
-
-.depthSelector .tabHint {
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  opacity: 0.75;
-}
-
-.explanationPanel,
-.pendingPanel {
-  padding: 48px 0;
-}
-
-.explanationText,
-.pendingPanel {
-  font-family: var(--serif);
-  font-size: 1.18rem;
-  line-height: 1.75;
-}
-
-.explanationText p:first-child {
-  margin-top: 0;
-}
-
-.pendingPanel {
-  padding: 40px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.35);
-}
-
-.goDeeper {
-  display: flex;
-  gap: 28px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 30px 34px;
-  border: 1px solid var(--ink);
-  background: rgba(255, 255, 255, 0.45);
-}
-
-.goDeeper h2 {
-  margin: 8px 0;
-  font-family: var(--serif);
-  font-size: 1.55rem;
-  font-weight: 400;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-}
-
-.goDeeper p:last-of-type {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-}
-
-.goDeeper .primaryButton {
-  flex-shrink: 0;
-}
-
-.techBar {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--line);
-}
-
-.techBar button {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.techBar button:hover {
-  color: var(--blue);
-}
-
-.techLabel {
-  color: var(--ink-soft);
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.pendingPanel h2,
-.evidenceShelf h2 {
-  margin: 0 0 18px;
-  font-family: var(--serif);
-  font-size: 2.1rem;
-  font-weight: 400;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-}
-
-.pendingPanel p:last-child {
-  margin-bottom: 0;
-  color: var(--ink-soft);
-  font-family: var(--sans);
-  font-size: 0.9rem;
-  line-height: 1.65;
-}
-
-.evidenceShelf {
-  align-self: start;
-  padding: 30px;
-  border: 1px solid var(--ink);
-  background: var(--paper-deep);
-}
-
-.sourceList {
-  margin-top: 28px;
-  border-top: 1px solid var(--line);
-}
-
-.sourceItem {
-  display: grid;
-  grid-template-columns: 26px 1fr auto;
-  gap: 12px;
-  padding: 22px 0;
-  border-bottom: 1px solid var(--line);
-  text-decoration: none;
-}
-
-.sourceNumber {
-  color: #8e8c83;
-  font-family: var(--serif);
-  font-size: 0.7rem;
-  font-style: italic;
-}
-
-.sourceType {
-  color: var(--forest);
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.sourceItem h3 {
-  margin: 8px 0;
-  font-family: var(--serif);
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.sourceItem p {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.65rem;
-  line-height: 1.5;
-}
-
-.sourceItem:hover h3 {
-  color: var(--blue);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.conceptShelf {
-  padding-top: 34px;
-}
-
-.conceptShelf > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.conceptShelf span {
-  padding: 7px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--paper);
-  font-size: 0.65rem;
-  font-weight: 700;
-}
-
-@media (max-width: 820px) {
-
-  .heroInner,
-  .feedSection,
-  .storyShell {
-    width: min(100% - 28px, 1180px);
-  }
-
-  .storyGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .evidenceShelf {
-    grid-row: 1;
-  }
-}
-
-@media (max-width: 520px) {
-
-  .goDeeper {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 24px;
-  }
-
-  .storyShell {
-    padding-top: 28px;
-  }
-
-  .storyHeader {
-    padding: 58px 0 46px;
-  }
-
-  .storyHeader h1 {
-    font-size: 3rem;
-  }
-
-  .storyHeaderMeta {
-    gap: 9px;
-  }
-
-  .storyHeaderMeta span + span::before,
-  .storyHeaderMeta time + span::before {
-    margin-right: 9px;
-  }
-
-  .storyGrid {
-    gap: 36px;
-    padding-top: 30px;
-  }
-
-  .evidenceShelf,
-  .pendingPanel {
-    padding: 24px;
-  }
-
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* Technical is the only layer with internal structure: its headings are the
-   order in which the work is inspected, and its citations are what a reader
-   opened this layer to check. Both are given room rather than folded into
-   the prose column the orientation layers use. */
-.technicalSection {
-  margin: 0 0 40px;
-}
-
-.technicalSection h3 {
-  margin: 0 0 10px;
-  font-family: var(--sans);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  opacity: 0.6;
-}
-
-.technicalCitations {
-  margin-top: 48px;
-  padding-top: 28px;
-  border-top: 1px solid var(--rule, rgba(128, 128, 128, 0.25));
-}
-
-.technicalCitations ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--sans);
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-
-.technicalCitations li {
-  padding: 6px 0;
-  opacity: 0.8;
-}
-
-.technicalCitations strong {
-  font-weight: 600;
-  opacity: 1;
-}
-
-/* The syndicated image. Subordinate to the title by construction: fixed and
-   modest, placed after the rail so the eye still lands on the words first.
-   Its job is to give the eye something to travel by down a long column, not
-   to be the reason a story is opened. */
-
-/* A stood-in figure says so. Small, plain, and over the image rather than
-   beside it, so the card's shape does not change according to where its
-   picture came from. */
-
-/* A formula KaTeX could not parse is shown as the TeX it came from, marked as
-   mathematics rather than silently dropped or silently mangled. */
-.mathRaw {
-  font-family: var(--mono, ui-monospace, monospace);
-  font-size: 0.9em;
-  padding: 0 3px;
-  border-radius: 3px;
-  background: rgba(128, 128, 128, 0.12);
-}
-
-/* Long display equations must scroll inside their own box rather than push
-   the column sideways. */
-.explanationText .katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 4px 0;
-}
-
-/* Vetting status in the story header. Deliberately quiet: it is a fact a reader
-   should be able to find, not a claim competing with the headline. */
-.storyHeaderMeta .reviewBadge {
-  font-family: var(--font-sans);
-  font-size: 0.68rem;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  padding: 0.15rem 0.5rem;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: 999px;
-}
-
-/* --- What this paper builds on -------------------------------------------
-   The relation is the information, so it leads: a reader scanning the left
-   column reads "Argues against / Builds on / Uses" before anything else.
-   The quote is the thing no citation index has, so it gets the width the rail
-   could not have given it. Everything else stays quiet. */
-
-.lineage {
-  margin-top: 56px;
-  padding-top: 34px;
-  border-top: 1px solid var(--ink);
-}
-
-.lineage h2 {
-  margin: 8px 0 4px;
-  font-family: var(--serif);
-  font-size: 1.55rem;
-  font-weight: 400;
-  letter-spacing: -0.03em;
-}
-
-.lineageNote {
-  margin: 0 0 26px;
-  max-width: 46ch;
-  font-family: var(--serif);
-  font-style: italic;
-  color: var(--ink-soft);
-}
-
-.lineageList {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 22px;
-}
-
-.lineageItem {
-  display: grid;
-  grid-template-columns: 8.5rem 1fr;
-  gap: 20px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-}
-
-.lineageRelation {
-  font-family: var(--sans);
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-  padding-top: 0.2rem;
-}
-
-/* Disagreement is the rarest relation and the most worth noticing: 14 of 454
-   edges in this corpus. It is the one place this panel raises its voice. */
-.lineageRelation--contradicts {
-  color: var(--blue);
-}
-
-.lineageTitle {
-  font-family: var(--serif);
-  font-size: 1.05rem;
-  line-height: 1.35;
-  color: var(--ink);
-  text-decoration: none;
-  border-bottom: 1px solid var(--line);
-}
-
-a.lineageTitle:hover,
-a.lineageTitle:focus-visible {
-  border-bottom-color: var(--ink);
-}
-
-.lineageQuote {
-  margin: 10px 0 0;
-  max-width: 62ch;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 0.95rem;
-  line-height: 1.55;
-  color: var(--ink-soft);
-}
-
-.lineageQuote::before {
-  content: "“";
-}
-
-.lineageQuote::after {
-  content: "”";
-}
-
-@media (max-width: 720px) {
-  .lineageItem {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-}
-
-/* Several works can share one statement, so they stack above the sentence that
-   covers them all. */
-.lineageWorks {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 4px;
-}
-
 /* ═════════════════════════════════════════════════════════════════════════
    THE FEED — a story is a row, not a card.
 
@@ -1273,106 +716,129 @@ a.lineageTitle:focus-visible {
 }
 .themeChoice--on .themeGlyph[data-choice="dark"]::after { background: var(--ink); }
 
-/* ---- Temporary: three treatments of the story page. Deleted once one wins. */
-.draftRow { display: flex; flex-wrap: wrap; gap: 1.25rem; padding: 1.25rem; align-items: flex-start; }
-.draftNote { flex: 1 0 100%; margin: 0; font-size: 0.82rem; color: var(--ink-3); }
-.draftCell { margin: 0; width: 390px; }
-.draftCell figcaption {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;
-  margin-bottom: 0.4rem; font-size: 0.74rem; font-weight: 700; color: var(--ink);
-}
-.draftCell figcaption span { font-weight: 500; color: var(--ink-3); }
-.draftFrame {
-  position: relative; height: 780px; overflow-y: auto; overscroll-behavior: contain;
-  border: 1px solid var(--rule); border-radius: 14px; background: var(--bg);
-}
+/* ═════════════════════════════════════════════════════════════════════════
+   THE STORY — one explanation at whichever depth was asked for.
 
-.draft { padding-bottom: 2.5rem; }
-.draftHead { padding: 1.15rem var(--margin) 0; }
+   Set in the same face as the feed, on the same margin, with the same
+   hairlines. Arriving here from a card should feel like the card opening
+   rather than like leaving the product, which the serif page it replaced did
+   not manage.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.article { padding-bottom: 3rem; }
+
+.articleHead { padding: 1.15rem var(--margin) 0; }
 /* Tighter when a picture already opened the page. */
-.storyFigure + .draftHead { padding-top: 0.85rem; }
-.draftMeta { display: flex; align-items: baseline; margin: 0 0 0.5rem; font-size: 0.72rem; color: var(--ink-3); }
+.storyFigure + .articleHead { padding-top: 0.85rem; }
 
-/* The publisher's name, doing the job the pill was doing. It costs no row
-   because the name was already on the page — a reader was reading "Nature" and
-   now that word is the way to Nature. Full ink and an arrow, because a grey
-   line at 0.72rem that happens to be a link is a link nobody finds. */
-.draftByline {
+.articleMeta {
+  display: flex; align-items: baseline;
+  margin: 0 0 0.5rem; font-size: 0.72rem; color: var(--ink-3);
+}
+.articleMeta time { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* The publisher's name, doing the job a filled pill was doing on a row of its
+   own. It costs no row because the name was already on the page — a reader was
+   reading "Nature", and now that word is the way to Nature. Full ink and an
+   arrow, because a grey line at 0.72rem that happens to be a link is a link
+   nobody finds. */
+.articleByline {
   display: inline-flex; align-items: center; gap: 0.28rem;
   color: var(--ink); font-weight: 600; text-decoration: none;
 }
-.draftByline span { font-size: 0.92em; opacity: 0.6; }
-.draftByline:hover { text-decoration: underline; text-underline-offset: 2px; }
-.draftMeta time { margin-left: auto; font-variant-numeric: tabular-nums; }
-.draftTitle {
+.articleByline span { font-size: 0.92em; opacity: 0.6; }
+.articleByline:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.articleTitle {
   margin: 0 0 0.85rem; font-size: 1.4rem; line-height: 1.22;
   font-weight: 600; letter-spacing: -0.021em; color: var(--ink);
 }
 
-.draftRungs { display: flex; gap: 3px; padding: 0 var(--margin) 0.95rem; background: var(--bg); }
-/* Opaque, not the masthead's translucent blur. Dense prose sliding under a
-   0.86 wash reads as smudge rather than as depth, and a control you use while
-   reading has to stay legible against whatever happens to be behind it. */
-.draftRungs--pinned {
-  position: sticky; top: 0; z-index: 2; padding-top: 0.7rem;
-  border-bottom: 1px solid var(--rule); background: var(--bg);
+/* The ladder. Pinned, because the depths run 1,800px and 7,000px and a control
+   that scrolls away is one a reader has to travel back to; opaque rather than
+   the masthead's translucent blur, because dense prose sliding under a 0.86
+   wash reads as smudge rather than as depth; and the same height at every
+   depth, so switching rungs does not shift the prose beneath it.
+
+   The active rung is underlined against the hairline the bar already draws, so
+   the control adds nothing to the page but a thickening of a line that was
+   there. Three bordered boxes with a black fill were tried: 20px taller, six
+   vertical rules, and the only filled object in a design that has no fills. */
+.articleRungs {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: stretch; gap: 1.4rem;
+  padding: 0 var(--margin);
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
 }
-.draftRung {
-  flex: 1; min-height: 38px; padding: 0 0.3rem;
-  border: 1px solid var(--rule); border-radius: 9px;
-  background: transparent; color: var(--ink-2);
-  font: inherit; font-size: 0.82rem; font-weight: 500; cursor: pointer;
-  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
+.articleRung {
+  position: relative; min-height: 44px; padding: 0;
+  border: 0; background: transparent; color: var(--ink-3);
+  font: inherit; font-size: 0.88rem; font-weight: 500; cursor: pointer;
+  transition: color var(--fast) var(--ease);
 }
-.draftRung:hover:not(:disabled) { border-color: var(--rule-hover); color: var(--ink); }
-.draftRung--on, .draftRung--on:hover:not(:disabled) {
-  background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 600;
+.articleRung:hover { color: var(--ink); }
+.articleRung--on { color: var(--ink); font-weight: 600; }
+.articleRung--on::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 2px; background: var(--ink);
 }
 
-
-.draftDepth { padding-top: 0.15rem; }
-.draftRungHead {
-  display: flex; align-items: baseline; gap: 0.5rem;
-  margin: 0 var(--margin) 0.55rem; padding-top: 0.95rem;
-  border-top: 1px solid var(--rule);
-  font-size: 0.8rem; font-weight: 700; color: var(--ink);
+.articleProse {
+  padding: 1.1rem var(--margin) 0;
+  font-size: 0.95rem; line-height: 1.62; color: var(--ink-2);
 }
-.draftDepth:first-of-type .draftRungHead { padding-top: 0; border-top: 0; }
-.draftRungHead span { font-size: 0.72rem; font-weight: 400; color: var(--ink-3); }
-
-.draftProse { padding: 0 var(--margin); font-size: 0.95rem; line-height: 1.62; color: var(--ink-2); }
-.draftProse p { margin: 0 0 0.85rem; }
-.draftProse--none { color: var(--ink-3); font-style: italic; }
-.draftSectionHead {
+.articleProse p { margin: 0 0 0.85rem; }
+.articleProse--none { color: var(--ink-3); font-style: italic; }
+/* The walkthrough's headings are the reader's map through several thousand
+   words. Flattening them into one column throws the map away. */
+.articleSectionHead {
   margin: 1.25rem 0 0.45rem; font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3);
 }
 
-.draftSection { margin-top: 1.5rem; padding: 1.15rem var(--margin) 0; border-top: 1px solid var(--rule); }
-.draftLabel {
-  margin: 0 0 0.75rem; font-size: 0.66rem; font-weight: 700;
-  letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3);
-}
-
-/* The closing block. A container rather than a link, because a reader who has
+/* The closing block: a container rather than a link, because a reader who has
    read 7,000 words should be met with the thing itself named, not a hyperlink
    they have to hover to identify. */
-.draftOriginal {
+.articleOriginal {
   margin: 1.9rem var(--margin) 0;
   padding: 1.05rem 1.1rem 1.15rem;
   border: 1px solid var(--rule); border-radius: 14px;
   background: var(--tint);
 }
-.draftOriginalName {
+.articleOriginalName {
   margin: 0 0 0.3rem; font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
 }
-.draftOriginalTitle {
+.articleOriginalName span { font-weight: 500; }
+.articleOriginalTitle {
   margin: 0 0 0.85rem; font-size: 0.95rem; line-height: 1.4;
   font-weight: 500; color: var(--ink);
 }
-.draftOriginal .draftSourceCta { margin-bottom: 0; }
+/* The one filled control on the page. It is the only thing here that leads
+   somewhere we did not write. */
+.articleCta {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  min-height: 36px; padding: 0 0.95rem;
+  border-radius: 999px; background: var(--ink); color: var(--bg);
+  font-size: 0.82rem; font-weight: 600; text-decoration: none;
+}
+.articleCta span { font-size: 0.9em; opacity: 0.75; }
+.articleCta:hover { opacity: 0.85; }
+
+/* A formula KaTeX could not parse is shown as the TeX it came from, marked as
+   mathematics rather than silently dropped or silently mangled. */
+.mathRaw {
+  font-family: ui-monospace, monospace; font-size: 0.9em;
+  padding: 0 3px; border-radius: 3px;
+  background: rgba(128, 128, 128, 0.12);
+}
+/* Long display equations scroll inside their own box rather than push the
+   column sideways. */
+.articleProse .katex-display,
+.lightboxCaption .katex-display {
+  overflow-x: auto; overflow-y: hidden; padding: 4px 0;
+}
 
 .storyFigure { margin: 0 0 1.1rem; }
 
@@ -1458,13 +924,3 @@ a.lineageTitle:focus-visible {
 }
 .lightboxClose:hover { background: rgba(255, 255, 255, 0.2); }
 
-/* The one filled control on the page. It is the only thing here that leads
-   somewhere we did not write. */
-.draftSourceCta {
-  display: inline-flex; align-items: center; gap: 0.4rem;
-  min-height: 36px; padding: 0 0.95rem; margin-bottom: 1.05rem;
-  border-radius: 999px; background: var(--ink); color: var(--bg);
-  font-size: 0.82rem; font-weight: 600; text-decoration: none;
-}
-.draftSourceCta span { font-size: 0.9em; opacity: 0.75; }
-.draftSourceCta:hover { opacity: 0.85; }
