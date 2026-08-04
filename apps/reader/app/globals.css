@@ -951,3 +951,24 @@ button {
 }
 .lightboxClose:hover { background: rgba(255, 255, 255, 0.2); }
 
+
+/* The shape of a story before its words arrive. Grey blocks rather than a
+   spinner: a spinner says "something is happening", these say what is about
+   to be there, so the real page replaces them without moving anything. */
+.skeleton {
+  display: block;
+  border-radius: 5px;
+  background: var(--tint);
+  animation: pulse 1.4s var(--ease) infinite;
+}
+.skeleton--meta { width: 40%; height: 0.72rem; }
+.skeleton--title { height: 1.15rem; margin-bottom: 0.5rem; }
+.skeleton--short { width: 58%; margin-bottom: 1.1rem; }
+.skeleton--line { height: 0.72rem; margin-bottom: 0.75rem; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}

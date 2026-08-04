@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { CardImage } from "@/components/CardImage";
+import { consumeHistoryArrival, readFeed, saveFeed } from "@/lib/feedcache";
 import { serialiseFields } from "@/lib/fields";
 import { vettingSource } from "@/lib/provenance";
 import type { FeedPage, FeedStory } from "@/lib/types";
@@ -46,7 +47,7 @@ function StoryRow({ story }: { story: FeedStory }) {
   const isFigure = Boolean(source && !source.imageUrl && source.figureImage);
 
   return (
-    <li className="story">
+    <li className="story" data-story={story.id} id={`story-${story.id}`}>
       <Link className="storyLink" href={`/story/${story.id}`}>
         {hasPicture ? (
           <span className={isFigure ? "storyPicture storyPicture--figure" : "storyPicture"}>
@@ -85,13 +86,90 @@ export function FeedStream({
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
+  const restored = useRef(false);
 
   // A new selection is a new feed, not more of the old one.
   useEffect(() => {
+    if (restored.current) {
+      // Except immediately after a restore, where initialPage is page one of
+      // the same selection and applying it would throw away what was just put
+      // back.
+      restored.current = false;
+      return;
+    }
     setStories(initialPage.stories);
     setCursor(initialPage.nextCursor);
     setFailed(false);
   }, [initialPage]);
+
+  /** Put back the pages, then the position.
+   *
+   * Before paint, because the alternative is a visible flash of page one at
+   * the top of the feed followed by a jump. The browser has already restored
+   * its own idea of the scroll position by now, into a document that was two
+   * thirds too short; setting it again once the rows exist is what makes it
+   * land.
+   */
+  useLayoutEffect(() => {
+    if (!consumeHistoryArrival()) {
+      return;
+    }
+    const snapshot = readFeed(fields);
+    if (!snapshot) {
+      return;
+    }
+    restored.current = true;
+    setStories(snapshot.stories);
+    setCursor(snapshot.cursor);
+    // Put the anchor story back where it was on the screen, once the rows this
+    // just asked for exist, and again shortly after: pictures above the reader
+    // are still arriving and each one that settles moves everything below it.
+    const place = () => {
+      const card = document.getElementById(`story-${snapshot.anchorId}`);
+      if (card) {
+        window.scrollBy(0, card.getBoundingClientRect().top - snapshot.anchorTop);
+      }
+    };
+    requestAnimationFrame(place);
+    const settle = window.setTimeout(place, 400);
+    return () => window.clearTimeout(settle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on mount only:
+    // a later run would fight a reader who has since scrolled somewhere else.
+  }, []);
+
+  // Read inside the click handler rather than closed over, so the snapshot
+  // holds every page loaded up to the tap and not the ones loaded up to the
+  // last render.
+  const latest = useRef({ stories, cursor });
+  latest.current = { stories, cursor };
+
+  /** Take the snapshot at the moment of the tap.
+   *
+   * Not on a scroll listener and not on unmount, both of which were tried and
+   * both of which record the wrong thing: Next scrolls to the top as part of
+   * the forward navigation, so by the time either fires the feed is at zero and
+   * the anchor saved is whatever happens to be first. The click is the last
+   * instant the reader's position is still the reader's position.
+   */
+  const remember = useCallback(() => {
+    const cards = document.querySelectorAll<HTMLElement>("[data-story]");
+    let anchor: HTMLElement | undefined;
+    for (const card of cards) {
+      if (card.getBoundingClientRect().bottom > 0) {
+        anchor = card;
+        break;
+      }
+    }
+    if (!anchor?.dataset.story) {
+      return;
+    }
+    saveFeed(fields, {
+      stories: latest.current.stories,
+      cursor: latest.current.cursor,
+      anchorId: anchor.dataset.story,
+      anchorTop: Math.round(anchor.getBoundingClientRect().top),
+    });
+  }, [fields]);
 
   const loadMore = useCallback(async () => {
     if (!cursor || loading) {
@@ -147,7 +225,9 @@ export function FeedStream({
 
   return (
     <>
-      <ul className="feed">
+      {/* Capture, so the snapshot is written before the router begins the
+          navigation and scrolls the feed to the top under us. */}
+      <ul className="feed" onClickCapture={remember}>
         {stories.map((story) => (
           <StoryRow key={story.id} story={story} />
         ))}
