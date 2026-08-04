@@ -1,0 +1,113 @@
+{
+  "$comment": [
+    "The field taxonomy, in one place because two runtimes need it: the",
+    "generation pass in Python, which offers the leaves to the model, and the",
+    "reader in TypeScript, which groups them for display. Kept as data rather",
+    "than duplicated as code, because a story's field would otherwise depend on",
+    "which copy was edited last.",
+    "",
+    "Stories are tagged with a LEAF. Groups exist only for presentation, so",
+    "regrouping -- promoting mathematics to the top level once there is enough",
+    "of it, merging AI back into computer science -- is a change to this file",
+    "with no re-tagging and no migration. That is the whole point of storing the",
+    "finer thing.",
+    "",
+    "The leaves were derived from a tagging pass over 150 stories drawn at",
+    "random from the corpus, which named each story's field in its own words",
+    "before seeing any candidate list. Names that appeared there and had nowhere",
+    "to go became leaves; leaves nothing filled were cut. See",
+    "docs/v2/FIELDS.md."
+  ],
+  "version": "fields-v1",
+  "groups": [
+    {
+      "slug": "computing",
+      "label": "Computing",
+      "note": "Machines, methods, and the labs building them",
+      "leaves": [
+        { "slug": "ai", "label": "AI & machine learning" },
+        { "slug": "computer_science", "label": "Computer science" },
+        { "slug": "robotics", "label": "Robotics" },
+        { "slug": "quantum_computing", "label": "Quantum computing" }
+      ]
+    },
+    {
+      "slug": "life",
+      "label": "Life sciences",
+      "note": "Biology from molecules to ecosystems",
+      "leaves": [
+        { "slug": "molecular_cell_biology", "label": "Molecular & cell biology" },
+        { "slug": "genetics_genomics", "label": "Genetics & genomics" },
+        { "slug": "ecology_evolution", "label": "Ecology & evolution" },
+        { "slug": "plant_science", "label": "Plant science" },
+        { "slug": "microbiology", "label": "Microbiology & virology" },
+        { "slug": "physiology_development", "label": "Physiology & development" },
+        { "slug": "immunology", "label": "Immunology" }
+      ]
+    },
+    {
+      "slug": "health",
+      "label": "Health & medicine",
+      "note": "Clinical research, medicine, public health",
+      "leaves": [
+        { "slug": "public_health", "label": "Public health & epidemiology" },
+        { "slug": "clinical_medicine", "label": "Clinical medicine" },
+        { "slug": "pharmacology", "label": "Pharmacology" },
+        { "slug": "mental_health", "label": "Mental health" }
+      ]
+    },
+    {
+      "slug": "mind",
+      "label": "Mind & brain",
+      "note": "How brains and minds work",
+      "leaves": [
+        { "slug": "neuroscience", "label": "Neuroscience" },
+        { "slug": "cognitive_science", "label": "Cognitive science" },
+        { "slug": "psychology", "label": "Psychology" }
+      ]
+    },
+    {
+      "slug": "physical",
+      "label": "Physical sciences",
+      "note": "Physics, chemistry, materials, and the maths behind them",
+      "leaves": [
+        { "slug": "physics", "label": "Physics" },
+        { "slug": "mathematics", "label": "Mathematics" },
+        { "slug": "materials_science", "label": "Materials science" },
+        { "slug": "chemistry", "label": "Chemistry" },
+        { "slug": "energy", "label": "Energy" }
+      ]
+    },
+    {
+      "slug": "space",
+      "label": "Space & astronomy",
+      "note": "Observation, missions, and what they found",
+      "leaves": [
+        { "slug": "astronomy", "label": "Astronomy & astrophysics" },
+        { "slug": "planetary_science", "label": "Planetary science" },
+        { "slug": "spaceflight", "label": "Spaceflight & missions" }
+      ]
+    },
+    {
+      "slug": "climate",
+      "label": "Climate & environment",
+      "note": "Earth systems and the changing climate",
+      "leaves": [
+        { "slug": "climate_science", "label": "Climate & atmosphere" },
+        { "slug": "earth_science", "label": "Earth & environment" }
+      ]
+    },
+    {
+      "slug": "society",
+      "label": "Society",
+      "note": "People, past and present, studied scientifically",
+      "leaves": [
+        { "slug": "archaeology", "label": "Archaeology & ancient history" },
+        { "slug": "linguistics", "label": "Linguistics" },
+        { "slug": "social_science", "label": "Social & political science" },
+        { "slug": "education", "label": "Education" },
+        { "slug": "science_policy", "label": "Science policy & meta-research" }
+      ]
+    }
+  ]
+}

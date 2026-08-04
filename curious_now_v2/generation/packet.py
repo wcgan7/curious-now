@@ -4,9 +4,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from curious_now_v2.core.enums import ClaimKind
+from curious_now_v2.core.fields import (
+    describe_for_prompt,
+    leaf as field_leaf,
+    leaf_slugs,
+)
 from curious_now_v2.generation.client import Completion, Generator, storable
 
-PROMPT_VERSION = "packet-v4"
+PROMPT_VERSION = "packet-v5"
 
 # Extraction, deliberately: asking which claims the source supports is a task a
 # model does well, where asking whether it feels able to explain something is
@@ -17,6 +22,7 @@ SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
     "required": [
         "story_kind",
+        "field",
         "central_claim",
         "claims",
         "limitations",
@@ -35,6 +41,13 @@ SCHEMA: dict[str, Any] = {
                 "not_science",
             ],
         },
+        # Asked here rather than in a pass of its own because this is the only
+        # pass that sees the whole document, and it already returns a
+        # categorical judgement about what the item is. Deriving the field from
+        # the source instead was tried and is wrong for a third of the corpus:
+        # arXiv's physical sciences feed carries geology, astronomy and
+        # materials science, and Nature carries everything.
+        "field": {"type": "string", "enum": [*leaf_slugs(), "unclear"]},
         "central_claim": {"type": "string"},
         "limitations": {"type": "array", "items": {"type": "string"}},
         "prerequisites": {"type": "array", "items": {"type": "string"}},
@@ -124,6 +137,25 @@ newsworthy it is:
   about the world; a company describing its own way of working is describing
   itself.
 
+field is what the work is about, chosen from this list:
+
+{field_list}
+
+Three rules decide the awkward cases, and they matter more than the labels:
+
+- The field is where the FINDING lands, not what the method was. A neural
+  network that predicts protein folding is molecular_cell_biology. A method
+  paper benchmarked on piano recordings is ai, because what it establishes is
+  about the method.
+- If the finding is about the nervous system, it is neuroscience, not
+  molecular_cell_biology. Clinical mental illness is mental_health; basic
+  research on behaviour and cognition is psychology or cognitive_science.
+- quantum_computing is computing, not physics.
+
+Choose "unclear" only when the text genuinely does not establish a subject.
+Guessing puts a physics paper in front of someone who asked for medicine, and
+"unclear" is a fact the pipeline can act on where a wrong guess is not.
+
 central_claim is the single thing this item amounts to, in one sentence.
 prerequisites are concepts a reader would need in order to follow it.
 
@@ -165,6 +197,11 @@ PUBLISHABLE_KINDS = frozenset(
 @dataclass(frozen=True)
 class ExtractedPacket:
     story_kind: str
+    #: A leaf of the field taxonomy, or None where the text established none.
+    #: None rather than a fallback: "we did not look" and "we looked and it is
+    #: chemistry" have to stay distinguishable, because a filter built on a
+    #: guess is worse than one that admits a gap.
+    field: str | None
     central_claim: str
     claims: tuple[ExtractedClaim, ...]
     limitations: tuple[str, ...]
@@ -272,6 +309,7 @@ def _extract_once(
             content_type=content_type,
             title=title,
             text=text,
+            field_list=describe_for_prompt(),
         ),
         SCHEMA,
     )
@@ -298,8 +336,13 @@ def _extract_once(
         )
 
     story_kind = str(payload.get("story_kind") or "").strip()
+    # Validated against the taxonomy rather than trusted: the schema constrains
+    # the enum, but a packet generated before this key existed has nothing here
+    # at all, and that must read as unknown rather than as a leaf.
+    field = str(payload.get("field") or "").strip()
     return ExtractedPacket(
         story_kind=story_kind if story_kind in VALID_KINDS else "not_science",
+        field=field if field_leaf(field) else None,
         central_claim=storable(str(payload.get("central_claim") or "").strip()),
         claims=tuple(claims),
         limitations=tuple(
