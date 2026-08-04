@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -37,11 +37,51 @@ export function Masthead() {
 function Bar({ children }: { children?: React.ReactNode }) {
   return (
     <header className="masthead">
+      <Back />
       <Link className="wordmark" href="/">
         curious<span>.now</span>
       </Link>
       {children}
     </header>
+  );
+}
+
+/** The way back to where you were, on a story page only.
+ *
+ * It has to be history rather than a link to "/". The feed is an infinite
+ * scroll whose later pages are fetched into client state, so navigating to "/"
+ * afresh discards every page after the first and lands at the top; going back
+ * restores both — measured, 3,000px of feed returns to 3,000px.
+ *
+ * It lives in the masthead because the masthead is already there. A row of its
+ * own above the picture would push a full-bleed image below the fold to say
+ * something the browser's own gesture already says, and this page's first
+ * screen is the whole argument for the design.
+ */
+function Back() {
+  const pathname = usePathname();
+  const router = useRouter();
+  if (!pathname?.startsWith("/story/")) {
+    return null;
+  }
+  return (
+    <button
+      aria-label="Back"
+      className="backButton"
+      onClick={() => {
+        // A story opened in a new tab, or arrived at from a shared link, has
+        // nowhere to go back to. Those readers get the feed from the top,
+        // which is the only honest answer.
+        if (window.history.length > 1) {
+          router.back();
+        } else {
+          router.push("/");
+        }
+      }}
+      type="button"
+    >
+      <span aria-hidden="true" className="glyphBack" />
+    </button>
   );
 }
 

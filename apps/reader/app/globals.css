@@ -44,6 +44,10 @@
   --serif: Newsreader, Georgia, "Times New Roman", serif;
 
   --margin: 20px;
+  /* The masthead's height, and therefore where anything else that pins has
+     to stop. Named because it was wrong: the ladder pinned to 0 and spent
+     every scroll entirely behind the bar. */
+  --top-h: 52px;
   --fast: 150ms;
   --med: 240ms;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -434,11 +438,30 @@ button {
   z-index: 10;
   display: flex;
   align-items: center;
-  height: 52px;
+  height: var(--top-h);
   padding: 0 var(--margin);
   background: var(--top-bg);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--rule);
+}
+
+/* On a story page, before the wordmark. The wordmark still goes home; this
+   goes back, which on an infinitely scrolled feed is a different place. */
+.backButton {
+  display: grid; place-items: center;
+  width: 34px; height: 40px;
+  margin-left: -10px;
+  border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink-2); cursor: pointer;
+  transition: color var(--fast) var(--ease);
+}
+.backButton:hover { color: var(--ink); }
+.glyphBack {
+  width: 9px; height: 9px;
+  border-left: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  transform: rotate(45deg);
+  margin-left: 3px;
 }
 
 .wordmark {
@@ -765,7 +788,7 @@ button {
    there. Three bordered boxes with a black fill were tried: 20px taller, six
    vertical rules, and the only filled object in a design that has no fills. */
 .articleRungs {
-  position: sticky; top: 0; z-index: 2;
+  position: sticky; top: var(--top-h); z-index: 2;
   display: flex; align-items: stretch; gap: 1.4rem;
   padding: 0 var(--margin);
   border-bottom: 1px solid var(--rule);
