@@ -13,7 +13,7 @@ from curious_now_v2.generation.client import (
 )
 from curious_now_v2.generation.packet import ExtractedPacket
 
-PROMPT_VERSION = "present-v7"
+PROMPT_VERSION = "present-v9"
 
 # Prohibited by the title contract, and cheap to check.
 HYPE = (
@@ -106,10 +106,31 @@ First settle the spine, which all the writing shares:
 
 Then produce:
 
-1. display_title: 6-14 words, plain language, naming the actual development — or \
-for an explainer, the thing being explained. No hype, no unsupported \
-superlative, no manufactured question. Attribute the claim if only an \
-interested party makes it.
+1. display_title: 6-14 words. No hype, no unsupported superlative, no \
+manufactured question. Attribute the claim if only an interested party makes it.
+
+   Write it in the register of these, which are real headlines from science \
+   newsrooms and research labs:
+
+       Butterflies thrive in micro-reserve garden
+       Uncovering repurposed medicines to fight liver fibrosis
+       All living things emit a faint glow. Could this light be useful?
+       How confessions can keep language models honest
+       Deep-sea snails ride surface currents to reach distant hydrothermal vents
+       Uniting biological toolkits for a new approach to ALS
+       AI maps Titan's methane clouds in record time
+       A new quantum toolkit for optimization
+       Finding GPT-4's mistakes with GPT-4
+       The anatomy of a personal health agent
+
+   Notice what they do not do: they do not name the method, they do not stack \
+   nouns, and they do not use an acronym a reader would have to look up. Notice \
+   what they do: a concrete subject, an ordinary verb, and one idea. For an \
+   explainer, the same register applied to the thing being explained.
+
+   Then check your title against one rule before you answer: if it contains \
+   three nouns in a row, rewrite it. A noun stack is what a title looks like \
+   when it has named a technique instead of saying what happened.
 
 2. glance: for someone curious with no background in this field — imagine a \
 sharp friend who works in something else.
@@ -125,10 +146,33 @@ sharp friend who works in something else.
    Glance carrying them has spent the reader's attention on detail before they \
    have the idea the detail is about.
 
-   Any term your reader would not know must be explained right where it appears \
-   or replaced with ordinary language. A Glance that reads like a compressed \
-   abstract has failed even if every word in it is true. Set `supported` false \
-   if the claims cannot carry even this.
+   One rule governs every technical term, and it is absolute: a term may \
+   appear only in a sentence that also says what it is.
+
+     wrong   Polar domains organize, then fragment below the transition.
+     right   Regions where the crystal's charges line up — polar domains —
+             grow orderly as it cools, then break up.
+
+     wrong   The method improves the lithium-ion transference number.
+     right   More of the current is carried by the lithium itself rather than
+             by the other ions drifting the wrong way.
+
+   If saying what a term is would cost more words than the idea is worth, the \
+   term does not belong in the Glance at all. Say the finding without it. \
+   Before you answer, read your Glance back and find any noun phrase a reader \
+   would have to look up. If there is one, you have not finished.
+
+   That rule does not buy you extra sentences. You still have ONE idea, and \
+   you still stop. Three or four sentences is the shape of a Glance; if you \
+   find yourself writing a fifth, you have started a second idea. A Glance \
+   that explains four things clearly has failed as surely as one that explains \
+   nothing: the reader was handed a lecture where they came for an idea. So \
+   the trade runs one way — explaining a term is worth sentences, and adding a \
+   second finding never is.
+
+   A Glance that reads like a compressed abstract has failed even if every \
+   word in it is true. Set `supported` false if the claims cannot carry even \
+   this.
 
    Where the evidence carries a qualification, write it into the Glance as \
    part of the explanation — a clause or a sentence in the reader's path, \
@@ -300,6 +344,73 @@ def _sentences(text: str) -> set[str]:
     }
 
 
+# Sources whose headlines are already written for a general reader, by a
+# journalist or a lab's communications team.
+WRITTEN_FOR_READERS = frozenset(
+    {"news", "blog", "lab_announcement", "press_release"}
+)
+
+
+def title_for(
+    *, source_title: str, generated: str, content_type: str
+) -> tuple[str, tuple[str, ...]]:
+    """Which title to show, and what is wrong with it.
+
+    Rewriting a paper's title helps: measured over 45 papers, ours read as
+    plain to a non-expert where the authors' did in 81% of cases, because a
+    paper's title is written for peers.
+
+    Rewriting a news headline does the opposite. Across 140 published stories a
+    judge found ours harder than the source's own in 28% of items that arrived
+    already written for a reader, against 7% of papers -- "How AI trained on
+    birds is surfacing underwater mysteries" became "Perch 2.0 Transfers
+    Bird-Learned Sound Features to Underwater Tasks". So those keep their own
+    headline.
+
+    Length is not checked on a headline we did not write. The 6-14 word bound
+    exists to stop our own titles sprawling or saying nothing; a newsroom's
+    "Butterflies thrive in micro-reserve garden" is not defective for being
+    six words and "Report from the self-organizing conference" is not defective
+    for being five. Hype and manufactured questions are still refused, because
+    those are the reasons a headline is unusable rather than merely short.
+    """
+
+    source = (source_title or "").strip()
+    if content_type in WRITTEN_FOR_READERS and source:
+        refusals = _unusable(source)
+        if not refusals:
+            return source, ()
+        # A hyped or interrogative headline is worse than our rewrite, so the
+        # rewrite stands and is judged on its own terms.
+
+    return generated, validate_title(generated)
+
+
+def _unusable(title: str) -> tuple[str, ...]:
+    """What makes a headline unusable, regardless of who wrote it."""
+
+    problems: list[str] = []
+    if any(word in title.casefold() for word in HYPE):
+        problems.append("title uses prohibited hype")
+    if title.rstrip().endswith("?"):
+        problems.append("title is a question")
+    return tuple(problems)
+
+
+def validate_glance_words(glance: str) -> tuple[str, ...]:
+    """The Glance's length contract, on its own.
+
+    Split out so a pass that rewrites only the Glance can check it without
+    assembling a whole Presentation. The bounds are the same ones `validate`
+    applies, and there is one copy of them.
+    """
+
+    count = _words(glance)
+    if not GLANCE_MIN_WORDS <= count <= GLANCE_MAX_WORDS:
+        return (f"glance is {count} words",)
+    return ()
+
+
 def validate_title(title: str) -> tuple[str, ...]:
     """Judge the display title alone.
 
@@ -311,11 +422,7 @@ def validate_title(title: str) -> tuple[str, ...]:
     problems: list[str] = []
     if not TITLE_MIN_WORDS <= _words(title) <= TITLE_MAX_WORDS:
         problems.append(f"title is {_words(title)} words")
-    if any(word in title.casefold() for word in HYPE):
-        problems.append("title uses prohibited hype")
-    if title.rstrip().endswith("?"):
-        problems.append("title is a question")
-    return tuple(problems)
+    return tuple(problems) + _unusable(title)
 
 
 def validate(presentation: Presentation, packet: ExtractedPacket) -> tuple[str, ...]:

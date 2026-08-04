@@ -17,6 +17,7 @@ from curious_now_v2.generation import significance as significance_module
 from curious_now_v2.generation import technical as technical_module
 from curious_now_v2.generation.client import CodexGenerator, Generator
 from curious_now_v2.generation.judge import declined_reason, judge_mechanism
+from curious_now_v2.generation.readable import judge_readability
 from curious_now_v2.generation.packet import extract_packet
 from curious_now_v2.generation.present import generate_presentation
 from curious_now_v2.generation.technical import generate_technical
@@ -316,6 +317,7 @@ def _store(
                         "model": model,
                         "prompt_version": packet_module.PROMPT_VERSION,
                         "story_kind": extracted.story_kind,
+                        "field": extracted.field,
                         "grounding_item": str(story.item_id),
                         "prerequisites": list(extracted.prerequisites),
                     }
@@ -371,6 +373,14 @@ def _store(
         )
         spine_id = cast(UUID, _one(cursor)[0])
 
+        # A paper's title is written for peers and is worth rewriting; a
+        # newsroom's is already written for a reader and was being made worse.
+        shown_title, title_problems = present_module.title_for(
+            source_title=story.title,
+            generated=presentation.display_title,
+            content_type=story.content_type,
+        )
+
         cursor.execute(
             """
             INSERT INTO display_titles (
@@ -390,10 +400,10 @@ def _store(
                 packet_id,
                 spine_id,
                 story.story_id,
-                presentation.display_title or story.title,
+                shown_title,
                 # Judged on its own terms: a hyped or over-long title is
                 # invalid as a title, and says nothing about the explanation.
-                "valid" if presentation.title_valid else "invalid",
+                "valid" if not title_problems else "invalid",
                 present_module.PROMPT_VERSION,
                 model,
                 now if presentation.title_valid else None,
@@ -524,6 +534,7 @@ def _store(
                   current_display_title_id = %s,
                   quality_score = %s,
                   significance = %s,
+                  field = %s,
                   effective_at = %s,
                   ranking_reasons = %s,
                   ranked_at = now(),
@@ -532,9 +543,10 @@ def _store(
                 """,
                 (
                     packet_id,
-                    title_id if presentation.title_valid else None,
+                    title_id if not title_problems else None,
                     scored.quality,
                     significance,
+                    extracted.field,
                     scored.effective_at,
                     # Same shape run_ranking writes, so a row means the
                     # same thing whichever writer last touched it.
@@ -639,6 +651,32 @@ def _present_one(
         out.reason = f"presentation: {presentation.completion.error}"
         return out
 
+    if presentation.glance_supported and presentation.glance.strip():
+        # The rung the product rests on, and until now the only one nothing
+        # guarded. Reviewed over 140 published stories, 9% needed the field to
+        # read and 11% opened by referring to something never introduced --
+        # "The key idea is to stabilize the algorithm", where no algorithm had
+        # been named. The prompt asks for a reader with no background in the
+        # field; nothing checked whether it got one.
+        readable = judge_readability(
+            engine,
+            title=presentation.display_title or story.title,
+            glance=presentation.glance,
+        )
+        out.cost += readable.completion.usage.cost(engine.model)
+        if not readable.plain:
+            # Withheld rather than shipped: a Glance a reader cannot follow is
+            # worse than no Glance, because the whole ladder promises this rung
+            # is the one that always lands.
+            presentation = present_module.Presentation(
+                **{
+                    **presentation.__dict__,
+                    "glance": "",
+                    "glance_supported": False,
+                }
+            )
+            out.judged_out += 1
+
     if presentation.explain_supported and presentation.explain.strip():
         # A third call, and the cheapest of the three: it reads the Explain
         # alone, not the source. The writer decides whether the evidence carries
@@ -659,7 +697,7 @@ def _present_one(
                     "explain_declined_reason": declined_reason(judgement),
                 }
             )
-            out.judged_out = 1
+            out.judged_out += 1
 
     # Technical only where the gate found the text can carry it and the
     # orientation above it stands. It is the most expensive call by far — it

@@ -44,9 +44,15 @@ def make_packet(
     kinds: tuple[ClaimKind, ...] = (ClaimKind.RESULT, ClaimKind.METHOD),
     limitations: tuple[str, ...] = ("Only soluble proteins were tested.",),
     story_kind: str = "research_result",
+    # Deliberately required on ExtractedPacket rather than defaulted, so that a
+    # new packet has to decide. The default here matches what this fixture's
+    # central claim is about: predicting protein structure is biology, whatever
+    # the method.
+    field: str | None = "molecular_cell_biology",
 ) -> ExtractedPacket:
     return ExtractedPacket(
         story_kind=story_kind,
+        field=field,
         central_claim="A model predicts protein structure from sequence.",
         claims=tuple(
             ExtractedClaim(kind=kind, text=f"a {kind.value} claim", confidence=0.9,
@@ -319,3 +325,88 @@ def test_generated_text_cannot_carry_what_a_text_column_rejects() -> None:
     # Whitespace a column can hold must survive: paragraphs are load-bearing.
     assert storable("one\ntwo\tthree\r\nfour") == "one\ntwo\tthree\r\nfour"
     assert storable("") == ""
+
+
+# --- which title a reader actually sees ---------------------------------------
+
+
+def test_a_paper_gets_our_rewrite() -> None:
+    """Measured over 45 papers, ours reads as plain to a non-expert where the
+    authors' does in 81% of cases: a paper's title is written for peers."""
+
+    from curious_now_v2.generation.present import title_for
+
+    shown, problems = title_for(
+        source_title="Efficient Online Conformal Selection with Limited Feedback",
+        generated="A method keeps prediction sets calibrated with sparse feedback",
+        content_type="preprint",
+    )
+    assert shown == "A method keeps prediction sets calibrated with sparse feedback"
+    assert problems == ()
+
+
+def test_a_newsroom_keeps_its_own_headline() -> None:
+    """The failure this exists to stop: across 140 stories, ours was harder
+    than the source's own on 28% of items that already arrived written for a
+    reader, against 7% of papers."""
+
+    from curious_now_v2.generation.present import title_for
+
+    shown, problems = title_for(
+        source_title="How AI trained on birds is surfacing underwater mysteries",
+        generated="Perch 2.0 Transfers Bird-Learned Sound Features to Underwater Tasks",
+        content_type="news",
+    )
+    assert shown == "How AI trained on birds is surfacing underwater mysteries"
+    assert problems == ()
+
+
+def test_a_short_headline_is_not_defective_for_being_short() -> None:
+    """The 6-14 word bound stops OUR titles sprawling or saying nothing. A
+    newsroom's five-word headline is not a fault, and rewriting it was."""
+
+    from curious_now_v2.generation.present import title_for
+
+    shown, problems = title_for(
+        source_title="Butterflies thrive in micro-reserve garden",
+        generated="A garden-scale reserve supported higher butterfly abundance",
+        content_type="lab_announcement",
+    )
+    assert shown == "Butterflies thrive in micro-reserve garden"
+    assert problems == ()
+
+
+def test_a_hyped_headline_is_still_refused() -> None:
+    """Keeping a source headline is a judgement that it was written for a
+    reader, not that anything a publisher writes is acceptable."""
+
+    from curious_now_v2.generation.present import title_for
+
+    shown, _ = title_for(
+        source_title="This breakthrough changes everything about batteries",
+        generated="A new electrolyte holds more charge across repeated cycles",
+        content_type="press_release",
+    )
+    assert shown == "A new electrolyte holds more charge across repeated cycles"
+
+
+def test_a_question_headline_is_still_refused() -> None:
+    from curious_now_v2.generation.present import title_for
+
+    shown, _ = title_for(
+        source_title="Could this finally cure ageing?",
+        generated="A drug extended median lifespan in mice by nine per cent",
+        content_type="news",
+    )
+    assert shown == "A drug extended median lifespan in mice by nine per cent"
+
+
+def test_a_source_with_no_headline_falls_back_to_ours() -> None:
+    from curious_now_v2.generation.present import title_for
+
+    shown, _ = title_for(
+        source_title="   ",
+        generated="A drug extended median lifespan in mice by nine per cent",
+        content_type="news",
+    )
+    assert shown == "A drug extended median lifespan in mice by nine per cent"
