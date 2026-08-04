@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { CSSProperties } from "react";
 import { useCallback, useState } from "react";
 
@@ -9,6 +10,7 @@ import {
   captionFor,
   type Frame,
   frameFor,
+  sameFrame,
 } from "@/lib/imagery";
 import type { SourceLink } from "@/lib/types";
 
@@ -60,18 +62,18 @@ export function StoryImage({
    * and attaches onLoad, so the event never fires and the figure keeps the
    * default frame forever.
    */
-  const measure = useCallback(
-    (image: HTMLImageElement | null) => {
-      if (image?.complete && image.naturalWidth > 0) {
-        setFrame(
-          frameFor(
-            kind,
-            image.naturalWidth,
-            image.naturalHeight,
-            STORY_MIN_FRAME_ASPECT,
-          ),
-        );
+  const settle = useCallback(
+    (image: HTMLImageElement | null | undefined) => {
+      if (!image?.complete || image.naturalWidth === 0) {
+        return;
       }
+      const next = frameFor(
+        kind,
+        image.naturalWidth,
+        image.naturalHeight,
+        STORY_MIN_FRAME_ASPECT,
+      );
+      setFrame((current) => (sameFrame(current, next) ? current : next));
     },
     [kind],
   );
@@ -95,25 +97,17 @@ export function StoryImage({
         style={{ "--frame-aspect": shape.aspect } as CSSProperties}
         type="button"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element -- hotlinked to
-            the publisher's CDN, never copied or re-served, so Next's optimiser
-            has nothing to optimise and would only proxy someone else's bytes. */}
-        <img
+        <Image
           alt={alt}
-          decoding="async"
+          fill
           onError={() => setFailed(true)}
-          onLoad={(event) => {
-            const image = event.currentTarget;
-            setFrame(
-              frameFor(
-                kind,
-                image.naturalWidth,
-                image.naturalHeight,
-                STORY_MIN_FRAME_ASPECT,
-              ),
-            );
-          }}
-          ref={measure}
+          // The optimiser preserves the aspect ratio, so the resized image
+          // reports the same shape the original had.
+          onLoad={(event) => settle(event.currentTarget)}
+          // Eager, and given priority: this is the first thing on the page.
+          priority
+          ref={settle}
+          sizes="(max-width: 44rem) 100vw, 44rem"
           src={src}
         />
         {/* A cursor says zoom-in and a thumb has no cursor. */}

@@ -89,19 +89,24 @@ export function frameFor(
   };
 }
 
+/** Whether two frames are the same frame.
+ *
+ * frameFor builds a fresh object every call, so feeding its result straight to
+ * setState makes every load a state change even when nothing changed — and with
+ * next/image that is a render loop, because the re-render re-runs the callback
+ * that produced it. React bails out of an update that returns the value it
+ * already had, which is what this is for.
+ */
+export function sameFrame(a: Frame | null, b: Frame): boolean {
+  return a !== null && a.aspect === b.aspect && a.fit === b.fit;
+}
+
 function measurable(width: number, height: number): boolean {
   return (
     Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
   );
 }
 
-/**
- * What fraction of the frame is ground rather than image.
- *
- * Exported because the promise the frame makes — that a figure is never cut,
- * and that what it costs instead is bounded — is only worth making if it can
- * be checked.
- */
 /**
  * A figure's caption, cut to the part that works as plain text.
  *
@@ -163,6 +168,13 @@ function firstSentence(text: string): string {
   return text;
 }
 
+/**
+ * What fraction of the frame is ground rather than image.
+ *
+ * Exported because the promise the frame makes — that a figure is never cut,
+ * and that what it costs instead is bounded — is only worth making if it can
+ * be checked.
+ */
 export function emptyFraction(naturalAspect: number, frame: Frame): number {
   if (!(naturalAspect > 0) || !(frame.aspect > 0) || frame.fit === "cover") {
     return 0;

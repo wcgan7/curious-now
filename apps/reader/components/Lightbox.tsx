@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef } from "react";
 
 /**
@@ -76,9 +77,20 @@ export function Lightbox({
       >
         Close
       </button>
-      {/* eslint-disable-next-line @next/next/no-img-element -- hotlinked to the
-          publisher's CDN, never copied or re-served. */}
-      <img alt={alt} className="lightboxImg" src={src} />
+      {/* A second size of the same picture, and the reason the band above can
+          afford to be small: this is where a figure is actually read, so it is
+          asked for at the width of the screen rather than the width of a card.
+          The optimiser has usually fetched the original already, so what this
+          costs is one resize rather than one download. */}
+      <div className="lightboxFrame">
+        <Image
+          alt={alt}
+          className="lightboxImg"
+          fill
+          sizes="100vw"
+          src={src}
+        />
+      </div>
       {/* The html is produced by lib/math on the server: prose escaped,
           formulas typeset by KaTeX with trust disabled. Where none was
           produced the caption is rendered as text, never as markup. */}

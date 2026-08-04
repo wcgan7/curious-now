@@ -926,8 +926,10 @@ button {
   background: #0a0a0b;
   overscroll-behavior: contain;
 }
+/* next/image with fill needs a positioned box to fill, and the box is what
+   the grid row gives it. */
+.lightboxFrame { position: relative; width: 100%; height: 100%; min-height: 0; }
 .lightboxImg {
-  max-width: 100%; max-height: 100%;
   object-fit: contain;
   /* Figures are drawn on white and published as transparent PNGs, which on
      this backdrop makes every axis label invisible. */
