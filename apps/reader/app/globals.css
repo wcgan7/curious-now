@@ -74,10 +74,14 @@
   box-sizing: border-box;
 }
 
+/* No scroll-behavior here. It reads as a nicety and applies to every
+   programmatic scroll the browser makes, including the one that restores your
+   place on the way back: the feed rendered at the top and then animated 3,000px
+   down to where you had been, turning a restoration into a journey. Where a
+   smooth scroll is actually wanted it is asked for at the call site. */
 html {
   background: var(--bg);
   color: var(--ink);
-  scroll-behavior: smooth;
 }
 
 body {

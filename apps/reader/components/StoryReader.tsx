@@ -66,8 +66,10 @@ export function StoryReader({
     setDepth(next);
     // The depths run 1,800px and 7,000px, so changing depth from halfway down
     // would leave a reader past the end of a shorter text, staring at the
-    // source block. Every change starts the new text at its beginning.
-    bar.current?.scrollIntoView({ block: "start" });
+    // source block. Every change starts the new text at its beginning —
+    // instantly, because the prose under the bar has already been replaced and
+    // animating 1,600px to reach it would be a long ride to nowhere.
+    bar.current?.scrollIntoView({ behavior: "instant", block: "start" });
     // In the URL so a depth can be linked to and survives a reload, and
     // replaceState so moving between depths does not fill the back button
     // with a trail a reader has to walk out of.
