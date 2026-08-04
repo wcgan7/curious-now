@@ -1,23 +1,77 @@
+/* Curious Now — the reader's design system.
+ *
+ * Promoted out of app/mock, which existed to compare five directions and has
+ * served its purpose. What follows is the one that was chosen: the card
+ * removed, the picture full-bleed, the text on a single margin, and a hairline
+ * between stories.
+ *
+ * The numbers here were measured rather than felt. The design this replaced
+ * spent 69 of every 390 pixels on chrome — page padding, card border, card
+ * padding — which left a 32-character measure and pushed titles to four lines.
+ * That is why the type read as too large: it was not too large, the column was
+ * too narrow for it. Chrome is now 40px and the measure 47 characters, and the
+ * title came down from 19.8px to 17.
+ *
+ * There is no brand colour. Every hue on the page comes from the figures,
+ * which is both the most disciplined option and the honest one: the science
+ * supplies the colour, so nothing else needs to.
+ */
+
 :root {
-  --paper: #f3f0e8;
-  --paper-deep: #e7e1d4;
-  --ink: #121411;
-  --ink-soft: #555a50;
-  --line: #cbc5b7;
-  --acid: #d8ff62;
-  --forest: #173a2b;
-  --blue: #3349c7;
-  --serif: Georgia, "Times New Roman", serif;
-  --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  /* One set of tokens, not two. light-dark() resolves against the computed
+     color-scheme, so the theme control changes a single property and every
+     colour follows. The alternative — a duplicate block under a media query
+     and another under a data attribute — is three places for one decision to
+     drift. */
+  color-scheme: light dark;
+
+  --bg: light-dark(#ffffff, #0c0c0d);
+  --top-bg: light-dark(rgba(255, 255, 255, 0.86), rgba(12, 12, 13, 0.86));
+  --surface-hover: light-dark(#fafafa, #161618);
+  --rule: light-dark(#e8e8e6, #232326);
+  --rule-hover: light-dark(#d4d4d1, #35353a);
+  --tint: light-dark(#f4f4f2, #17171a);
+  --ink: light-dark(#0d0d0f, #f4f4f1);
+  --ink-2: light-dark(#3f4045, #c2c2be);
+  /* 5.4:1 either way. The previous #77808c measured 4.0:1 on white and failed
+     AA for text this size, which no amount of taste would have caught. The
+     dark ink stops short of pure white, which haloes against near-black. */
+  --ink-3: light-dark(#6a6b70, #9a9a96);
+  --accent: light-dark(#0d0d0f, #f4f4f1);
+  --warn: light-dark(#8a3d22, #d9855f);
+
+  --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --serif: Newsreader, Georgia, "Times New Roman", serif;
+
+  --margin: 20px;
+  --fast: 150ms;
+  --med: 240ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* The names the story page and search were written against, kept so they
+     inherit the new palette and its dark mode rather than being rewritten
+     twice. They go when those pages are redesigned. */
+  --paper: var(--bg);
+  --paper-deep: var(--tint);
+  --ink-soft: var(--ink-2);
+  --line: var(--rule);
+  --acid: var(--tint);
+  --forest: var(--ink);
+  --blue: var(--accent);
 }
+
+/* The reader's choice, when they have made one. Without it the page follows
+   the system, which is the right default and the wrong only option: a light
+   phone at night should not force a light page. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * {
   box-sizing: border-box;
 }
 
 html {
-  background: var(--paper);
+  background: var(--bg);
   color: var(--ink);
   scroll-behavior: smooth;
 }
@@ -25,11 +79,11 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    linear-gradient(rgba(18, 20, 17, 0.025) 1px, transparent 1px),
-    var(--paper);
-  background-size: 100% 32px;
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--sans);
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
@@ -39,190 +93,6 @@ a {
 
 button {
   font: inherit;
-}
-
-.siteHeader {
-  position: sticky;
-  z-index: 20;
-  top: 0;
-  border-bottom: 1px solid rgba(203, 197, 183, 0.85);
-  background: rgba(243, 240, 232, 0.94);
-  backdrop-filter: blur(14px);
-}
-
-.headerInner {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  width: min(1180px, calc(100% - 40px));
-  min-height: 70px;
-  margin: 0 auto;
-}
-
-.wordmark {
-  width: fit-content;
-  color: var(--ink);
-  font-family: var(--serif);
-  font-size: 1.55rem;
-  font-weight: 700;
-  letter-spacing: -0.045em;
-  text-decoration: none;
-}
-
-.wordmark span {
-  color: var(--blue);
-}
-
-.headerPromise {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.7rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.headerInner nav {
-  display: flex;
-  gap: 20px;
-  justify-self: end;
-}
-
-.headerInner nav a {
-  border-bottom: 1px solid var(--ink);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-
-.hero {
-  overflow: hidden;
-  border-bottom: 1px solid var(--line);
-}
-
-.heroInner {
-  position: relative;
-  width: min(1180px, calc(100% - 40px));
-  padding: clamp(72px, 11vw, 150px) 0 clamp(60px, 9vw, 112px);
-  margin: 0 auto;
-}
-
-.heroInner::after {
-  position: absolute;
-  z-index: -1;
-  top: 23%;
-  right: -6%;
-  width: clamp(210px, 32vw, 420px);
-  height: clamp(210px, 32vw, 420px);
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 34px var(--paper),
-    0 0 0 35px var(--line),
-    0 0 0 82px var(--paper),
-    0 0 0 83px var(--line);
-  content: "";
-}
-
-.eyebrow,
-.sectionKicker {
-  margin: 0 0 20px;
-  color: var(--ink-soft);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.17em;
-  line-height: 1.3;
-  text-transform: uppercase;
-}
-
-.eyebrow {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.eyebrow span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 0 5px rgba(51, 73, 199, 0.12);
-}
-
-.hero h1 {
-  max-width: 850px;
-  margin: 0;
-  font-family: var(--serif);
-  font-size: clamp(4rem, 9.5vw, 8.5rem);
-  font-weight: 400;
-  letter-spacing: -0.065em;
-  line-height: 0.82;
-}
-
-.hero h1 em {
-  position: relative;
-  color: var(--blue);
-  font-weight: 400;
-}
-
-.hero h1 em::after {
-  position: absolute;
-  right: 0;
-  bottom: -0.06em;
-  left: 0.06em;
-  height: 0.1em;
-  background: var(--acid);
-  content: "";
-  transform: rotate(-1.5deg);
-  z-index: -1;
-}
-
-.heroCopy {
-  max-width: 610px;
-  margin: 48px 0 0;
-  color: #363a33;
-  font-family: var(--serif);
-  font-size: clamp(1.15rem, 2.1vw, 1.45rem);
-  line-height: 1.55;
-}
-
-.depthLegend {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  margin-top: 36px;
-  color: var(--forest);
-  font-size: 0.67rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.depthLegend i {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--forest);
-}
-
-.feedSection {
-  width: min(1180px, calc(100% - 40px));
-  padding: 80px 0 100px;
-  margin: 0 auto;
-}
-
-.sectionHeading {
-  display: grid;
-  grid-template-columns: 1fr minmax(240px, 390px);
-  gap: 30px;
-  align-items: end;
-  padding-bottom: 28px;
-  border-bottom: 2px solid var(--ink);
-}
-
-.sectionHeading .sectionKicker {
-  margin-bottom: 10px;
 }
 
 .sectionHeading h2,
@@ -235,116 +105,12 @@ button {
   line-height: 1;
 }
 
-.sectionNote {
-  justify-self: end;
-  max-width: 350px;
-  margin: 0;
-  color: var(--ink-soft);
-  font-family: var(--serif);
-  font-size: 0.98rem;
-  font-style: italic;
-  line-height: 1.5;
-  text-align: right;
-}
-
-.feedList {
-  display: flex;
-  flex-direction: column;
-}
-
-.storyCard {
-  display: grid;
-  /* A third column for the syndicated image. It is `auto`, so on the roughly
-     half of cards that have none it collapses to nothing and the card is
-     exactly the two-column card it always was. */
-  grid-template-columns: 62px 1fr auto;
-  gap: 0 24px;
-  min-height: 210px;
-  border-bottom: 1px solid var(--line);
-  color: inherit;
-  text-decoration: none;
-  transition: background 180ms ease;
-}
-
-.storyCard:hover {
-  background: rgba(255, 255, 255, 0.38);
-}
-
-.cardRail {
-  padding-top: 37px;
-  color: #8e8c83;
-  font-family: var(--serif);
-  font-size: 0.78rem;
-  font-style: italic;
-}
-
-.cardBody {
-  grid-column: 2;
-  padding: 34px 0 32px;
-}
-
 .cardMeta,
 .cardFooter,
 .storyHeaderMeta {
   display: flex;
   gap: 16px;
   align-items: center;
-}
-
-.cardMeta {
-  color: var(--ink-soft);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.sourceRole {
-  display: inline-flex;
-  gap: 7px;
-  align-items: center;
-  color: var(--forest);
-}
-
-.sourceRole::before {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #4d705f;
-  content: "";
-}
-
-.sourceRole--primary_research::before {
-  background: var(--blue);
-}
-
-.sourceRole--journalism::before {
-  background: #b2431c;
-}
-
-.sourceRole--lab_announcement::before {
-  background: #7a4bb1;
-}
-
-.cardBody h3 {
-  max-width: 900px;
-  margin: 24px 0 18px;
-  font-family: var(--serif);
-  font-size: clamp(2rem, 4.1vw, 3.6rem);
-  font-weight: 400;
-  letter-spacing: -0.045em;
-  line-height: 1.03;
-  transition: color 160ms ease;
-}
-
-.storyCard:hover h3 {
-  color: var(--blue);
-}
-
-.cardFooter {
-  justify-content: space-between;
-  align-items: end;
-  margin-top: 34px;
 }
 
 .sourceByline,
@@ -365,25 +131,6 @@ button {
   text-transform: uppercase;
 }
 
-.cardArrow {
-  display: grid;
-  width: 37px;
-  height: 37px;
-  margin-left: 5px;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--paper);
-  font-size: 1rem;
-  place-items: center;
-  text-decoration: none;
-  transition: background 160ms ease, transform 160ms ease;
-}
-
-.storyCard:hover .cardArrow {
-  background: var(--blue);
-  transform: translate(2px, -2px);
-}
-
 .visuallyHidden {
   position: absolute;
   overflow: hidden;
@@ -397,11 +144,6 @@ button {
   display: flex;
   gap: 10px;
   margin-bottom: 8px;
-}
-
-.feedSection > .backLink {
-  display: inline-block;
-  margin-bottom: 26px;
 }
 
 .searchForm input {
@@ -641,12 +383,6 @@ button {
   padding: 48px 0;
 }
 
-.explanationPanel .sectionKicker,
-.pendingPanel .sectionKicker,
-.evidenceShelf .sectionKicker {
-  margin-bottom: 12px;
-}
-
 .explanationText,
 .pendingPanel {
   font-family: var(--serif);
@@ -742,15 +478,6 @@ button {
   line-height: 1.65;
 }
 
-
-
-
-
-
-
-
-
-
 .evidenceShelf {
   align-self: start;
   padding: 30px;
@@ -827,68 +554,12 @@ button {
   font-weight: 700;
 }
 
-.siteFooter {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 34px max(20px, calc((100% - 1180px) / 2));
-  border-top: 1px solid var(--line);
-  color: var(--ink-soft);
-  font-family: var(--serif);
-  font-size: 0.82rem;
-  font-style: italic;
-}
-
-.siteFooter p {
-  margin: 0;
-}
-
 @media (max-width: 820px) {
-  .headerInner {
-    grid-template-columns: 1fr auto;
-    width: min(100% - 28px, 1180px);
-  }
-
-  .headerPromise {
-    display: none;
-  }
 
   .heroInner,
   .feedSection,
   .storyShell {
     width: min(100% - 28px, 1180px);
-  }
-
-  .heroInner::after {
-    top: 31%;
-    right: -32%;
-  }
-
-  .hero h1 {
-    font-size: clamp(3.6rem, 18vw, 7rem);
-  }
-
-  .heroCopy {
-    max-width: 85%;
-    margin-top: 38px;
-  }
-
-  .sectionHeading {
-    grid-template-columns: 1fr;
-  }
-
-  .sectionNote {
-    justify-self: start;
-    text-align: left;
-  }
-
-  .storyCard {
-    grid-template-columns: 36px 1fr;
-  }
-
-  .cardFooter {
-    gap: 25px;
-    align-items: start;
   }
 
   .storyGrid {
@@ -901,49 +572,6 @@ button {
 }
 
 @media (max-width: 520px) {
-  .heroInner {
-    padding-top: 68px;
-  }
-
-  .hero h1 {
-    font-size: clamp(3.4rem, 15vw, 4.8rem);
-  }
-
-  .heroCopy {
-    max-width: 100%;
-    font-size: 1.05rem;
-  }
-
-  .depthLegend {
-    gap: 9px;
-    font-size: 0.58rem;
-  }
-
-  .feedSection {
-    padding-top: 56px;
-  }
-
-  .storyCard {
-    grid-template-columns: 1fr;
-    min-height: 0;
-  }
-
-  .cardRail {
-    display: none;
-  }
-
-  .cardBody {
-    padding: 30px 0;
-  }
-
-  .cardBody h3 {
-    font-size: 2rem;
-  }
-
-  .cardFooter {
-    flex-direction: row;
-    justify-content: space-between;
-  }
 
   .goDeeper {
     flex-direction: column;
@@ -982,9 +610,6 @@ button {
     padding: 24px;
   }
 
-  .siteFooter {
-    flex-direction: column;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1046,50 +671,10 @@ button {
    modest, placed after the rail so the eye still lands on the words first.
    Its job is to give the eye something to travel by down a long column, not
    to be the reason a story is opened. */
-.cardImage {
-  grid-column: 3;
-  width: 132px;
-  height: 88px;
-  overflow: hidden;
-  border-radius: 4px;
-  align-self: center;
-  background: rgba(128, 128, 128, 0.08);
-}
-
-.cardImage img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-@media (max-width: 720px) {
-  .cardImage {
-    width: 84px;
-    height: 60px;
-  }
-}
 
 /* A stood-in figure says so. Small, plain, and over the image rather than
    beside it, so the card's shape does not change according to where its
    picture came from. */
-.cardImage {
-  position: relative;
-}
-
-.cardImageLabel {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  padding: 2px 6px;
-  font-family: var(--sans);
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.55);
-  border-radius: 0 4px 0 4px;
-}
 
 /* A formula KaTeX could not parse is shown as the TeX it came from, marked as
    mathematics rather than silently dropped or silently mangled. */
@@ -1229,3 +814,462 @@ a.lineageTitle:focus-visible {
   display: grid;
   gap: 4px;
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   THE FEED — a story is a row, not a card.
+
+   The card idiom was three nested containers to present one story, and what
+   it cost was not the pixels but the measure: 32 characters, where anything
+   meant to be read sits between 45 and 60. So the container went. The picture
+   runs edge to edge, the text keeps one margin, and a hairline separates one
+   story from the next.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.feed { list-style: none; margin: 0; padding: 0; }
+
+.story { position: relative; }
+/* The hairline starts at the text margin rather than the screen edge, so the
+   pictures read as a column and the rules as a list. */
+.story + .story::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--margin);
+  right: var(--margin);
+  height: 1px;
+  background: var(--rule);
+}
+
+.storyLink {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0 0 1.15rem;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--fast) var(--ease);
+}
+.storyLink:hover { background: var(--surface-hover); }
+
+.storyPicture { grid-row: 1; padding: 1.15rem 0 0; }
+.storyBody { grid-row: 2; padding: 0.85rem var(--margin) 0; }
+/* No picture: the text still needs the top margin the picture was giving it. */
+.storyBody:only-child { padding-top: 1.15rem; }
+
+.storyMeta {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
+.storySource { font-weight: 500; }
+/* Pushed to the far end so the dates start at one x and read as a column,
+   instead of beginning wherever a source name of unpredictable length ends. */
+.storyWhen {
+  margin-left: auto;
+  padding-left: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.storyTitle {
+  margin: 0;
+  font-size: 1.0625rem;   /* 17px */
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--ink);
+}
+
+/* A card gets a picture or a sentence, never neither. The sentence fills
+   exactly the gap a missing picture leaves, so every story has something under
+   its title — which matters because the head of the feed is almost all
+   pictured and the tail is not. */
+.storyDek {
+  margin: 0.4rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Two kinds of picture, framed differently. A photograph's edges are
+   background, so it fills the frame. A figure's edges are its axis labels and
+   panel titles, so it is never cropped: the frame takes the figure's own shape
+   where the layout can carry it, and where it cannot, the remainder shows as
+   ground.
+
+   That ground is white — the same white the figures are drawn on — so what is
+   left over reads as the figure's margin rather than as a blank band. Against
+   a tinted ground the same pixels looked like wasted space. See
+   lib/imagery.ts. */
+.cardImage {
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: var(--frame-aspect, 1.9);
+  /* A figure never exceeds this however wide the column gets, which is what
+     stops one picture owning a desktop screen. */
+  max-height: 340px;
+  overflow: hidden;
+  background: #ffffff;
+}
+.cardImage img { display: block; width: 100%; height: 100%; }
+.cardImage--cover img { object-fit: cover; }
+.cardImage--contain img { object-fit: contain; }
+
+/* A figure is drawn on white paper. Full-bleed on a dark page it is a slab
+   with no edge, so in dark it insets onto its own ground and reads as a plate
+   on a dark table rather than a hole in the page. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .storyPicture { padding-inline: var(--margin); }
+  :root:not([data-theme="light"]) .cardImage { border-radius: 8px; }
+}
+:root[data-theme="dark"] .storyPicture { padding-inline: var(--margin); }
+:root[data-theme="dark"] .cardImage { border-radius: 8px; }
+
+.feedNotice {
+  padding: 1.15rem var(--margin);
+  font-size: 0.88rem;
+  color: var(--ink-3);
+}
+
+@media (min-width: 560px) {
+  .masthead, .feedNotice { padding-inline: max(var(--margin), calc((100vw - 44rem) / 2)); }
+  .feed { max-width: 44rem; margin: 0 auto; }
+  .storyTitle { font-size: 1.15rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+
+/* Present to a screen reader, absent to a sighted one. Not display:none,
+   which removes it from the accessibility tree as well. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Left standing for the search and story pages, which are still on the design
+   this replaced and are next in line. They inherit the new tokens, so they are
+   legible and follow the theme; they are not yet the same design. */
+.feedSection { padding: 1.15rem 0 0; }
+.sectionHeading { padding: 0 var(--margin) 0.75rem; }
+.sectionHeading h2 { margin: 0; font-size: 1.25rem; letter-spacing: -0.02em; }
+.sectionKicker,
+.sectionNote {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+.sourceRole { color: var(--ink-3); }
+
+
+
+/* ═════════════════════════════════════════════════════════════════════════
+   THE MASTHEAD — the name, and one way in.
+
+   It carried three controls in three visual languages, two of them disclosure
+   affordances sitting side by side. Five rearrangements did not fix it: a 52px
+   strip is not enough room for three unrelated things, and they compete for it
+   however they are placed. So one affordance, and what it opens has room.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  padding: 0 var(--margin);
+  background: var(--top-bg);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.wordmark {
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.wordmark span { color: var(--ink-3); }
+
+.menuButton {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-left: auto;
+  margin-right: -8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.menuButton:hover { background: var(--tint); color: var(--ink); }
+
+.glyphMenu {
+  position: relative;
+  width: 16px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
+}
+/* The smallest honest replacement for the summary this drawer removed: it says
+   a filter is on without spending a row to say which. */
+.glyphMenu[data-filtered="true"]::after {
+  content: "";
+  position: absolute;
+  top: -9px;
+  right: -4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.glyphClose {
+  position: relative;
+  width: 15px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+.glyphClose::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(-90deg);
+}
+
+.glyphSearch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+.glyphSearch::after {
+  content: "";
+  position: absolute;
+  right: -3.5px;
+  bottom: -2.5px;
+  width: 5.5px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+
+/* The drawer ————————————————————————————————————————————————————————————— */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  border: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--ink) 32%, transparent);
+  cursor: default;
+  animation: fade var(--med) var(--ease);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  width: min(21rem, 86vw);
+  padding: 0.75rem 1rem 2rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg);
+  box-shadow: -8px 0 32px color-mix(in srgb, var(--ink) 22%, transparent);
+  animation: slideIn var(--med) var(--ease);
+}
+.drawer:focus { outline: none; }
+
+.drawerHead {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  margin-bottom: 0.6rem;
+}
+.drawerTitle {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.drawerSearch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 38px;
+  padding: 0 0.7rem;
+  margin-bottom: 1.1rem;
+  border-radius: 9px;
+  background: var(--tint);
+  color: var(--ink-3);
+}
+.drawerSearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+}
+.drawerSearch input:focus { outline: none; }
+.drawerSearch input::placeholder { color: var(--ink-3); }
+
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn {
+  from { transform: translateX(12px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* The fields, inside the drawer ————————————————————————————————————————————
+   The count keeps the list honest — a field holding ten stories says so before
+   it is chosen — and the leaves stop the boundary being a matter of
+   interpretation. "Life sciences" against "Health & medicine" is a distinction
+   nobody can guess from the names; molecular & cell biology and genetics on one
+   side against public health and clinical medicine on the other is not a
+   definition but a list. */
+
+.panelLabel {
+  margin: 0 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.panelLabel--split {
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+
+.fieldList { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+
+.fieldRow {
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.55rem 0.5rem;
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+.fieldRow:hover { background: var(--tint); }
+
+.check {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  border: 1.5px solid var(--rule-hover);
+  border-radius: 5px;
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.fieldRow--on .check {
+  position: relative;
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.fieldRow--on .check::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--bg);
+  border-width: 0 1.7px 1.7px 0;
+  transform: rotate(45deg);
+}
+
+.fieldRowBody { flex: 1; min-width: 0; }
+/* Everything has no leaves to describe, so its name sits on the row itself. */
+.fieldRow > .fieldRowName { align-self: center; }
+
+
+
+.fieldRowName { display: block; font-size: 0.92rem; font-weight: 600; color: var(--ink); }
+.fieldRowLeaves {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+/* Appearance, set once and living where things set once belong. */
+.themeChoices { display: flex; gap: 2px; }
+.themeChoice {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 38px;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 9px;
+  background: var(--tint);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.themeChoice:hover { color: var(--ink); }
+.themeChoice--on { background: var(--ink); color: var(--bg); font-weight: 600; }
+.themeChoice--on:hover { color: var(--bg); }
+
+.themeGlyph {
+  position: relative;
+  display: block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+}
+.themeGlyph[data-choice="light"] { background: currentColor; }
+.themeGlyph[data-choice="dark"] { background: currentColor; overflow: hidden; }
+.themeGlyph[data-choice="dark"]::after {
+  content: "";
+  position: absolute;
+  inset: -3px -5px -3px auto;
+  left: -5px;
+  width: 13px;
+  border-radius: 50%;
+  background: var(--tint);
+}
+.themeChoice--on .themeGlyph[data-choice="dark"]::after { background: var(--ink); }
+
