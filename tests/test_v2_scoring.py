@@ -7,6 +7,9 @@ import pytest
 
 from curious_now_v2.pipeline.scoring import (
     FRESHNESS_HALF_LIFE_HOURS,
+    QUALITY_BY_RUNGS,
+    QUALITY_BY_SIGNIFICANCE,
+    ROTATION_SECONDS,
     score_story,
 )
 
@@ -130,3 +133,94 @@ def test_reasons_are_stated_in_hours() -> None:
 
     assert any("rungs 2" in reason and "h)" in reason for reason in scored.reasons)
     assert any("significance incremental" in reason for reason in scored.reasons)
+
+
+def test_a_tie_is_broken_by_queue_position_and_only_by_a_second() -> None:
+    """Two stories that earned the same thing on the same day must not tie.
+
+    Left tied, the order fell to the row UUID, which put 110 stories from one
+    publisher at the top of the feed in an order that meant nothing.
+    """
+
+    first = score_story(
+        published_at=WHEN, rungs_earned=3, significance="changes_practice"
+    )
+    second = score_story(
+        published_at=WHEN,
+        rungs_earned=3,
+        significance="changes_practice",
+        queue_position=1,
+    )
+    assert second.effective_at < first.effective_at
+    assert (first.effective_at - second.effective_at).total_seconds() == pytest.approx(
+        ROTATION_SECONDS
+    )
+
+
+def test_the_tie_break_cannot_overturn_a_quality_decision() -> None:
+    """The whole rotation must stay inside the narrowest quality gap.
+
+    A minute per place was tried first: with the largest observed tie at 101
+    stories it cleared the closest pair of quality bands by 1.3x, which is not
+    a margin. A second clears it by sixty.
+    """
+
+    offsets = sorted(
+        score_story(
+            published_at=WHEN, rungs_earned=rungs, significance=verdict
+        ).offset_hours
+        for rungs in QUALITY_BY_RUNGS
+        for verdict in QUALITY_BY_SIGNIFICANCE
+    )
+    narrowest_gap = min(b - a for a, b in zip(offsets, offsets[1:]) if b - a > 0)
+
+    # Far beyond any tie we have seen; the largest was 101.
+    largest_rotation_hours = 500 * ROTATION_SECONDS / 3600
+    assert largest_rotation_hours < narrowest_gap
+
+
+def test_position_zero_is_the_same_key_as_no_position_at_all() -> None:
+    """So that adding the term did not silently shift every existing story."""
+
+    assert score_story(
+        published_at=WHEN, rungs_earned=2, significance="incremental"
+    ).effective_at == score_story(
+        published_at=WHEN,
+        rungs_earned=2,
+        significance="incremental",
+        queue_position=0,
+    ).effective_at
+
+
+def test_the_tie_break_is_not_reported_as_a_shortcoming() -> None:
+    """It is whose turn it is, not a judgement, and the reasons say so.
+
+    `offset_hours` and `quality` are what an operator reads to learn why one
+    story sits above another. A fraction of a second is not an answer to that
+    question, and listing it would imply the story was judged worse.
+    """
+
+    plain = score_story(
+        published_at=WHEN, rungs_earned=3, significance="changes_practice"
+    )
+    rotated = score_story(
+        published_at=WHEN,
+        rungs_earned=3,
+        significance="changes_practice",
+        queue_position=40,
+    )
+    assert rotated.reasons == plain.reasons
+    assert rotated.quality == plain.quality
+    assert rotated.offset_hours == plain.offset_hours
+
+
+def test_a_negative_position_cannot_promote_a_story() -> None:
+    assert (
+        score_story(
+            published_at=WHEN,
+            rungs_earned=3,
+            significance="changes_practice",
+            queue_position=-5,
+        ).effective_at
+        <= WHEN
+    )

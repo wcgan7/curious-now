@@ -30,40 +30,108 @@ class RankingRunResult:
     newest_effective_at: datetime | None
 
 
+@dataclass(frozen=True)
+class RankingInput:
+    story_id: UUID
+    published_at: datetime
+    rungs: int
+    significance: str
+    #: Which feed the story came down. Not a term in the score -- only what
+    #: decides whose turn it is when several stories share a key.
+    source_name: str
+    #: When we first saw it, which is the closest thing we hold to arrival
+    #: order and is what orders a source's queue.
+    first_seen: datetime
+
+
 def published_inputs(
     connection: psycopg.Connection[Any], *, limit: int | None = None
-) -> list[tuple[UUID, datetime, int, str]]:
+) -> list[RankingInput]:
     """What every published story earned, and when its science appeared.
 
     The publication date is the item's, not the story's: freshness measures how
     recent the work is, where `stories.published_at` records when we got round
     to showing it.
+
+    The source is the one that supplied that date. A story can carry several --
+    a paper and the journalism about it -- and taking the source of the item
+    whose date set the key is the only choice that is not arbitrary.
     """
 
     with connection.cursor() as cursor:
         cursor.execute(
             f"""
+            WITH dated AS (
+              SELECT DISTINCT ON (si.story_id)
+                si.story_id,
+                i.published_at,
+                src.name AS source_name
+              FROM story_items si
+              JOIN items i ON i.id = si.item_id
+              JOIN sources src ON src.id = i.source_id
+              WHERE i.published_at IS NOT NULL
+              ORDER BY si.story_id, i.published_at DESC, src.name
+            )
             SELECT
               s.id,
-              COALESCE(
-                (SELECT max(i.published_at) FROM story_items si
-                   JOIN items i ON i.id = si.item_id
-                  WHERE si.story_id = s.id),
-                s.created_at
-              ) AS published,
+              COALESCE(d.published_at, s.created_at) AS published,
               (SELECT count(*) FROM explanations e
                 WHERE e.story_id = s.id
                   AND e.evidence_packet_id = s.current_evidence_packet_id
                   AND e.status = 'valid') AS rungs,
-              COALESCE(s.significance, 'unclear')
+              COALESCE(s.significance, 'unclear'),
+              COALESCE(d.source_name, ''),
+              s.created_at
             FROM stories s
+            LEFT JOIN dated d ON d.story_id = s.id
             WHERE s.status = 'published'
             ORDER BY s.id
             {"LIMIT %s" if limit else ""};
             """,
             (limit,) if limit else (),
         )
-        return [(row[0], row[1], int(row[2]), str(row[3])) for row in cursor.fetchall()]
+        return [
+            RankingInput(
+                story_id=row[0],
+                published_at=row[1],
+                rungs=int(row[2]),
+                significance=str(row[3]),
+                source_name=str(row[4]),
+                first_seen=row[5],
+            )
+            for row in cursor.fetchall()
+        ]
+
+
+def queue_positions(inputs: list[RankingInput]) -> dict[UUID, int]:
+    """Whose turn it is, among stories from one source sharing one key.
+
+    The key a story would have on quality alone is what decides which stories
+    are competing: they are the ones a reader would otherwise see in UUID
+    order. Within each (key, source) the queue runs oldest-first by when we
+    first saw the story, so a story's position never changes once assigned --
+    anything arriving later joins the back.
+    """
+
+    order: dict[tuple[datetime, str], list[RankingInput]] = {}
+    for entry in inputs:
+        base = scoring.score_story(
+            published_at=entry.published_at,
+            rungs_earned=entry.rungs,
+            significance=entry.significance,
+        )
+        # Rounded to the second, because the quality offsets are whole hours
+        # and floating point should not be what decides whether two stories are
+        # in the same queue.
+        key = base.effective_at.replace(microsecond=0)
+        order.setdefault((key, entry.source_name), []).append(entry)
+
+    positions: dict[UUID, int] = {}
+    for competing in order.values():
+        competing.sort(key=lambda entry: (entry.first_seen, str(entry.story_id)))
+        for index, entry in enumerate(competing):
+            positions[entry.story_id] = index
+    return positions
 
 
 def run_ranking(
@@ -97,18 +165,19 @@ def run_ranking(
             run_id = cast(UUID, row[0])
 
         try:
+            inputs = published_inputs(connection, limit=limit)
+            positions = queue_positions(inputs)
             scored = [
                 (
-                    story_id,
+                    entry.story_id,
                     scoring.score_story(
-                        published_at=published,
-                        rungs_earned=rungs,
-                        significance=verdict,
+                        published_at=entry.published_at,
+                        rungs_earned=entry.rungs,
+                        significance=entry.significance,
+                        queue_position=positions.get(entry.story_id, 0),
                     ),
                 )
-                for story_id, published, rungs, verdict in published_inputs(
-                    connection, limit=limit
-                )
+                for entry in inputs
             ]
             if scored:
                 with connection.transaction(), connection.cursor() as cursor:

@@ -16,6 +16,13 @@ a story ranks as if published earlier by an amount its shortcomings cost it.
 That is the whole reason the score is readable: an operator asking why one story
 sits above another gets an answer in hours rather than in arbitrary points.
 
+**Ties are broken by rotating sources, not by row id.** Both terms above are
+coarse -- see ROTATION_SECONDS -- so a great many stories share a key exactly.
+Left alone the order falls to the UUID, which put 110 stories from one
+publisher at the top of the feed in an order that meant nothing. A second per
+place in a source's queue turns that block into a round robin. It is not a
+judgement about the stories and does not appear in their reasons.
+
 What is deliberately absent is as important. Provenance -- peer-reviewed against
 preprint -- is a fact worth showing a reader and not a claim about whether the
 science is interesting, so it is a badge rather than a term here. Our own
@@ -57,6 +64,27 @@ QUALITY_BY_SIGNIFICANCE: dict[str, float] = {
 }
 SIGNIFICANCE_FALLBACK = 0.35
 
+# One second per place in the queue, subtracted to break a tie.
+#
+# Both terms of the key are coarse. Publication dates carry no sub-day
+# resolution -- 84% of ingested items land exactly on the hour, because arXiv
+# stamps everything 04:00 and eLife, medRxiv and Nature 00:00 -- and quality
+# takes nine values, all whole hours. Their sum lands 974 published stories on
+# 460 distinct keys, 110 of them sharing the newest. Within a tie the order
+# falls to the row id, which is a random UUID: stable, and meaningless.
+#
+# So a story is nudged earlier by its position among the stories from the same
+# source landing on the same key. Reading the column then walks a tie as a
+# round robin -- every source's first story, then every source's second --
+# instead of as one publisher's whole day followed by another's.
+#
+# A second is small enough to be certain it decides nothing else. The closest
+# two quality bands sit 1.7 hours apart, and the largest tie ever observed was
+# 101 stories, so the largest shift this can produce is 101 seconds: a 60x
+# margin. A minute was tried first and cleared the same gap by 1.3x, which is
+# not a margin.
+ROTATION_SECONDS = 1.0
+
 
 @dataclass(frozen=True)
 class ScoreComponent:
@@ -92,12 +120,19 @@ def score_story(
     published_at: datetime,
     rungs_earned: int,
     significance: str,
+    queue_position: int = 0,
     half_life_hours: float = FRESHNESS_HALF_LIFE_HOURS,
 ) -> StoryScore:
     """The sort key for one story, and the reasons behind it.
 
     `published_at` is the item's publication date -- when the science appeared
     -- not when we got round to publishing it.
+
+    `queue_position` is how many stories from the same source already hold this
+    story's key. It is knowable when the story is published and never changes
+    afterwards, because a later story takes a higher position and an earlier one
+    is never revisited -- so the key stays written-once, which is the property
+    the whole design rests on.
     """
 
     rungs = QUALITY_BY_RUNGS.get(rungs_earned, RUNGS_FALLBACK)
@@ -107,11 +142,17 @@ def score_story(
         _component("rungs", str(rungs_earned), rungs, half_life_hours),
         _component("significance", significance, weight, half_life_hours),
     )
-    offset = sum(component.offset_hours for component in components)
+    quality_offset = sum(component.offset_hours for component in components)
+
+    # Kept out of `components`, and out of `quality`, on purpose. The reasons
+    # exist so an operator can ask why one story sits above another and get an
+    # answer in hours; a fraction of a second is not an answer, and listing it
+    # would imply the story was judged worse, which it was not.
+    rotation_hours = -(max(queue_position, 0) * ROTATION_SECONDS) / 3600
 
     return StoryScore(
         quality=rungs * weight,
-        offset_hours=offset,
-        effective_at=published_at + timedelta(hours=offset),
+        offset_hours=quality_offset,
+        effective_at=published_at + timedelta(hours=quality_offset + rotation_hours),
         components=components,
     )

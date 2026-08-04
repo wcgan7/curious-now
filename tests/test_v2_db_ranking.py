@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import psycopg
 import pytest
@@ -36,15 +37,15 @@ def test_the_publication_date_comes_from_the_item_not_the_story(conn) -> None:
     assert rows, "no published stories to check against"
 
     with conn.cursor() as cur:
-        for story_id, published, _rungs, _verdict in rows:
+        for entry in rows:
             cur.execute(
                 """SELECT max(i.published_at) FROM story_items si
                    JOIN items i ON i.id = si.item_id WHERE si.story_id = %s;""",
-                (story_id,),
+                (entry.story_id,),
             )
             item_date = cur.fetchone()[0]
             if item_date is not None:
-                assert published == item_date
+                assert entry.published_at == item_date
 
 
 def test_the_two_publication_dates_are_not_the_same_column(conn) -> None:
@@ -67,22 +68,22 @@ def test_rungs_are_counted_from_the_current_packet_only(conn) -> None:
 
     rows = published_inputs(conn, limit=100)
     with conn.cursor() as cur:
-        for story_id, _published, rungs, _verdict in rows[:20]:
+        for entry in rows[:20]:
             cur.execute(
                 """SELECT count(*) FROM explanations e
                    JOIN stories s ON s.id = e.story_id
                    WHERE e.story_id = %s AND e.status = 'valid'
                      AND e.evidence_packet_id = s.current_evidence_packet_id;""",
-                (story_id,),
+                (entry.story_id,),
             )
-            assert cur.fetchone()[0] == rungs
+            assert cur.fetchone()[0] == entry.rungs
 
 
 def test_a_story_with_no_verdict_is_read_as_unclear_not_as_missing(conn) -> None:
     """Ranking must not skip a story generated before the judge existed."""
 
-    for _story_id, _published, _rungs, verdict in published_inputs(conn, limit=200):
-        assert verdict in {"changes_practice", "incremental", "unclear"}
+    for entry in published_inputs(conn, limit=200):
+        assert entry.significance in {"changes_practice", "incremental", "unclear"}
 
 
 def test_recomputing_is_idempotent(conn) -> None:
