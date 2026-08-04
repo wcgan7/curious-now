@@ -26,6 +26,29 @@ export const PAPER_TYPES: ReadonlyArray<SourceLink["contentType"]> = [
   "peer_reviewed",
 ];
 
+/** What the link at the top of a story page offers.
+ *
+ * "Read the source" is what a system calls it. A reader is deciding whether to
+ * spend the next twenty minutes, and "Read the paper" and "Read the article"
+ * are different offers. Preprints and peer-reviewed work share a label because
+ * they are the same kind of reading; what separates them is vetting, which the
+ * page says elsewhere and should not say twice.
+ */
+const SOURCE_LINK_LABELS: Partial<Record<SourceLink["contentType"], string>> = {
+  preprint: "Read the paper",
+  peer_reviewed: "Read the paper",
+  report: "Read the report",
+  dataset: "Open the dataset",
+  news: "Read the article",
+  press_release: "Read the press release",
+  lab_announcement: "Read the announcement",
+  blog: "Read the post",
+};
+
+export function sourceLinkLabel(source: SourceLink): string {
+  return SOURCE_LINK_LABELS[source.contentType] ?? "Read the original";
+}
+
 export function reviewBadge(source: SourceLink): string | undefined {
   if (source.contentTypeBasis === "feed_unmatched") {
     return undefined;

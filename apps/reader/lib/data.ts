@@ -78,6 +78,14 @@ function mapFeedRow(row: FeedRow): FeedStory {
 export async function getFeedPage(
   cursor: Cursor | null = null,
   pageSize = 20,
+  /** Restrict to a set of field leaves, or null for no restriction.
+   *
+   * It has to be in the query rather than applied to the page afterwards.
+   * Filtering a fetched page of twenty left a reader who asked for space with
+   * an empty screen, because the head of the feed is homogeneous and every
+   * other field is hundreds of rows down. The predicate belongs where the rows
+   * are chosen. */
+  fieldLeaves: readonly string[] | null = null,
 ): Promise<FeedPage> {
   const sql = database();
   // effective_at is the story's publication date shifted earlier by what its
@@ -91,6 +99,11 @@ export async function getFeedPage(
           < (${cursor.sortAt}::timestamptz, ${cursor.id}::uuid)
       `
     : sql``;
+
+  const fieldFilter =
+    fieldLeaves && fieldLeaves.length > 0
+      ? sql`AND s.field = ANY(${fieldLeaves as string[]})`
+      : sql``;
 
   const rows = await sql<FeedRow[]>`
     WITH page AS (
@@ -106,6 +119,7 @@ export async function getFeedPage(
        AND dt.status = 'valid'
       WHERE s.status = 'published'
       ${cursorFilter}
+      ${fieldFilter}
       ORDER BY
         COALESCE(s.effective_at, s.published_at, s.created_at) DESC,
         s.id DESC
@@ -128,7 +142,11 @@ export async function getFeedPage(
             -- A paper syndicates no image, but its own first figure can stand
             -- in: a thumbnail identifying a work we link to and explain.
             'figureImage', (
-              SELECT jsonb_build_object('url', f->>'image_url', 'label', f->>'label')
+              SELECT jsonb_build_object(
+                'url', f->>'image_url',
+                'label', f->>'label',
+                'caption', f->>'caption'
+              )
               FROM jsonb_array_elements(
                 COALESCE(i.text_structure->'figures', '[]'::jsonb)
               ) f
@@ -217,7 +235,10 @@ export async function searchStories(
       SELECT
         s.id,
         COALESCE(dt.text, s.working_title) AS reader_title,
-        COALESCE(s.published_at, s.created_at) AS sort_at,
+        -- One alias, not two. The older publication-date version was left
+        -- behind when ranking moved to effective_at, and Postgres rejected the
+        -- whole query as ambiguous rather than picking one -- so search has
+        -- been returning a 500 since that change.
         COALESCE(s.effective_at, s.published_at, s.created_at) AS sort_at,
         m.relevance
       FROM matches m
@@ -246,7 +267,11 @@ export async function searchStories(
             -- A paper syndicates no image, but its own first figure can stand
             -- in: a thumbnail identifying a work we link to and explain.
             'figureImage', (
-              SELECT jsonb_build_object('url', f->>'image_url', 'label', f->>'label')
+              SELECT jsonb_build_object(
+                'url', f->>'image_url',
+                'label', f->>'label',
+                'caption', f->>'caption'
+              )
               FROM jsonb_array_elements(
                 COALESCE(i.text_structure->'figures', '[]'::jsonb)
               ) f
@@ -336,7 +361,11 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
             -- A paper syndicates no image, but its own first figure can stand
             -- in: a thumbnail identifying a work we link to and explain.
             'figureImage', (
-              SELECT jsonb_build_object('url', f->>'image_url', 'label', f->>'label')
+              SELECT jsonb_build_object(
+                'url', f->>'image_url',
+                'label', f->>'label',
+                'caption', f->>'caption'
+              )
               FROM jsonb_array_elements(
                 COALESCE(i.text_structure->'figures', '[]'::jsonb)
               ) f
@@ -519,8 +548,26 @@ export async function getStory(id: string): Promise<StoryDetail | null> {
       c.name;
   `;
 
+  const base = mapFeedRow(row);
+
   return {
-    ...mapFeedRow(row),
+    ...base,
+    // Typeset the figure caption here, with the same KaTeX the prose uses and
+    // for the same reason: 134 of the corpus's 291 figure captions carry
+    // LaTeX, so nearly half of them would otherwise read "Level scheme of
+    // \(Q_{x}\)-transition". The feed never shows a caption, so this happens
+    // on the story page only.
+    sources: base.sources.map((source) =>
+      source.figureImage?.caption
+        ? {
+            ...source,
+            figureImage: {
+              ...source.figureImage,
+              captionHtml: renderMath(source.figureImage.caption),
+            },
+          }
+        : source,
+    ),
     mode: row.mode,
     availableDepths: row.available_depths ?? [],
     claims,

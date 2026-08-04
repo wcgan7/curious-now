@@ -47,7 +47,17 @@ export interface SourceLink {
   // A paper's own first figure, where the source syndicated no image. Shown
   // with its label, because a diagram from the work is not a photograph of it
   // and a reader should be able to tell which they are looking at.
-  figureImage: { url: string; label: string | null } | null;
+  // The caption travels with it because a figure's caption is the paper's own
+  // account of what the figure shows, and on the story page it is the only
+  // sentence on the picture that the reader can trust absolutely.
+  figureImage: {
+    url: string;
+    label: string | null;
+    caption: string | null;
+    // The same caption with its mathematics typeset, rendered on the server.
+    // Set on the story page and absent in the feed, which shows no caption.
+    captionHtml?: string;
+  } | null;
   accessClass: string;
   publishedAt: string | null;
 }

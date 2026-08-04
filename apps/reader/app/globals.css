@@ -1273,3 +1273,198 @@ a.lineageTitle:focus-visible {
 }
 .themeChoice--on .themeGlyph[data-choice="dark"]::after { background: var(--ink); }
 
+/* ---- Temporary: three treatments of the story page. Deleted once one wins. */
+.draftRow { display: flex; flex-wrap: wrap; gap: 1.25rem; padding: 1.25rem; align-items: flex-start; }
+.draftNote { flex: 1 0 100%; margin: 0; font-size: 0.82rem; color: var(--ink-3); }
+.draftCell { margin: 0; width: 390px; }
+.draftCell figcaption {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;
+  margin-bottom: 0.4rem; font-size: 0.74rem; font-weight: 700; color: var(--ink);
+}
+.draftCell figcaption span { font-weight: 500; color: var(--ink-3); }
+.draftFrame {
+  position: relative; height: 780px; overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--rule); border-radius: 14px; background: var(--bg);
+}
+
+.draft { padding-bottom: 2.5rem; }
+.draftHead { padding: 1.15rem var(--margin) 0; }
+/* Tighter when a picture already opened the page. */
+.storyFigure + .draftHead { padding-top: 0.85rem; }
+.draftMeta { display: flex; align-items: baseline; margin: 0 0 0.5rem; font-size: 0.72rem; color: var(--ink-3); }
+
+/* The publisher's name, doing the job the pill was doing. It costs no row
+   because the name was already on the page — a reader was reading "Nature" and
+   now that word is the way to Nature. Full ink and an arrow, because a grey
+   line at 0.72rem that happens to be a link is a link nobody finds. */
+.draftByline {
+  display: inline-flex; align-items: center; gap: 0.28rem;
+  color: var(--ink); font-weight: 600; text-decoration: none;
+}
+.draftByline span { font-size: 0.92em; opacity: 0.6; }
+.draftByline:hover { text-decoration: underline; text-underline-offset: 2px; }
+.draftMeta time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.draftTitle {
+  margin: 0 0 0.85rem; font-size: 1.4rem; line-height: 1.22;
+  font-weight: 600; letter-spacing: -0.021em; color: var(--ink);
+}
+
+.draftRungs { display: flex; gap: 3px; padding: 0 var(--margin) 0.95rem; background: var(--bg); }
+/* Opaque, not the masthead's translucent blur. Dense prose sliding under a
+   0.86 wash reads as smudge rather than as depth, and a control you use while
+   reading has to stay legible against whatever happens to be behind it. */
+.draftRungs--pinned {
+  position: sticky; top: 0; z-index: 2; padding-top: 0.7rem;
+  border-bottom: 1px solid var(--rule); background: var(--bg);
+}
+.draftRung {
+  flex: 1; min-height: 38px; padding: 0 0.3rem;
+  border: 1px solid var(--rule); border-radius: 9px;
+  background: transparent; color: var(--ink-2);
+  font: inherit; font-size: 0.82rem; font-weight: 500; cursor: pointer;
+  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.draftRung:hover:not(:disabled) { border-color: var(--rule-hover); color: var(--ink); }
+.draftRung--on, .draftRung--on:hover:not(:disabled) {
+  background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 600;
+}
+
+
+.draftDepth { padding-top: 0.15rem; }
+.draftRungHead {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  margin: 0 var(--margin) 0.55rem; padding-top: 0.95rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.8rem; font-weight: 700; color: var(--ink);
+}
+.draftDepth:first-of-type .draftRungHead { padding-top: 0; border-top: 0; }
+.draftRungHead span { font-size: 0.72rem; font-weight: 400; color: var(--ink-3); }
+
+.draftProse { padding: 0 var(--margin); font-size: 0.95rem; line-height: 1.62; color: var(--ink-2); }
+.draftProse p { margin: 0 0 0.85rem; }
+.draftProse--none { color: var(--ink-3); font-style: italic; }
+.draftSectionHead {
+  margin: 1.25rem 0 0.45rem; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3);
+}
+
+.draftSection { margin-top: 1.5rem; padding: 1.15rem var(--margin) 0; border-top: 1px solid var(--rule); }
+.draftLabel {
+  margin: 0 0 0.75rem; font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3);
+}
+
+/* The closing block. A container rather than a link, because a reader who has
+   read 7,000 words should be met with the thing itself named, not a hyperlink
+   they have to hover to identify. */
+.draftOriginal {
+  margin: 1.9rem var(--margin) 0;
+  padding: 1.05rem 1.1rem 1.15rem;
+  border: 1px solid var(--rule); border-radius: 14px;
+  background: var(--tint);
+}
+.draftOriginalName {
+  margin: 0 0 0.3rem; font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+}
+.draftOriginalTitle {
+  margin: 0 0 0.85rem; font-size: 0.95rem; line-height: 1.4;
+  font-weight: 500; color: var(--ink);
+}
+.draftOriginal .draftSourceCta { margin-bottom: 0; }
+
+.storyFigure { margin: 0 0 1.1rem; }
+
+/* The band, and the doorway. A button rather than a div because it opens
+   something — the whole figure, full screen — and a picture that opens has to
+   announce itself to a keyboard and a screen reader as well as to a thumb. */
+.storyFigureFrame {
+  display: block;
+  position: relative;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  aspect-ratio: var(--frame-aspect, 1.9);
+  max-height: 300px;
+  overflow: hidden;
+  background: #fff;
+  cursor: zoom-in;
+}
+.storyFigureFrame img { display: block; width: 100%; height: 100%; }
+.storyFigureFrame--cover img { object-fit: cover; }
+.storyFigureFrame--contain img { object-fit: contain; }
+/* Two corner brackets, bottom right. Small enough to ignore and specific
+   enough to read as "this gets bigger" rather than as a badge. */
+.storyFigureOpen {
+  position: absolute; right: 10px; bottom: 10px;
+  width: 26px; height: 26px; border-radius: 7px;
+  background: rgba(12, 12, 13, 0.55);
+  opacity: 0; transition: opacity var(--fast) var(--ease);
+}
+.storyFigureOpen::before,
+.storyFigureOpen::after {
+  content: ""; position: absolute; width: 7px; height: 7px;
+}
+.storyFigureOpen::before {
+  top: 7px; left: 7px;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.95);
+  border-left: 1.5px solid rgba(255, 255, 255, 0.95);
+}
+.storyFigureOpen::after {
+  right: 7px; bottom: 7px;
+  border-right: 1.5px solid rgba(255, 255, 255, 0.95);
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.95);
+}
+.storyFigureFrame:hover .storyFigureOpen,
+.storyFigureFrame:focus-visible .storyFigureOpen { opacity: 1; }
+/* No hover on a phone, so there it is simply always there. */
+@media (hover: none) {
+  .storyFigureOpen { opacity: 1; }
+}
+
+.lightbox {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center; gap: 0.9rem;
+  grid-template-rows: 1fr auto;
+  padding: 3.2rem 1rem 1.4rem;
+  /* Opaque. At 0.93 the page's own prose showed faintly through the
+     caption, which reads as a rendering fault rather than as depth. */
+  background: #0a0a0b;
+  overscroll-behavior: contain;
+}
+.lightboxImg {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;
+  /* Figures are drawn on white and published as transparent PNGs, which on
+     this backdrop makes every axis label invisible. */
+  background: #fff;
+}
+.lightboxCaption {
+  max-width: 46rem; margin: 0; overflow-y: auto;
+  /* Room for the scrollbar, which otherwise sits on top of the last word of
+     every line long enough to need it. */
+  padding-right: 0.8rem;
+  max-height: 26vh;
+  color: rgba(244, 244, 241, 0.82);
+  font-size: 0.82rem; line-height: 1.55;
+}
+.lightboxClose {
+  position: absolute; top: 0.9rem; right: 0.9rem;
+  min-height: 34px; padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1); color: #fff;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+}
+.lightboxClose:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* The one filled control on the page. It is the only thing here that leads
+   somewhere we did not write. */
+.draftSourceCta {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  min-height: 36px; padding: 0 0.95rem; margin-bottom: 1.05rem;
+  border-radius: 999px; background: var(--ink); color: var(--bg);
+  font-size: 0.82rem; font-weight: 600; text-decoration: none;
+}
+.draftSourceCta span { font-size: 0.9em; opacity: 0.75; }
+.draftSourceCta:hover { opacity: 0.85; }

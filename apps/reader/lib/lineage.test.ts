@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { citedWorkUrl, groupLineage, orderLineage } from "@/lib/lineage";
+import {
+  citedWorkUrl,
+  groupLineage,
+  orderLineage,
+} from "@/lib/lineage";
 import type { LineageEdge } from "@/lib/types";
 
 function edge(over: Partial<LineageEdge> = {}): LineageEdge {
@@ -119,3 +123,4 @@ describe("citedWorkUrl", () => {
     expect(citedWorkUrl(edge())).toBeNull();
   });
 });
+
