@@ -1,0 +1,13 @@
+[Unit]
+Description=Curious Now v2 scheduled pipeline cycle
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Documents/curious-now
+EnvironmentFile=%h/Documents/curious-now/.env.v2.example
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/Documents/curious-now/.venv/bin/python %h/Documents/curious-now/scripts/v2_run_cycle.py --registry %h/Documents/curious-now/config/v2/sources.json --daily-budget-usd 20 --retrieval-limit 50
+TimeoutStartSec=45min
+Nice=5

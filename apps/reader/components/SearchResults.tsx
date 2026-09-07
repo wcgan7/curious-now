@@ -46,7 +46,11 @@ export function SearchResults({
         return (
           <li key={story.id}>
             <Link href={`/story/${story.id}`}>
-              <h3>{story.title}</h3>
+              {story.titleHtml ? (
+                <h3 dangerouslySetInnerHTML={{ __html: story.titleHtml }} />
+              ) : (
+                <h3>{story.title}</h3>
+              )}
               <p>
                 {leadSource?.sourceName ?? "Collected source"}
                 {" · "}

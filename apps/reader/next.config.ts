@@ -31,10 +31,45 @@ const IMAGE_HOSTS = [
   "cdn.eso.org",
   "www.sciencenews.org",
   "www.quantamagazine.org",
+  "iiif.elifesciences.org",
+  "elifesciences.org",
+  "journals.plos.org",
+  "media.nature.com",
+  "media.springernature.com",
+  "www.beilstein-journals.org",
+  "d2csxpduxe849s.cloudfront.net",
+  "news.mit.edu",
+  "news.cnrs.fr",
+  "www.esa.int",
+  "images.theconversation.com",
+  "archaeology.org",
+  "planetary.s3.amazonaws.com",
+  "plus.maths.org",
+  "assets.science.nasa.gov",
+  "spacenews.com",
+  "i0.wp.com",
+  "www.nasa.gov",
+  "images-assets.nasa.gov",
+  "cdn.ncbi.nlm.nih.gov",
+  "npr-brightspot.s3.amazonaws.com",
+  "i.guim.co.uk",
+  "th-thumbnailer.cdn-si-edu.com",
+  "aasnova.org",
+  "www.sciencealert.com",
+  "www.carbonbrief.org",
+  "www.nature.com",
 ];
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Lets verification builds use a separate output tree while `next dev`
+  // keeps serving from `.next`. Running both against one directory produces
+  // stale or missing chunks as each process replaces the other's manifests.
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  // Codex Desktop forwards localhost through this private development host.
+  // Next otherwise rejects its client runtime/HMR requests as cross-origin,
+  // leaving server-rendered links usable while React controls stay inert.
+  allowedDevOrigins: ["10.147.17.227"],
   images: {
     remotePatterns: IMAGE_HOSTS.map((hostname) => ({
       protocol: "https" as const,

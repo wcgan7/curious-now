@@ -25,7 +25,13 @@ import type { SourceLink } from "@/lib/types";
  * must become the card it would have been without one, not a card with a hole
  * in it. A host missing from next.config.ts fails exactly that way.
  */
-export function CardImage({ source }: { source: SourceLink | undefined }) {
+export function CardImage({
+  eager = false,
+  source,
+}: {
+  eager?: boolean;
+  source: SourceLink | undefined;
+}) {
   const [failed, setFailed] = useState(false);
   // The frame's shape, once the image has reported its own. Nothing stores the
   // dimensions — the extractor records a figure's label, caption and URL and
@@ -52,6 +58,7 @@ export function CardImage({ source }: { source: SourceLink | undefined }) {
         alt=""
         aria-hidden="true"
         fill
+        loading={eager ? "eager" : "lazy"}
         onError={() => setFailed(true)}
         onLoad={(event) => {
           // The optimiser preserves the aspect ratio, so the resized image

@@ -1,35 +1,28 @@
 """Grounded generation for Curious Now v2.
 
-Two steps, deliberately separate. First the evidence packet records which
-claims the sources support, each behind a verbatim quote. Then the reader-facing
-layers are written from those claims, not from the source at large.
-
-Splitting them is what makes abstention checkable: absence of a mechanism claim
-is a fact the pipeline can test, where a generator's sense of whether it could
-explain something is not.
+The evidence packet classifies and records what the source can support. The
+reader-facing layers are independent plain-text summaries of the retrieved
+source itself; the packet routes depths but does not plan or constrain prose.
 """
 
 from curious_now_v2.generation.client import (
     CodexGenerator,
     Completion,
     Generator,
+    TextCompletion,
     Usage,
 )
+from curious_now_v2.generation.direct import DirectLayer, generate_layer
 from curious_now_v2.generation.packet import ExtractedPacket, extract_packet
-from curious_now_v2.generation.present import (
-    Presentation,
-    generate_presentation,
-    validate,
-)
 
 __all__ = [
     "CodexGenerator",
     "Completion",
+    "DirectLayer",
     "ExtractedPacket",
     "Generator",
-    "Presentation",
+    "TextCompletion",
     "Usage",
     "extract_packet",
-    "generate_presentation",
-    "validate",
+    "generate_layer",
 ]

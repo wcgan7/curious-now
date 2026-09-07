@@ -40,8 +40,11 @@
   --accent: light-dark(#0d0d0f, #f4f4f1);
   --warn: light-dark(#8a3d22, #d9855f);
 
-  --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --serif: Newsreader, Georgia, "Times New Roman", serif;
+  /* next/font exposes the bundled family through these generated variables.
+     Referring to the display name directly leaves the preload unused and falls
+     through to a system font on machines that do not have it installed. */
+  --sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --serif: var(--font-serif), Georgia, "Times New Roman", serif;
 
   --margin: 20px;
   /* The masthead's height, and therefore where anything else that pins has
@@ -798,6 +801,7 @@ button {
   border-bottom: 1px solid var(--rule);
   background: var(--bg);
 }
+.articleRungAnchor { height: 0; }
 .articleRung {
   position: relative; min-height: 44px; padding: 0;
   border: 0; background: transparent; color: var(--ink-3);
@@ -812,16 +816,61 @@ button {
 }
 
 .articleProse {
-  padding: 1.1rem var(--margin) 0;
-  font-size: 0.95rem; line-height: 1.62; color: var(--ink-2);
+  padding: 1.35rem var(--margin) 0;
+  font-size: 1rem; line-height: 1.7; color: var(--ink-2);
 }
-.articleProse p { margin: 0 0 0.85rem; }
+.articleProse p { margin: 0 0 1rem; }
+.articleProse .articleLead {
+  margin-bottom: 1.35rem;
+  color: var(--ink);
+  font-size: 1.08rem;
+  line-height: 1.62;
+}
 .articleProse--none { color: var(--ink-3); font-style: italic; }
 /* The walkthrough's headings are the reader's map through several thousand
    words. Flattening them into one column throws the map away. */
 .articleSectionHead {
-  margin: 1.25rem 0 0.45rem; font-size: 0.72rem; font-weight: 700;
-  letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3);
+  margin: 2rem 0 0.65rem;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: -0.022em;
+  line-height: 1.2;
+}
+.articleProse > .articleSectionHead:first-child,
+.articleProse > section:first-child > .articleSectionHead:first-child { margin-top: 0; }
+.articleSubhead {
+  margin: 1.5rem 0 0.5rem;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+.articleList {
+  margin: 0.15rem 0 1.25rem;
+  padding-left: 1.35rem;
+}
+.articleList li { margin: 0 0 0.55rem; padding-left: 0.2rem; }
+.articleList li::marker { color: var(--ink-3); font-weight: 600; }
+.articleQuote {
+  margin: 0.25rem 0 1.25rem;
+  padding: 0.15rem 0 0.15rem 1rem;
+  border-left: 2px solid var(--rule-hover);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.08rem;
+  line-height: 1.55;
+}
+.articleProse strong { color: var(--ink); font-weight: 650; }
+.inlineCode {
+  padding: 0.08em 0.3em;
+  border-radius: 4px;
+  background: var(--tint);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
 }
 
 /* The closing block: a container rather than a link, because a reader who has
@@ -841,6 +890,12 @@ button {
 .articleOriginalTitle {
   margin: 0 0 0.85rem; font-size: 0.95rem; line-height: 1.4;
   font-weight: 500; color: var(--ink);
+}
+.storyTitle .katex,
+.articleTitle .katex,
+.articleOriginalTitle .katex,
+.searchResults h3 .katex {
+  font-size: 1em;
 }
 /* The one filled control on the page. It is the only thing here that leads
    somewhere we did not write. */

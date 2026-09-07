@@ -33,7 +33,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html className={`${sans.variable} ${serif.variable}`} lang="en">
+    <html
+      className={`${sans.variable} ${serif.variable}`}
+      lang="en"
+      // THEME_SCRIPT deliberately adds data-theme before React hydrates. The
+      // server cannot know a browser's stored preference, so this one
+      // attribute is expected to differ and should not raise a hydration
+      // error in development.
+      suppressHydrationWarning
+    >
       <body>
         {/* Before the first paint, so a stored dark choice never flashes
             white — the bug nearly every theme toggle ships with. React hoists

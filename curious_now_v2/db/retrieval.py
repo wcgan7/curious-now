@@ -58,6 +58,7 @@ def list_items_needing_text(
     connection: psycopg.Connection[Any],
     *,
     limit: int,
+    source: str | None = None,
     refetch_source: str | None = None,
     refetch_path: str | None = None,
 ) -> tuple[PendingItem, ...]:
@@ -76,9 +77,17 @@ def list_items_needing_text(
             connection, limit=limit, source=refetch_source, path=refetch_path
         )
 
+    source_clause = ""
+    parameters: list[object] = []
+    if source:
+        source_clause = "AND source_id = (SELECT id FROM sources WHERE name = %s)"
+        parameters.append(source)
+    parameters.append(f"{RETRY_AFTER_DAYS} days")
+    parameters.append(limit)
+
     with connection.cursor() as cursor:
         cursor.execute(
-            """
+            f"""
             -- Interleave sources so one large feed cannot fill the whole
             -- batch: everything shares a discovery timestamp, so ordering by
             -- date alone processes a single publisher for run after run.
@@ -93,6 +102,7 @@ def list_items_needing_text(
                 -- A source dropped for never returning anything must stop
                 -- being asked; its backlog outlives the decision otherwise.
                 AND source_id IN (SELECT id FROM sources WHERE active)
+                {source_clause}
                 AND (
                   full_text_status = 'pending'
                   OR (
@@ -106,7 +116,7 @@ def list_items_needing_text(
             ORDER BY rank_in_source, id
             LIMIT %s;
             """,
-            (f"{RETRY_AFTER_DAYS} days", limit),
+            tuple(parameters),
         )
         return tuple(
             PendingItem(
@@ -353,6 +363,7 @@ def store_resolution(
             UPDATE items SET
               full_text = %s,
               text_structure = %s,
+              image_url = COALESCE(image_url, %s),
               full_text_kind = %s,
               full_text_source = %s,
               full_text_status = %s,
@@ -374,6 +385,7 @@ def store_resolution(
             (
                 text,
                 Jsonb(structure_of(document) if document else {}),
+                resolution.image_url,
                 resolution.kind.value if resolution.kind else None,
                 resolution.source,
                 resolution.status.value,
@@ -398,6 +410,7 @@ def run_retrieval(
     *,
     limit: int = 50,
     timeout_seconds: float = 30,
+    source: str | None = None,
     refetch_source: str | None = None,
     refetch_path: str | None = None,
 ) -> RetrievalRunResult:
@@ -431,6 +444,7 @@ def run_retrieval(
         pending = list_items_needing_text(
             connection,
             limit=limit,
+            source=source,
             refetch_source=refetch_source,
             refetch_path=refetch_path,
         )

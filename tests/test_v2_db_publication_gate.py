@@ -38,6 +38,8 @@ def seed_story(
     *,
     status: str,
     withheld_kind: str | None = None,
+    full_text_status: str = "ok",
+    source_name: str | None = None,
 ) -> UUID:
     suffix = uuid4().hex
     with connection.cursor() as cursor:
@@ -47,7 +49,7 @@ def seed_story(
             VALUES (%s, 'primary_research', '{"counts_as_independent": true}')
             RETURNING id;
             """,
-            (f"Gate source {suffix}",),
+            (source_name or f"Gate source {suffix}",),
         )
         source_id = (cursor.fetchone() or (None,))[0]
 
@@ -59,7 +61,7 @@ def seed_story(
               full_text_status, full_text_kind, text_structure
             )
             VALUES (%s, %s, %s, %s, %s, 'peer_reviewed', 'open_full_text',
-                    %s, %s, 'ok', 'fulltext', %s)
+                    %s, %s, %s, 'fulltext', %s)
             RETURNING id;
             """,
             (
@@ -70,6 +72,7 @@ def seed_story(
                 "A dose-response study",
                 BODY,
                 len(BODY.split()),
+                full_text_status,
                 psycopg.types.json.Jsonb(
                     {
                         "sections": [
@@ -190,3 +193,100 @@ def test_the_gate_runs_at_all() -> None:
     assert result.eligible + result.ineligible == result.evaluated
     # Sanity on the clock: gating stamps a time, and it is not in the future.
     assert datetime.now(UTC) - timedelta(minutes=5) < datetime.now(UTC)
+
+
+def test_the_gate_can_target_one_source() -> None:
+    assert TEST_DATABASE_URL is not None
+    apply_migrations(TEST_DATABASE_URL)
+    with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as connection:
+        target_id = seed_story(
+            connection,
+            status="draft",
+            source_name=f"Target gate source {uuid4().hex}",
+        )
+        target_source = connection.execute(
+            """
+            SELECT src.name
+            FROM story_items si
+            JOIN items i ON i.id = si.item_id
+            JOIN sources src ON src.id = i.source_id
+            WHERE si.story_id = %s
+            """,
+            (target_id,),
+        ).fetchone()
+        assert target_source is not None
+
+        other_id = seed_story(connection, status="draft")
+        result = run_publication_gate(
+            TEST_DATABASE_URL,
+            source=str(target_source[0]),
+            limit=5,
+        )
+
+        assert result.evaluated == 1
+        assert story_row(connection, target_id)[2] is True
+        assert story_row(connection, other_id)[2] is False
+
+
+def test_the_gate_does_not_reopen_a_blocked_feed_item() -> None:
+    """A source exclusion must survive later gate runs.
+
+    Blocked items retain their fetched body for auditability. That body must not
+    make an excluded format eligible for model generation again.
+    """
+
+    assert TEST_DATABASE_URL is not None
+    apply_migrations(TEST_DATABASE_URL)
+    with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as connection:
+        story_id = seed_story(
+            connection,
+            status="draft",
+            full_text_status="blocked",
+        )
+        run_publication_gate(TEST_DATABASE_URL)
+        status, depths, gated, _ = story_row(connection, story_id)
+
+    assert status == "draft"
+    assert depths == []
+    assert gated is False
+
+
+def test_changed_only_gate_revisits_only_new_evidence() -> None:
+    assert TEST_DATABASE_URL is not None
+    apply_migrations(TEST_DATABASE_URL)
+    with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as connection:
+        source_name = f"Changed gate source {uuid4().hex}"
+        story_id = seed_story(
+            connection,
+            status="draft",
+            source_name=source_name,
+        )
+
+        first = run_publication_gate(
+            TEST_DATABASE_URL,
+            source=source_name,
+            changed_only=True,
+        )
+        second = run_publication_gate(
+            TEST_DATABASE_URL,
+            source=source_name,
+            changed_only=True,
+        )
+        assert first.evaluated == 1
+        assert second.evaluated == 0
+
+        connection.execute(
+            """
+            UPDATE items SET full_text_fetched_at = now() + interval '1 second'
+            WHERE id IN (
+              SELECT item_id FROM story_items WHERE story_id = %s
+            );
+            """,
+            (story_id,),
+        )
+        third = run_publication_gate(
+            TEST_DATABASE_URL,
+            source=source_name,
+            changed_only=True,
+        )
+    assert third.evaluated == 1

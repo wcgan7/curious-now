@@ -22,8 +22,8 @@ V2 separates the read path from the write path.
 ```text
                          WRITE PATH (scheduled)
 sources -> ingest -> normalize -> hydrate -> cluster -> evidence packet
-                                                   -> conceptual spine
-                                                   -> presentations -> concepts -> rank
+                                                   -> direct depth summaries
+                                                   -> concepts -> rank
                                                                         |
                                                                         v
                                                                      Postgres
@@ -114,8 +114,8 @@ access class to what was actually fetched. Many DOIs — news and editorial item
 in particular — publish no abstract at all; those are recorded as attempted and
 retried later rather than refetched on every run.
 
-Open-access full text is not yet extracted, so no story currently reaches the
-`open_full_text` sufficiency that Technical requires.
+Open-access primary full text enables Technical. Abstracts can support Idea and,
+when they state a method, Explain. Metadata and snippets are skipped.
 
 ### 3. Cluster
 
@@ -136,11 +136,10 @@ The evidence packet is the factual interface between retrieval and generation.
 It contains structured claims, supporting items, excerpts or locators,
 limitations, uncertainty, and prerequisite concepts.
 
-The packet also records which presentation elements the sources support. This is
-where a layer becomes ineligible for lack of evidence: a packet with no
-limitation claims cannot ground an Explain, because Explain is required to cover
-limitations. Recording support per element, rather than asking a generator
-whether it feels equipped, keeps the decision checkable by code.
+The packet provides the method signal used to route Explain and records whether
+the source is substantive enough to publish. It is a control-plane record for
+provenance, classification, routing, and ranking; reader-facing prose is not
+assembled from its fields.
 
 Claims without supporting items are invalid. The evidence packet is versioned;
 new evidence creates a new version rather than silently changing the basis of an
@@ -148,25 +147,27 @@ existing explanation.
 
 ### 5. Present
 
-Every generated presentation references one evidence-packet version and one
-conceptual spine.
+Every generated layer references one evidence-packet version.
 
-- The display title is a versioned reader artifact, distinct from immutable source
-  titles and the internal story working title.
-- Title and Glance are generated for the broadest set of supported stories.
-- Glance assumes no topic familiarity and establishes the simplest accurate
-  intuition.
-- Explain assumes foundational field familiarity and adds terminology, mechanism,
-  evidence, comparison, and limitations.
-- Technical is restricted to stories with suitable primary material and enough
-  accessible text to inspect methods and evidence.
-- Glance and Explain are orientation choices; Technical is a progressive
-  investigation reached after either orientation.
-- A layer may be declined for insufficient evidence; the decline and its reason
-  are stored, and a declined layer never withdraws a shallower one.
+- The source title is used unless a separate valid display title exists.
+- Papers, reports, and datasets generate that display title from their completed
+  Idea; reader-written news and magazine headlines remain unchanged.
+- Idea is generated for every substantive article and assumes no topic familiarity.
+- Explain is generated when the evidence carries a method or mechanism, and for
+  open primary works.
+- Technical is generated only from open primary material.
+- Each depth is an independent plain-text Luna call over the retrieved source.
+- The paper title is one independent plain-text Luna call over the completed Idea.
+- A deeper failure does not block a new story's successful Idea, but an
+  incomplete regeneration cannot replace the existing current set.
+- An ineligible depth is not a failure; completeness is relative to the depths
+  the selected source can support.
+- Metadata and snippets do not enter generation.
+- Generation disables both Codex shell implementations, runs from an empty
+  working directory, ignores local instructions, and rejects any call in which
+  the agent attempts to use another tool.
 - Generated content is never produced in a reader request.
-- Model, prompt version, evidence-packet version, conceptual-spine version,
-  generation status, and validation status are stored.
+- Model, prompt version, evidence-packet version, usage, and status are stored.
 
 The normative content rules are defined in
 [`PRESENTATION_CONTRACT.md`](PRESENTATION_CONTRACT.md). The screen hierarchy is
@@ -182,29 +183,17 @@ for every story that mentions it.
 
 ### 7. Rank
 
-Ranking is computed in the pipeline and stores both a score and inspectable
-reasons. Initial signals include:
+Ranking stores a stable `effective_at` sort key and inspectable reasons from
+validated presentation completion, categorical significance and publication
+time. It does not use per-user engagement. See [`RANKING.md`](RANKING.md) for
+the measured signal choices and the time-shift derivation.
 
-- freshness;
-- evidence quality;
-- primary-source availability;
-- independent-source diversity;
-- estimated significance;
-- topical variety;
-- duplicate and low-information penalties.
-
-Ranking does not use per-user engagement.
-
-A weighted base score combines freshness, evidence quality, primary-material
-availability, independent corroboration, and text sufficiency. A variety damper
-then demotes each repeated principal source within a pass, so one bulk feed drop
-cannot occupy the whole shelf. Every stored score records the reason for each
-signal and any damping applied. Ranking is deterministic: the same stories and
-clock produce the same order.
-
-Source-level variety is the initial approximation of topical variety; a topic
-signal replaces it once stories carry topic assignments. Significance and
-duplicate penalties are not yet implemented.
+Feed composition is deliberately separate from story quality. The reader
+queries technical and accessible stories as independently ranked lanes,
+interleaves them two-to-one, and spreads principal sources within each selected
+page batch. Each lane has its own keyset cursor. This keeps a bulk paper feed
+from filling the shelf without permanently lowering any individual story's
+stored score or losing rows at a pagination boundary.
 
 ## Publication rules
 
@@ -289,8 +278,8 @@ Cutover occurs only after:
 
 1. source import and ingestion work;
 2. evidence-only stories appear in the reader;
-3. generated display titles, Glance, and Explain are grounded in a versioned
-   evidence packet and conceptual spine;
+3. direct Idea and Explain summaries are grounded in retrieved source text and
+   reference a versioned evidence packet;
 4. basic search and continuous pagination work;
 5. a legacy-content importer has either been run or deliberately rejected.
 

@@ -18,6 +18,7 @@ from curious_now_v2.retrieval.document import (
     inherit_section_kinds,
     split_sentences,
 )
+from curious_now_v2.retrieval.images import jats_figure_image
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -139,6 +140,9 @@ def _in_translation(tag: Tag) -> bool:
 
 def _figures_and_tables(
     root: Tag,
+    *,
+    source: str | None = None,
+    base_url: str | None = None,
 ) -> tuple[tuple[Figure, ...], tuple[Table, ...]]:
     figures: list[Figure] = []
     for node in root.find_all("fig"):
@@ -153,6 +157,11 @@ def _figures_and_tables(
             Figure(
                 label=_compact(label_node.get_text()) if label_node else None,
                 caption=caption,
+                image_url=jats_figure_image(
+                    node,
+                    source=source,
+                    base_url=base_url,
+                ),
             )
         )
 
@@ -279,7 +288,12 @@ def _jats_references(soup: BeautifulSoup) -> tuple[Reference, ...]:
     return tuple(references)
 
 
-def extract_jats(xml: str) -> Document:
+def extract_jats(
+    xml: str,
+    *,
+    source: str | None = None,
+    base_url: str | None = None,
+) -> Document:
     """Extract structure from a JATS full-text XML article.
 
     PubMed Central and Europe PMC publish full text as JATS, where sections,
@@ -337,7 +351,11 @@ def extract_jats(xml: str) -> Document:
     # Publishers place floats differently: some inline them in <body>, others
     # (MDPI among them) collect them in a <floats-group> beside it. Searching
     # the whole article catches both, plus any in back matter.
-    figures, tables = _figures_and_tables(soup)
+    figures, tables = _figures_and_tables(
+        soup,
+        source=source,
+        base_url=base_url,
+    )
 
     warnings: list[str] = []
     if body is None:

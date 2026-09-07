@@ -449,7 +449,7 @@ def test_invalid_display_title_falls_back_to_a_source_title() -> None:
     [
         (
             AccessClass.METADATA_ONLY,
-            (ExplanationDepth.GLANCE,),
+            (),
         ),
         (
             AccessClass.ABSTRACT,
@@ -519,8 +519,37 @@ def test_full_text_announcement_does_not_get_a_technical_explanation() -> None:
         ExplanationDepth.EXPLAIN,
     )
     assert plan.skipped_reasons[ExplanationDepth.TECHNICAL] == (
-        "story has no primary material"
+        "this evidence packet is not grounded in primary material"
     )
+
+
+def test_secondary_packet_does_not_borrow_primary_status_from_another_item() -> None:
+    primary_metadata = make_item(access_class=AccessClass.METADATA_ONLY)
+    secondary = make_item(
+        source_name="Science Desk",
+        source_role=SourceRole.JOURNALISM,
+        content_type=ContentType.NEWS,
+        access_class=AccessClass.OPEN_FULL_TEXT,
+    )
+    story_id = uuid4()
+    packet_id = uuid4()
+    story = StoryDraft(
+        story_id=story_id,
+        working_title=secondary.title,
+        items=(primary_metadata, secondary),
+        current_evidence_packet_id=packet_id,
+    )
+    packet = make_packet(
+        story_id=story_id,
+        item_id=secondary.item_id,
+        packet_id=packet_id,
+        access_class=AccessClass.OPEN_FULL_TEXT,
+    )
+
+    plan = plan_explanations(story, packet)
+
+    assert plan.depths == (ExplanationDepth.GLANCE, ExplanationDepth.EXPLAIN)
+    assert ExplanationDepth.TECHNICAL in plan.skipped_reasons
 
 
 def test_full_text_technical_report_is_eligible_for_technical() -> None:
@@ -653,7 +682,7 @@ def test_context_only_evidence_supports_nothing() -> None:
     ]
 
 
-def test_technical_needs_reported_results_not_just_full_text() -> None:
+def test_technical_needs_open_primary_text_not_a_specific_claim_shape() -> None:
     item = make_item(access_class=AccessClass.OPEN_FULL_TEXT)
     story_id = uuid4()
     packet_id = uuid4()
@@ -673,10 +702,7 @@ def test_technical_needs_reported_results_not_just_full_text() -> None:
 
     plan = plan_explanations(story, packet)
 
-    assert ExplanationDepth.TECHNICAL not in plan.depths
-    assert plan.skipped_reasons[ExplanationDepth.TECHNICAL] == (
-        "evidence lacks reported results"
-    )
+    assert ExplanationDepth.TECHNICAL in plan.depths
 
 
 def test_blocked_story_raises_in_projection() -> None:

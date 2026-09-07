@@ -52,6 +52,7 @@
       "leaves": [
         { "slug": "public_health", "label": "Public health & epidemiology" },
         { "slug": "clinical_medicine", "label": "Clinical medicine" },
+        { "slug": "biomedical_engineering", "label": "Biomedical engineering" },
         { "slug": "pharmacology", "label": "Pharmacology" },
         { "slug": "mental_health", "label": "Mental health" }
       ]

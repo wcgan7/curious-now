@@ -11,16 +11,13 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from curious_now_v2.core.enums import ExplanationDepth
+from curious_now_v2.db import ranking as ranking_module
+from curious_now_v2.generation import direct as direct_module
 from curious_now_v2.generation import packet as packet_module
-from curious_now_v2.generation import present as present_module
 from curious_now_v2.generation import significance as significance_module
-from curious_now_v2.generation import technical as technical_module
-from curious_now_v2.generation.client import CodexGenerator, Generator
-from curious_now_v2.generation.judge import declined_reason, judge_mechanism
-from curious_now_v2.generation.readable import judge_readability
+from curious_now_v2.generation.client import CodexGenerator, Generator, Usage
+from curious_now_v2.generation.direct import generate_layer, planned_depths
 from curious_now_v2.generation.packet import extract_packet
-from curious_now_v2.generation.present import generate_presentation
-from curious_now_v2.generation.technical import generate_technical
 from curious_now_v2.pipeline import scoring
 
 
@@ -42,16 +39,22 @@ MIN_WORDS = 150
 class GenerationRunResult:
     attempted: int
     generated: int
-    declined_explain: int
+    explain_ineligible: int
+    explain_failed: int
     withheld_kind: int
     relabelled: int
-    # Explains withdrawn by the judge for listing capabilities, not mechanism.
-    judged_out: int
     technical: int
-    technical_declined: int
-    invalid: int
+    technical_failed: int
+    titles_generated: int
+    title_failed: int
     failed: int
     cost_usd: float
+
+    @property
+    def without_explain(self) -> int:
+        """Compatibility name for intentionally Idea-only stories."""
+
+        return self.explain_ineligible
 
 
 @dataclass(frozen=True)
@@ -65,11 +68,13 @@ class PendingStory:
     # What retrieval actually got, not what we wish it got. Explain and
     # Technical are both gated on this, and it was a hardcoded constant.
     text_sufficiency: str
-    # The gate's finding, and the document's own section/figure/table labels.
-    # Technical is the only layer that cites, so it is the only one that needs
-    # to know what there is to cite.
-    technical_eligible: bool
-    structure: dict[str, Any] | None
+    is_primary_material: bool
+    # Scheduler composition follows the same evidence shape as the reader:
+    # reported/news-like material has a protected lane, while primary papers
+    # remain the majority.  Keep this on the selected grounding item rather
+    # than inferring it later from a source name.
+    is_accessible_material: bool
+    published_at: datetime
 
 
 def list_stories_needing_presentations(
@@ -78,6 +83,7 @@ def list_stories_needing_presentations(
     limit: int,
     regenerate: bool = False,
     story_ids: Sequence[UUID] | None = None,
+    source: str | None = None,
 ) -> tuple[PendingStory, ...]:
     """Published stories awaiting presentation, grounded in their richest item.
 
@@ -104,35 +110,70 @@ def list_stories_needing_presentations(
         )
     """
     chosen = "AND s.id = ANY(%s)" if story_ids else ""
+    from_source = "" if source is None else """
+        AND EXISTS (
+          SELECT 1
+          FROM story_items source_si
+          JOIN items source_i ON source_i.id = source_si.item_id
+          JOIN sources source_src ON source_src.id = source_i.source_id
+          WHERE source_si.story_id = s.id AND source_src.name = %s
+        )
+    """
+    parameters: list[object] = [MIN_WORDS]
+    if source is not None:
+        parameters.append(source)
+    if story_ids:
+        parameters.append(list(story_ids))
+    parameters.append(limit)
     with connection.cursor() as cursor:
         cursor.execute(
             f"""
             SELECT DISTINCT ON (s.id)
               s.id, i.id, src.name, i.content_type,
-              COALESCE(dt.text, s.working_title), i.full_text,
-              CASE WHEN i.full_text_kind = 'fulltext'
-                   THEN 'open_full_text' ELSE COALESCE(i.access_class, 'abstract')
+              i.title, i.full_text,
+              CASE i.full_text_kind
+                   WHEN 'fulltext' THEN 'open_full_text'
+                   WHEN 'abstract' THEN 'abstract'
+                   ELSE COALESCE(i.access_class, 'metadata_only')
               END,
-              'technical' = ANY(s.supported_depths),
-              i.text_structure
+              i.content_type IN ('preprint', 'peer_reviewed', 'report', 'dataset')
+                OR src.role = 'primary_research',
+              src.role = 'journalism'
+                OR i.content_type IN ('news', 'press_release', 'blog'),
+              COALESCE(i.published_at, s.last_evidence_at, s.created_at)
             FROM stories s
             JOIN story_items si ON si.story_id = s.id
             JOIN items i ON i.id = si.item_id
             JOIN sources src ON src.id = i.source_id
-            LEFT JOIN display_titles dt
-              ON dt.id = s.current_display_title_id AND dt.status = 'valid'
             WHERE s.status <> 'hidden'
               AND s.withheld_kind IS NULL
               AND cardinality(s.supported_depths) > 0
               AND src.active
+              AND i.full_text_status <> 'blocked'
               AND i.full_text IS NOT NULL
               AND COALESCE(i.full_text_words, 0) >= %s
+              AND CASE i.full_text_kind
+                       WHEN 'fulltext' THEN 'open_full_text'
+                       WHEN 'abstract' THEN 'abstract'
+                       ELSE COALESCE(i.access_class, 'metadata_only')
+                  END IN ('abstract', 'open_full_text')
+              {from_source}
               {chosen}
               {having}
-            ORDER BY s.id, i.full_text_words DESC
+            ORDER BY s.id,
+              (
+                (i.content_type IN ('preprint', 'peer_reviewed', 'report', 'dataset')
+                  OR src.role = 'primary_research')
+                AND CASE i.full_text_kind
+                         WHEN 'fulltext' THEN 'open_full_text'
+                         WHEN 'abstract' THEN 'abstract'
+                         ELSE COALESCE(i.access_class, 'metadata_only')
+                    END = 'open_full_text'
+              ) DESC,
+              i.full_text_words DESC
             LIMIT %s;
             """,
-            (MIN_WORDS, list(story_ids), limit) if story_ids else (MIN_WORDS, limit),
+            tuple(parameters),
         )
         return tuple(
             PendingStory(
@@ -143,8 +184,9 @@ def list_stories_needing_presentations(
                 title=row[4],
                 text=row[5],
                 text_sufficiency=row[6],
-                technical_eligible=bool(row[7]),
-                structure=row[8],
+                is_primary_material=bool(row[7]),
+                is_accessible_material=bool(row[8]),
+                published_at=row[9],
             )
             for row in cursor
         )
@@ -213,7 +255,11 @@ NOT_RESEARCH = frozenset({"not_science", "announcement"})
 PAPER_TYPES = frozenset({"peer_reviewed", "preprint"})
 
 
-def reconsider_withheld(connection: psycopg.Connection[Any]) -> int:
+def reconsider_withheld(
+    connection: psycopg.Connection[Any],
+    *,
+    source: str | None = None,
+) -> int:
     """Reopen stories dropped by a classifier we no longer run.
 
     Adding `explainer` to the taxonomy turned a piece on how a wildfire builds
@@ -223,19 +269,29 @@ def reconsider_withheld(connection: psycopg.Connection[Any]) -> int:
     as the taxonomy behind it, so a change of taxonomy reopens the question.
     """
 
-    with connection.transaction(), connection.cursor() as cursor:
-        cursor.execute(
-            """
+    query = """
             UPDATE stories SET
               withheld_kind = NULL,
               withheld_by = NULL,
               publication_reasons = '[]'::jsonb,
               updated_at = now()
             WHERE withheld_kind IS NOT NULL
-              AND withheld_by IS DISTINCT FROM %s;
-            """,
-            (packet_module.PROMPT_VERSION,),
-        )
+              AND withheld_by IS DISTINCT FROM %s
+    """
+    parameters: list[object] = [packet_module.PROMPT_VERSION]
+    if source is not None:
+        query += """
+          AND EXISTS (
+            SELECT 1
+            FROM story_items source_si
+            JOIN items source_i ON source_i.id = source_si.item_id
+            JOIN sources source_src ON source_src.id = source_i.source_id
+            WHERE source_si.story_id = stories.id AND source_src.name = %s
+          )
+        """
+        parameters.append(source)
+    with connection.transaction(), connection.cursor() as cursor:
+        cursor.execute(query, tuple(parameters))
         return cursor.rowcount
 
 
@@ -269,24 +325,91 @@ def _reconcile_content_type(
         return cursor.rowcount > 0
 
 
+@dataclass(frozen=True)
+class _StoredLayer:
+    depth: ExplanationDepth
+    body: str
+    supported: bool
+    content: dict[str, Any]
+    declined_reason: str
+    prompt_version: str
+    usage: Usage
+
+
+def _layers_to_store(
+    layers: Sequence[direct_module.DirectLayer],
+) -> tuple[_StoredLayer, ...]:
+    """Adapt independent prose calls to the existing explanation rows."""
+
+    return tuple(
+        _StoredLayer(
+            depth=layer.depth,
+            body=layer.text,
+            supported=layer.valid,
+            content=layer.content,
+            declined_reason=layer.completion.error or "empty output",
+            prompt_version=layer.prompt_version,
+            usage=layer.completion.usage,
+        )
+        for layer in layers
+    )
+
+
+def _replacement_complete(layers: Sequence[_StoredLayer]) -> bool:
+    """Whether this attempt is safe to make reader-current."""
+
+    idea_valid = any(
+        layer.depth is ExplanationDepth.GLANCE and layer.supported
+        for layer in layers
+    )
+    return idea_valid and all(
+        layer.supported and bool(layer.body.strip()) for layer in layers
+    )
+
+
+def _can_make_current(
+    layers: Sequence[_StoredLayer], *, has_current: bool
+) -> bool:
+    """Publish an initial Idea, but never downgrade an existing presentation."""
+
+    idea_valid = any(
+        layer.depth is ExplanationDepth.GLANCE and layer.supported
+        for layer in layers
+    )
+    return idea_valid and (not has_current or _replacement_complete(layers))
+
+
 def _store(
     connection: psycopg.Connection[Any],
     *,
     story: PendingStory,
     extracted: packet_module.ExtractedPacket,
-    presentation: present_module.Presentation,
-    technical: technical_module.Technical | None,
+    layers: Sequence[direct_module.DirectLayer],
+    display_title: direct_module.DirectTitle | None,
     significance: str,
     model: str,
     now: datetime,
-) -> None:
-    """Persist packet, claims, spine, and presentations as one version.
+) -> bool:
+    """Persist packet and independently generated reader layers as one version.
 
-    Everything written here references one packet version and one spine
-    version, so a reader can never be shown a mixture of two.
+    The legacy spine row remains as a batch identifier for schema compatibility;
+    it no longer plans or constrains the three pieces of prose.
     """
 
+    stored_layers = _layers_to_store(layers)
+    idea_valid = any(
+        layer.depth is ExplanationDepth.GLANCE and layer.supported
+        for layer in stored_layers
+    )
+
     with connection.transaction(), connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT current_evidence_packet_id FROM stories WHERE id = %s;",
+            (story.story_id,),
+        )
+        has_current = _one(cursor)[0] is not None
+        make_current = _can_make_current(stored_layers, has_current=has_current)
+
         cursor.execute(
             """
             SELECT COALESCE(max(version), 0) + 1 FROM evidence_packets
@@ -308,7 +431,7 @@ def _store(
             (
                 story.story_id,
                 version,
-                "valid" if presentation.valid else "invalid",
+                "valid",
                 story.text_sufficiency,
                 extracted.central_claim,
                 Jsonb(list(extracted.limitations)),
@@ -322,7 +445,7 @@ def _store(
                         "prerequisites": list(extracted.prerequisites),
                     }
                 ),
-                now if presentation.valid else None,
+                now,
             ),
         )
         packet_id = cast(UUID, _one(cursor)[0])
@@ -360,105 +483,54 @@ def _store(
             (
                 story.story_id,
                 packet_id,
-                "valid" if presentation.valid else "invalid",
+                "valid" if idea_valid else "invalid",
                 extracted.central_claim,
-                presentation.spine_novelty,
-                presentation.spine_intuition,
-                presentation.spine_qualification,
+                None,
+                None,
+                None,
                 Jsonb(list(extracted.prerequisites)),
-                present_module.PROMPT_VERSION,
+                direct_module.IDEA_PROMPT_VERSION,
                 model,
-                now if presentation.valid else None,
+                now if idea_valid else None,
             ),
         )
         spine_id = cast(UUID, _one(cursor)[0])
 
-        # A paper's title is written for peers and is worth rewriting; a
-        # newsroom's is already written for a reader and was being made worse.
-        shown_title, title_problems = present_module.title_for(
-            source_title=story.title,
-            generated=presentation.display_title,
-            content_type=story.content_type,
-        )
-
-        cursor.execute(
-            """
-            INSERT INTO display_titles (
-              story_id, evidence_packet_id, conceptual_spine_id, version, text,
-              status, prompt_version, model_provider, model_name, validated_at
+        title_id: UUID | None = None
+        if display_title is not None and display_title.valid:
+            cursor.execute(
+                """
+                SELECT COALESCE(max(version), 0) + 1
+                FROM display_titles WHERE story_id = %s;
+                """,
+                (story.story_id,),
             )
-            VALUES (
-              %s, %s, %s,
-              (SELECT COALESCE(max(version), 0) + 1 FROM display_titles
-               WHERE story_id = %s),
-              %s, %s, %s, 'openai', %s, %s
-            )
-            RETURNING id;
-            """,
-            (
-                story.story_id,
-                packet_id,
-                spine_id,
-                story.story_id,
-                shown_title,
-                # Judged on its own terms: a hyped or over-long title is
-                # invalid as a title, and says nothing about the explanation.
-                "valid" if not title_problems else "invalid",
-                present_module.PROMPT_VERSION,
-                model,
-                now if presentation.title_valid else None,
-            ),
-        )
-        title_id = cast(UUID, _one(cursor)[0])
-
-        # The qualification is not a field the reader is shown; it is written
-        # into the Glance prose. What is kept here is the span locating it, so
-        # a later audit can ask whether it survived without reading every word.
-        layers: tuple[tuple[ExplanationDepth, str, bool, dict[str, Any], str], ...] = (
-            (
-                ExplanationDepth.GLANCE,
-                presentation.glance,
-                presentation.glance_supported,
-                {"qualification_span": presentation.glance_qualification_span}
-                if presentation.glance_qualification_span
-                else {},
-                "",
-            ),
-            (
-                ExplanationDepth.EXPLAIN,
-                presentation.explain,
-                presentation.explain_supported,
-                {},
-                presentation.explain_declined_reason,
-            ),
-        )
-        if technical is not None:
-            # Technical carries structure the other layers do not: its headings
-            # are the argument's order and its citations are what a reader came
-            # to check, so both are stored rather than flattened into prose.
-            layers += (
+            title_version = cast(int, _one(cursor)[0])
+            cursor.execute(
+                """
+                INSERT INTO display_titles (
+                  story_id, evidence_packet_id, conceptual_spine_id, version,
+                  text, status, prompt_version, model_provider, model_name,
+                  validated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, 'valid', %s, 'openai', %s, %s)
+                RETURNING id;
+                """,
                 (
-                    ExplanationDepth.TECHNICAL,
-                    technical.text,
-                    technical.valid,
-                    {
-                        "sections": [
-                            {"heading": s.heading, "text": s.text}
-                            for s in technical.sections
-                        ],
-                        "citations": [
-                            {"label": c.label, "used_for": c.used_for}
-                            for c in technical.citations
-                        ],
-                        "prerequisites": list(technical.prerequisites),
-                    },
-                    technical.declined_reason
-                    or "; ".join(technical.violations),
+                    story.story_id,
+                    packet_id,
+                    spine_id,
+                    title_version,
+                    display_title.text,
+                    display_title.prompt_version,
+                    model,
+                    now,
                 ),
             )
+            title_id = cast(UUID, _one(cursor)[0])
 
-        for depth, body, supported, provenance, declined in layers:
-            usable = supported and bool(body.strip()) and presentation.valid
+        for layer in stored_layers:
+            usable = layer.supported and bool(layer.body.strip())
             cursor.execute(
                 """
                 INSERT INTO explanations (
@@ -476,54 +548,70 @@ def _store(
                     story.story_id,
                     packet_id,
                     spine_id,
-                    depth.value,
-                    "valid" if usable else ("invalid" if supported else "failed"),
-                    Jsonb(provenance if supported else {}),
-                    body or None,
+                    layer.depth.value,
+                    "valid"
+                    if usable
+                    else ("invalid" if layer.supported else "failed"),
+                    Jsonb(layer.content if layer.supported else {}),
+                    layer.body or None,
                     model,
-                    present_module.PROMPT_VERSION,
-                    presentation.completion.usage.input_tokens,
-                    presentation.completion.usage.output_tokens,
-                    None if supported else (declined or "declined"),
+                    layer.prompt_version,
+                    layer.usage.input_tokens,
+                    layer.usage.output_tokens,
+                    None
+                    if layer.supported
+                    else (layer.declined_reason or "declined"),
                     now if usable else None,
                 ),
             )
 
-        if presentation.valid:
+        if make_current:
             # Publication happens here and only here: a story is offered to a
             # reader when there is something to show them, which is not a fact
             # the gate can know from counting words.
             #
-            # The display title is pointed at separately, because a title that
-            # breaks the contract falls back to the source's own headline —
-            # an attributed fact rather than our editorial text — while the
-            # explanation it belongs to goes out unaffected.
-            #
             # The sort key is written here too, and only here. It is
             # time-invariant by construction, so publication is both the first
-            # moment it can be computed — rungs earned are known only now — and
+            # moment it can be computed — depth completion is known only now — and
             # the last moment it needs to be.
             cursor.execute(
                 """
                 SELECT
-                  (SELECT count(*) FROM explanations e
-                    WHERE e.story_id = %s AND e.evidence_packet_id = %s
-                      AND e.status = 'valid'),
-                  COALESCE(
-                    (SELECT max(i.published_at) FROM story_items si
-                       JOIN items i ON i.id = si.item_id
-                      WHERE si.story_id = %s),
-                    s.created_at
-                  )
-                FROM stories s WHERE s.id = %s;
+                  COALESCE(d.published_at, s.created_at),
+                  COALESCE(d.source_name, %s)
+                FROM stories s
+                LEFT JOIN LATERAL (
+                  SELECT i.published_at, src.name AS source_name
+                  FROM story_items si
+                  JOIN items i ON i.id = si.item_id
+                  JOIN sources src ON src.id = i.source_id
+                  WHERE si.story_id = s.id AND i.published_at IS NOT NULL
+                  ORDER BY i.published_at DESC, src.name
+                  LIMIT 1
+                ) d ON TRUE
+                WHERE s.id = %s;
                 """,
-                (story.story_id, packet_id, story.story_id, story.story_id),
+                (story.source_name, story.story_id),
             )
-            rungs_earned, published_at = _one(cursor)
+            published_at, ranking_source = _one(cursor)
+            density_identity = ranking_module.density_identity(
+                source_name=str(ranking_source),
+                field=extracted.field,
+                published_at=published_at,
+            )
+            density_position = ranking_module.reserve_density_position(
+                cursor,
+                story_id=story.story_id,
+                identity=density_identity,
+            )
             scored = scoring.score_story(
                 published_at=published_at,
-                rungs_earned=rungs_earned,
+                rungs_earned=scoring.completion_rungs(
+                    valid_depths=sum(layer.supported for layer in stored_layers),
+                    eligible_depths=len(stored_layers),
+                ),
                 significance=significance,
+                density_position=density_position,
             )
             cursor.execute(
                 """
@@ -531,7 +619,8 @@ def _store(
                   status = 'published',
                   published_at = COALESCE(published_at, now()),
                   current_evidence_packet_id = %s,
-                  current_display_title_id = %s,
+                  current_display_title_id = COALESCE(%s, current_display_title_id),
+                  supported_depths = %s,
                   quality_score = %s,
                   significance = %s,
                   field = %s,
@@ -543,7 +632,8 @@ def _store(
                 """,
                 (
                     packet_id,
-                    title_id if not title_problems else None,
+                    title_id,
+                    [layer.depth.value for layer in stored_layers],
                     scored.quality,
                     significance,
                     extracted.field,
@@ -551,15 +641,17 @@ def _store(
                     # Same shape run_ranking writes, so a row means the
                     # same thing whichever writer last touched it.
                     Jsonb(
-                        {
-                            "quality": round(scored.quality, 6),
-                            "offset_hours": round(scored.offset_hours, 2),
-                            "reasons": list(scored.reasons),
-                        }
+                        ranking_module.ranking_payload(
+                            scored,
+                            identity=density_identity,
+                            density_position=density_position,
+                        )
                     ),
                     story.story_id,
                 ),
             )
+
+    return make_current
 
 
 
@@ -570,13 +662,14 @@ class _Outcome:
 
     cost: float = 0.0
     generated: int = 0
-    declined: int = 0
+    explain_ineligible: int = 0
+    explain_failed: int = 0
     withheld: int = 0
     relabelled: int = 0
-    judged_out: int = 0
     technical: int = 0
-    technical_declined: int = 0
-    invalid: int = 0
+    technical_failed: int = 0
+    titles_generated: int = 0
+    title_failed: int = 0
     failed: int = 0
     # Why it failed. A bare count says a story did not make it and nothing
     # about whether the model refused, the call timed out, or the text was
@@ -588,6 +681,7 @@ def _present_one(
     connection: psycopg.Connection[Any],
     *,
     engine: Generator,
+    writer: Generator,
     story: PendingStory,
     now: datetime,
 ) -> _Outcome:
@@ -616,12 +710,13 @@ def _present_one(
         )
         return out
 
-    if _reconcile_content_type(
+    relabelled = _reconcile_content_type(
         connection,
         item_id=story.item_id,
         content_type=story.content_type,
         story_kind=extracted.story_kind,
-    ):
+    )
+    if relabelled:
         out.relabelled = 1
 
     if not extracted.worth_publishing:
@@ -638,123 +733,118 @@ def _present_one(
         out.withheld = 1
         return out
 
-    presentation = generate_presentation(
-        engine,
-        extracted,
-        source_name=story.source_name,
-        content_type=story.content_type,
-        text=story.text,
+    has_method = any(claim.kind.value == "method" for claim in extracted.claims)
+    content_type = "other" if relabelled else story.content_type
+    depths = planned_depths(
+        is_primary_material=story.is_primary_material and not relabelled,
+        text_sufficiency=story.text_sufficiency,
+        has_method=has_method,
     )
-    out.cost += presentation.completion.usage.cost(engine.model)
-    if not presentation.completion.ok:
+    if not depths:
+        # The queue excludes metadata and snippets. Keep this guard close to
+        # inference as well, so a directly requested stale story is not spent.
         out.failed = 1
-        out.reason = f"presentation: {presentation.completion.error}"
+        out.reason = "source is metadata or a snippet, not an article"
         return out
 
-    if presentation.glance_supported and presentation.glance.strip():
-        # The rung the product rests on, and until now the only one nothing
-        # guarded. Reviewed over 140 published stories, 9% needed the field to
-        # read and 11% opened by referring to something never introduced --
-        # "The key idea is to stabilize the algorithm", where no algorithm had
-        # been named. The prompt asks for a reader with no background in the
-        # field; nothing checked whether it got one.
-        readable = judge_readability(
-            engine,
-            title=presentation.display_title or story.title,
-            glance=presentation.glance,
-        )
-        out.cost += readable.completion.usage.cost(engine.model)
-        if not readable.plain:
-            # Withheld rather than shipped: a Glance a reader cannot follow is
-            # worse than no Glance, because the whole ladder promises this rung
-            # is the one that always lands.
-            presentation = present_module.Presentation(
-                **{
-                    **presentation.__dict__,
-                    "glance": "",
-                    "glance_supported": False,
-                }
-            )
-            out.judged_out += 1
-
-    if presentation.explain_supported and presentation.explain.strip():
-        # A third call, and the cheapest of the three: it reads the Explain
-        # alone, not the source. The writer decides whether the evidence carries
-        # a mechanism and, asked to write, tends to find that it does.
-        judgement = judge_mechanism(
-            engine,
-            title=presentation.display_title or story.title,
-            source_name=story.source_name,
-            explain=presentation.explain,
-        )
-        out.cost += judgement.completion.usage.cost(engine.model)
-        if not judgement.explains:
-            presentation = present_module.Presentation(
-                **{
-                    **presentation.__dict__,
-                    "explain": "",
-                    "explain_supported": False,
-                    "explain_declined_reason": declined_reason(judgement),
-                }
-            )
-            out.judged_out += 1
-
-    # Technical only where the gate found the text can carry it and the
-    # orientation above it stands. It is the most expensive call by far — it
-    # reads the whole document — so it is never spent on a story a reader
-    # cannot already orient in.
-    written: technical_module.Technical | None = None
-    if story.technical_eligible and presentation.valid:
-        written = generate_technical(
-            engine,
-            source_name=story.source_name,
-            content_type=story.content_type,
-            title=presentation.display_title or story.title,
+    layers = tuple(
+        generate_layer(
+            writer,
+            depth=depth,
+            content_type=content_type,
+            title=story.title,
             full_text=story.text,
-            structure=story.structure,
         )
-        out.cost += written.completion.usage.cost(engine.model)
-        if written.valid:
+        for depth in depths
+    )
+    for layer in layers:
+        out.cost += layer.completion.usage.cost(writer.model)
+
+    idea = next(
+        layer for layer in layers if layer.depth is ExplanationDepth.GLANCE
+    )
+    explain = next(
+        (layer for layer in layers if layer.depth is ExplanationDepth.EXPLAIN),
+        None,
+    )
+    technical = next(
+        (layer for layer in layers if layer.depth is ExplanationDepth.TECHNICAL),
+        None,
+    )
+    layer_errors: list[str] = []
+    if explain is None:
+        out.explain_ineligible = 1
+    elif not explain.valid:
+        out.explain_failed = 1
+        layer_errors.append(
+            f"explain: {explain.completion.error or 'empty output'}"
+        )
+    if technical is not None:
+        if technical.valid:
             out.technical = 1
-        elif written.completion.ok:
-            out.technical_declined = 1
+        else:
+            out.technical_failed = 1
+            layer_errors.append(
+                f"technical: {technical.completion.error or 'empty output'}"
+            )
+
+    if not idea.valid:
+        layer_errors.insert(0, f"idea: {idea.completion.error or 'empty output'}")
+
+    display_title: direct_module.DirectTitle | None = None
+    if idea.valid and direct_module.should_generate_title(content_type):
+        display_title = direct_module.generate_title(
+            writer,
+            source_title=story.title,
+            idea=idea.text,
+        )
+        out.cost += display_title.completion.usage.cost(writer.model)
+        if display_title.valid:
+            out.titles_generated = 1
+        else:
+            # The source title remains the safe fallback. A transient title
+            # failure must not withhold an otherwise complete explanation.
+            out.title_failed = 1
 
     # Whether the result would change what someone in the field does next. Its
-    # own call rather than a question bolted onto an existing one: the packet
-    # pass would be grading its own extraction, which is the failure the
-    # mechanism judge exists to prevent, and the mechanism judge reads our
-    # prose where this must read the evidence.
-    verdict = significance_module.judge_significance(
-        engine,
-        title=presentation.display_title or story.title,
-        source_name=story.source_name,
-        claims=[
-            significance_module.CandidateClaim(
-                claim_kind=claim.kind.value,
-                claim_text=claim.text,
-                excerpt=claim.excerpt,
-            )
-            for claim in extracted.claims
-        ],
+    # own call rather than a question bolted onto one of the writing prompts.
+    verdict = (
+        significance_module.judge_significance(
+            engine,
+            title=story.title,
+            source_name=story.source_name,
+            claims=[
+                significance_module.CandidateClaim(
+                    claim_kind=claim.kind.value,
+                    claim_text=claim.text,
+                    excerpt=claim.excerpt,
+                )
+                for claim in extracted.claims
+            ],
+        )
+        if idea.valid
+        else None
     )
-    out.cost += verdict.completion.usage.cost(engine.model)
+    if verdict is not None:
+        out.cost += verdict.completion.usage.cost(engine.model)
 
-    _store(
+    committed = _store(
         connection,
         story=story,
         extracted=extracted,
-        presentation=presentation,
-        technical=written,
-        significance=verdict.verdict,
-        model=engine.model,
+        layers=layers,
+        display_title=display_title,
+        significance=verdict.verdict if verdict is not None else "unclear",
+        model=writer.model,
         now=now,
     )
-    if presentation.valid:
+    if committed:
         out.generated = 1
-        if not presentation.explain_supported:
-            out.declined = 1
+        if layer_errors:
+            out.reason = "; ".join(layer_errors)
     else:
-        out.invalid = 1
+        out.failed = 1
+        out.reason = "; ".join(layer_errors) or "eligible depth was not generated"
     return out
 
 
@@ -766,6 +856,7 @@ def run_generation(
     regenerate: bool = False,
     generator: Generator | None = None,
     story_ids: Sequence[UUID] | None = None,
+    source: str | None = None,
     workers: int = 1,
 ) -> GenerationRunResult:
     """Extract an evidence packet, then write the layers it can support.
@@ -783,6 +874,15 @@ def run_generation(
     """
 
     engine = generator or CodexGenerator(model=model or CodexGenerator.model)
+    # The three prompts were evaluated with Luna at low effort. Packet
+    # extraction and significance keep their existing effort; only the prose
+    # path uses the tested setting. A supplied generator remains fully under
+    # its caller's control.
+    writer: Generator = (
+        engine
+        if generator is not None
+        else CodexGenerator(model=engine.model, effort="low")
+    )
     now = datetime.now(UTC)
     totals = _Outcome()
     errors: list[str] = []
@@ -797,20 +897,31 @@ def run_generation(
             )
             run_id = cast(UUID, _one(cursor)[0])
 
-        reopened = reconsider_withheld(connection)
+        # Reconsidering an old taxonomy is corpus maintenance, not a property
+        # of presenting one requested story. Applying it before the ID filter
+        # made a surgical run mutate hundreds of unrelated rows.
+        reopened = (
+            reconsider_withheld(connection, source=source)
+            if story_ids is None
+            else 0
+        )
         if reopened:
             print(  # noqa: T201
                 f"reopened {reopened} stories withheld by an older classifier"
             )
 
         pending = list_stories_needing_presentations(
-            connection, limit=limit, regenerate=regenerate, story_ids=story_ids
+            connection,
+            limit=limit,
+            regenerate=regenerate,
+            story_ids=story_ids,
+            source=source,
         )
         def present(story: PendingStory) -> tuple[PendingStory, _Outcome | Exception]:
             try:
                 with psycopg.connect(database_url, autocommit=True) as own:
                     return story, _present_one(
-                        own, engine=engine, story=story, now=now
+                        own, engine=engine, writer=writer, story=story, now=now
                     )
             except Exception as error:  # noqa: BLE001 — one story cannot end a run
                 # Hours of subprocess calls should not be lost, along with every
@@ -833,13 +944,14 @@ def run_generation(
 
                 totals.cost += outcome.cost
                 totals.generated += outcome.generated
-                totals.declined += outcome.declined
+                totals.explain_ineligible += outcome.explain_ineligible
+                totals.explain_failed += outcome.explain_failed
                 totals.withheld += outcome.withheld
                 totals.relabelled += outcome.relabelled
-                totals.judged_out += outcome.judged_out
                 totals.technical += outcome.technical
-                totals.technical_declined += outcome.technical_declined
-                totals.invalid += outcome.invalid
+                totals.technical_failed += outcome.technical_failed
+                totals.titles_generated += outcome.titles_generated
+                totals.title_failed += outcome.title_failed
                 totals.failed += outcome.failed
                 if outcome.reason:
                     errors.append(f"{story.story_id}: {outcome.reason}")
@@ -856,14 +968,15 @@ def run_generation(
         counters: dict[str, Any] = {
             "attempted": len(pending),
             "generated": totals.generated,
-            "declined_explain": totals.declined,
+            "explain_ineligible": totals.explain_ineligible,
+            "explain_failed": totals.explain_failed,
             "withheld_kind": totals.withheld,
             "reopened": reopened,
             "relabelled": totals.relabelled,
-            "judged_out": totals.judged_out,
             "technical": totals.technical,
-            "technical_declined": totals.technical_declined,
-            "invalid": totals.invalid,
+            "technical_failed": totals.technical_failed,
+            "titles_generated": totals.titles_generated,
+            "title_failed": totals.title_failed,
             "failed": totals.failed,
             "cost_usd": round(totals.cost, 4),
         }
@@ -887,13 +1000,14 @@ def run_generation(
     return GenerationRunResult(
         attempted=len(pending),
         generated=totals.generated,
-        declined_explain=totals.declined,
+        explain_ineligible=totals.explain_ineligible,
+        explain_failed=totals.explain_failed,
         withheld_kind=totals.withheld,
         relabelled=totals.relabelled,
-        judged_out=totals.judged_out,
         technical=totals.technical,
-        technical_declined=totals.technical_declined,
-        invalid=totals.invalid,
+        technical_failed=totals.technical_failed,
+        titles_generated=totals.titles_generated,
+        title_failed=totals.title_failed,
         failed=totals.failed,
         cost_usd=round(totals.cost, 4),
     )

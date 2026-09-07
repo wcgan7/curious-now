@@ -47,7 +47,24 @@ def plan_explanations(
             skipped_reasons=dict.fromkeys(ExplanationDepth, reason),
         )
 
+    if packet.text_sufficiency in {
+        AccessClass.METADATA_ONLY,
+        AccessClass.SNIPPET,
+    }:
+        reason = "metadata or snippet is insufficient for an article"
+        return ExplanationPlan(
+            story_id=story.story_id,
+            evidence_packet_id=packet.packet_id,
+            depths=(),
+            skipped_reasons=dict.fromkeys(ExplanationDepth, reason),
+        )
+
     kinds = {claim.kind for claim in packet.claims}
+    packet_items = packet.cited_item_ids
+    packet_has_primary = any(
+        item.item_id in packet_items and item.is_primary_material
+        for item in story.items
+    )
     depths: list[ExplanationDepth] = []
     skipped: dict[ExplanationDepth, str] = {}
 
@@ -66,27 +83,28 @@ def plan_explanations(
     # constrains the text without gating whether Explain exists.
     if ExplanationDepth.GLANCE not in depths:
         skipped[ExplanationDepth.EXPLAIN] = "no orientation to expand"
-    elif packet.text_sufficiency is AccessClass.METADATA_ONLY:
-        skipped[ExplanationDepth.EXPLAIN] = "metadata-only evidence is insufficient"
-    elif ClaimKind.METHOD not in kinds:
+    elif (
+        ClaimKind.METHOD not in kinds
+        and not (
+            packet_has_primary
+            and packet.text_sufficiency is AccessClass.OPEN_FULL_TEXT
+        )
+    ):
         skipped[ExplanationDepth.EXPLAIN] = (
             "evidence lacks mechanism; nothing to explain how it works"
         )
     else:
         depths.append(ExplanationDepth.EXPLAIN)
 
-    # Technical inspects the work itself, so it needs primary material and
-    # enough accessible text to cite sections, figures, and tables.
-    if not story.has_primary_material:
-        skipped[ExplanationDepth.TECHNICAL] = "story has no primary material"
+    # Technical is a direct summary of the work itself, so it needs the work:
+    # open primary material. It is independent of whether an intermediate
+    # Explain was useful or successfully generated.
+    if not packet_has_primary:
+        skipped[ExplanationDepth.TECHNICAL] = (
+            "this evidence packet is not grounded in primary material"
+        )
     elif packet.text_sufficiency is not AccessClass.OPEN_FULL_TEXT:
         skipped[ExplanationDepth.TECHNICAL] = "open primary text is unavailable"
-    elif ExplanationDepth.EXPLAIN not in depths:
-        skipped[ExplanationDepth.TECHNICAL] = (
-            "no orientation established to go deeper from"
-        )
-    elif ClaimKind.RESULT not in kinds:
-        skipped[ExplanationDepth.TECHNICAL] = "evidence lacks reported results"
     else:
         depths.append(ExplanationDepth.TECHNICAL)
 

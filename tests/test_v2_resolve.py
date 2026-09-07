@@ -335,7 +335,7 @@ def test_an_item_with_no_url_or_identifier_resolves_to_not_found() -> None:
     assert resolution.status is ResolutionStatus.NOT_FOUND
 
 
-def test_a_short_page_resolves_as_abstract_rather_than_full_text() -> None:
+def test_a_short_but_complete_page_remains_full_text() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         maybe = robots(request)
         if maybe is not None:
@@ -350,7 +350,53 @@ def test_a_short_page_resolves_as_abstract_rather_than_full_text() -> None:
         resolution = resolve_item_text(fetcher, url="https://www.bbc.co.uk/news/x")
 
     assert resolution.status is ResolutionStatus.OK
+    assert resolution.kind is TextKind.FULL_TEXT
+
+
+def test_a_paper_landing_page_remains_an_abstract_fallback() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        maybe = robots(request)
+        if maybe is not None:
+            return maybe
+        return httpx.Response(
+            200,
+            content=fixture_text("medrxiv_article_html").encode(),
+            headers={"content-type": "text/html; charset=utf-8"},
+        )
+
+    with build_fetcher(handler) as fetcher:
+        resolution = resolve_item_text(
+            fetcher,
+            url="https://publisher.test/paper",
+            is_paper=True,
+        )
+
+    assert resolution.status is ResolutionStatus.OK
     assert resolution.kind is TextKind.ABSTRACT
+
+
+def test_a_complete_report_page_is_full_text_without_a_length_quota() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        maybe = robots(request)
+        if maybe is not None:
+            return maybe
+        return httpx.Response(
+            200,
+            content=fixture_text("bbc_news_html").encode(),
+            headers={"content-type": "text/html; charset=utf-8"},
+        )
+
+    with build_fetcher(handler) as fetcher:
+        # Reports and datasets use the same primary-document discovery path as
+        # papers, but their own page can be the complete work.
+        resolution = resolve_item_text(
+            fetcher,
+            url="https://agency.test/report",
+            is_paper=True,
+        )
+
+    assert resolution.status is ResolutionStatus.OK
+    assert resolution.kind is TextKind.FULL_TEXT
 
 
 def test_every_attempt_is_recorded_for_the_operator() -> None:

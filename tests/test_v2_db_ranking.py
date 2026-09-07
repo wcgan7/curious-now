@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
 
 import psycopg
 import pytest
 
-from curious_now_v2.db.ranking import published_inputs, run_ranking
-from curious_now_v2.pipeline.scoring import FRESHNESS_HALF_LIFE_HOURS
+from curious_now_v2.db.ranking import (
+    density_identity,
+    published_inputs,
+    reserve_density_position,
+    run_ranking,
+)
+from curious_now_v2.pipeline.scoring import (
+    QUALITY_BY_RUNGS,
+    QUALITY_BY_SIGNIFICANCE,
+)
 
 DATABASE_URL = os.environ.get("CURIOUS_NOW_V2_DATABASE_URL")
 
@@ -86,6 +93,24 @@ def test_a_story_with_no_verdict_is_read_as_unclear_not_as_missing(conn) -> None
         assert entry.significance in {"changes_practice", "incremental", "unclear"}
 
 
+def test_publication_reuses_an_existing_density_reservation(conn) -> None:
+    entry = published_inputs(conn, limit=1)[0]
+    identity = density_identity(
+        source_name=entry.source_name,
+        field=entry.field,
+        published_at=entry.published_at,
+    )
+
+    with conn.cursor() as cursor:
+        position = reserve_density_position(
+            cursor,
+            story_id=entry.story_id,
+            identity=identity,
+        )
+
+    assert position == entry.stored_density_position
+
+
 def test_recomputing_is_idempotent(conn) -> None:
     """The key depends only on things that do not move, so it must not drift.
 
@@ -144,8 +169,8 @@ def test_the_key_is_never_later_than_the_publication_date(conn) -> None:
         assert cur.fetchone()[0] == 0
 
 
-def test_the_worst_story_is_shifted_by_roughly_a_fortnight(conn) -> None:
-    """Ties the stored data to the calibration, so a table change is visible."""
+def test_stored_quality_stays_inside_the_calibrated_range(conn) -> None:
+    """A corpus need not happen to contain every theoretical quality band."""
 
     with conn.cursor() as cur:
         cur.execute(
@@ -154,7 +179,8 @@ def test_the_worst_story_is_shifted_by_roughly_a_fortnight(conn) -> None:
         )
         worst, best = cur.fetchone()
 
-    from math import log
-
-    shift_hours = FRESHNESS_HALF_LIFE_HOURS * log(best / worst)
-    assert timedelta(days=11) < timedelta(hours=shift_hours) < timedelta(days=15)
+    floor = min(QUALITY_BY_RUNGS.values()) * min(QUALITY_BY_SIGNIFICANCE.values())
+    ceiling = max(QUALITY_BY_RUNGS.values()) * max(
+        QUALITY_BY_SIGNIFICANCE.values()
+    )
+    assert floor <= worst <= best <= ceiling

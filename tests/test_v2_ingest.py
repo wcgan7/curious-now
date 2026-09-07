@@ -81,6 +81,29 @@ def test_normalize_entry_produces_an_exact_idempotency_key() -> None:
     assert candidate.access_class is AccessClass.SNIPPET
 
 
+def test_entry_category_can_type_an_item_from_a_mixed_journal_feed() -> None:
+    entry = RawFeedEntry(
+        source_id=uuid4(),
+        source_name="Mixed Journal",
+        source_role=SourceRole.PRIMARY_RESEARCH,
+        title="A measured bioengineering result",
+        url="https://example.test/articles/42",
+        default_content_type=ContentType.OTHER,
+        content_type_rules=(
+            ContentTypeRule(
+                pattern="Original Research",
+                content_type=ContentType.PEER_REVIEWED,
+            ),
+        ),
+        content_type_hints=("Original Research",),
+    )
+
+    candidate = normalize_entry(entry)
+
+    assert candidate.content_type is ContentType.PEER_REVIEWED
+    assert candidate.content_type_basis == "source_pattern"
+
+
 def test_checked_in_source_registry_is_valid_and_diverse() -> None:
     registry_path = (
         Path(__file__).parents[1] / "config" / "v2" / "sources.json"

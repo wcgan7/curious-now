@@ -4,20 +4,20 @@ Curious Now is a calm, continuously updated science feed. It collects research,
 science journalism, and frontier-lab publications; groups duplicate coverage into
 canonical stories; and explains each story at the depth the reader wants.
 
-The v2 product has a progressive four-layer presentation:
+The v2 product has three independent reading depths under a reader-facing title:
 
 ```text
-Title -> Glance and/or Explain -> Technical
+Idea -> Explain -> Technical
 ```
 
-- **Title** supports fast, calm discovery in the feed.
-- **Glance** gives a newcomer the simplest accurate intuition.
-- **Explain** gives a field-aware reader the important terminology and detail.
-- **Technical** investigates methods, evidence, results, and limitations.
+- **Idea** gives a newcomer the intuition in a short paragraph.
+- **Explain** gives a fuller intuitive account.
+- **Technical** gives a technical but intuitive summary of the contribution.
 
-All layers derive from one versioned evidence packet and conceptual spine. Every
-published story keeps its original source titles visible, and stories can appear in
-evidence-only mode when AI enrichment is unavailable.
+Each layer is generated directly from the retrieved source text and records its
+evidence-packet and prompt version. Technical works receive an intuitive display
+title from the completed Idea; news keeps its original headline, and every source
+title remains visible. Metadata and snippets alone are not treated as articles.
 
 ## V2 status
 
@@ -36,7 +36,8 @@ The v2 source of truth is:
 
 The first executable slice is in place:
 
-- a versioned registry with 15 sources and 16 feeds;
+- a versioned registry spanning primary research, journalism, institutions,
+  and public agencies;
 - deterministic feed parsing, URL normalization, and identifier extraction;
 - a fresh PostgreSQL schema and idempotent migration command;
 - evidence-packet, explanation-depth, publication, and reader contracts;

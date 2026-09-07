@@ -41,6 +41,7 @@ def test_exact_paper_ids_cluster_two_items_into_one_evidence_only_story() -> Non
     feed = FeedSpec(
         url=f"https://example.test/{suffix}/feed.xml",
         default_content_type=ContentType.PREPRINT,
+        max_entries=7,
     )
     source = SourceSpec(
         name=f"Integration preprints {suffix}",
@@ -60,6 +61,7 @@ def test_exact_paper_ids_cluster_two_items_into_one_evidence_only_story() -> Non
         now = datetime.now(UTC)
         due_feeds = list_due_feeds(connection, now=now, limit=100)
         due = next(value for value in due_feeds if value.feed.url == feed.url)
+        assert due.feed.max_entries == 7
 
         entries = (
             RawFeedEntry(

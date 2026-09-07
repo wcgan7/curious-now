@@ -12,6 +12,7 @@ from curious_now_v2.retrieval.extract_arxiv import extract_arxiv_html
 from curious_now_v2.retrieval.extract_jats import extract_jats
 from curious_now_v2.retrieval.extract_pdf import extract_pdf
 from curious_now_v2.retrieval.fetch import Fetcher, FetchOutcome
+from curious_now_v2.retrieval.images import extract_html_preview_image
 from curious_now_v2.retrieval.quality import TextVerdict, assess_text
 from curious_now_v2.retrieval.select import (
     ScoredDocument,
@@ -45,6 +46,7 @@ class Candidate:
     url: str
     source: str
     parser: str
+    expected_kind: TextKind | None = None
     open_access: bool = True
     licence: str | None = None
 
@@ -90,6 +92,7 @@ class Resolution:
     attempted: tuple[str, ...] = field(default_factory=tuple)
     reasons: tuple[str, ...] = field(default_factory=tuple)
     error: str | None = None
+    image_url: str | None = None
 
     @property
     def text(self) -> str:
@@ -149,6 +152,9 @@ def _openalex_locations(fetcher: Fetcher, doi: str) -> tuple[Candidate, ...]:
                     url=url,
                     source=source,
                     parser=parser,
+                    expected_kind=(
+                        TextKind.FULL_TEXT if parser == "pdf" else None
+                    ),
                     licence=licence,
                 )
             )
@@ -205,6 +211,7 @@ def _publisher_native(*, url: str, doi: str | None) -> tuple[Candidate, ...]:
                     ),
                     source="plos_jats",
                     parser="jats",
+                    expected_kind=TextKind.FULL_TEXT,
                     licence="cc-by",
                 )
             )
@@ -217,6 +224,7 @@ def _publisher_native(*, url: str, doi: str | None) -> tuple[Candidate, ...]:
                 url=f"https://elifesciences.org/articles/{match.group(1)}.xml",
                 source="elife_jats",
                 parser="jats",
+                expected_kind=TextKind.FULL_TEXT,
                 licence="cc-by",
             )
         )
@@ -237,6 +245,7 @@ def _publisher_native(*, url: str, doi: str | None) -> tuple[Candidate, ...]:
                 url=urlunsplit((parts.scheme, parts.netloc, path, "", "")),
                 source=f"{match.group(1).casefold()}rxiv_pdf",
                 parser="pdf",
+                expected_kind=TextKind.FULL_TEXT,
             )
         )
 
@@ -267,6 +276,7 @@ def discover_candidates(
                 url=f"https://arxiv.org/html/{bare}",
                 source="arxiv_html",
                 parser="arxiv",
+                expected_kind=TextKind.FULL_TEXT,
             )
         )
         candidates.append(
@@ -274,6 +284,7 @@ def discover_candidates(
                 url=f"https://arxiv.org/pdf/{bare}",
                 source="arxiv_pdf",
                 parser="pdf",
+                expected_kind=TextKind.FULL_TEXT,
             )
         )
 
@@ -286,6 +297,7 @@ def discover_candidates(
                     url=EUROPE_PMC_FULLTEXT.format(pmcid=pmcid),
                     source="pmc_jats",
                     parser="jats",
+                    expected_kind=TextKind.FULL_TEXT,
                 ),
             )
         candidates.extend(_openalex_locations(fetcher, doi))
@@ -323,10 +335,44 @@ def _parse(candidate: Candidate, body: bytes, text: str) -> Document:
         # asked for is the one the paths are relative to.
         return extract_arxiv_html(text, base_url=candidate.url)
     if candidate.parser == "jats":
-        return extract_jats(text)
+        return extract_jats(
+            text,
+            source=candidate.source,
+            base_url=candidate.url,
+        )
     if candidate.parser == "pdf":
         return extract_pdf(body)
     return extract_article(text)
+
+
+def _kind_of(candidate: Candidate, document: Document) -> TextKind:
+    """What this response actually contains, separate from access rights."""
+
+    if candidate.expected_kind is not None:
+        return candidate.expected_kind
+    # HTML landing pages are ambiguous. The article extractor separates a
+    # labelled abstract from body prose, so this is direct parsed evidence
+    # rather than a length/heading quota. A report or dataset page with a real
+    # body remains full text; a preprint landing page containing only its
+    # abstract does not.
+    if document.abstract and not document.body_text.strip():
+        return TextKind.ABSTRACT
+    return TextKind.FULL_TEXT
+
+
+def _preview_image(fetches: list[RawFetch]) -> str | None:
+    """Recover a declared article preview from bodies already fetched."""
+
+    for fetch in fetches:
+        if fetch.parser != "article" or not fetch.body:
+            continue
+        image = extract_html_preview_image(
+            fetch.body.decode("utf-8", errors="replace"),
+            base_url=fetch.final_url or fetch.url,
+        )
+        if image:
+            return image
+    return None
 
 
 def resolve_item_text(
@@ -356,6 +402,7 @@ def resolve_item_text(
     scored: list[ScoredDocument] = []
     attempted: list[str] = []
     licences: dict[str, str | None] = {}
+    scored_kinds: list[tuple[ScoredDocument, TextKind]] = []
     outcomes: list[str] = []
     fetches: list[RawFetch] = []
 
@@ -400,6 +447,7 @@ def resolve_item_text(
 
         entry = score_document(document, source=candidate.source)
         licences[candidate.source] = candidate.licence
+        scored_kinds.append((entry, _kind_of(candidate, document)))
         scored.append(entry)
         outcomes.append(f"{candidate.source}: scored {entry.score:.2f}")
         if is_good_enough(entry):
@@ -422,16 +470,13 @@ def resolve_item_text(
             attempted=tuple(attempted),
             reasons=tuple(outcomes),
             error="; ".join(outcomes[:3]) or "no candidate produced text",
+            image_url=_preview_image(fetches),
         )
 
-    assessment = assess_text(
-        best.document.text, has_structure=best.document.has_structure
-    )
-    kind = (
-        TextKind.FULL_TEXT
-        if best.document.sections and assessment.words >= 600
-        else TextKind.ABSTRACT
-    )
+    # Structure and length help choose between copies, but neither decides
+    # completeness. That comes from the route and the parsed abstract/body
+    # distinction above. Tiny/stub text was already rejected by assess_text.
+    kind = next(kind for entry, kind in scored_kinds if entry is best)
 
     # The winner's bibliography if it has one, otherwise the best-scoring
     # candidate that does. Every candidate is a copy of the same article, so a
@@ -459,4 +504,5 @@ def resolve_item_text(
         fetches=tuple(fetches),
         attempted=tuple(attempted),
         reasons=(*outcomes, *best.reasons),
+        image_url=_preview_image(fetches),
     )

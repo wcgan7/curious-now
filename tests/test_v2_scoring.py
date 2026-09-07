@@ -10,6 +10,8 @@ from curious_now_v2.pipeline.scoring import (
     QUALITY_BY_RUNGS,
     QUALITY_BY_SIGNIFICANCE,
     ROTATION_SECONDS,
+    SOURCE_DENSITY_STRENGTH,
+    completion_rungs,
     score_story,
 )
 
@@ -224,3 +226,67 @@ def test_a_negative_position_cannot_promote_a_story() -> None:
         ).effective_at
         <= WHEN
     )
+
+
+def test_first_story_in_a_source_category_day_pays_no_density_cost() -> None:
+    plain = score_story(
+        published_at=WHEN, rungs_earned=3, significance="changes_practice"
+    )
+    first = score_story(
+        published_at=WHEN,
+        rungs_earned=3,
+        significance="changes_practice",
+        density_position=0,
+    )
+
+    assert first.effective_at == plain.effective_at
+    assert first.density_factor == 1.0
+    assert first.density_offset_hours == 0.0
+
+
+def test_density_cost_grows_smoothly_without_changing_quality() -> None:
+    first = score_story(
+        published_at=WHEN, rungs_earned=3, significance="changes_practice"
+    )
+    second = score_story(
+        published_at=WHEN,
+        rungs_earned=3,
+        significance="changes_practice",
+        density_position=1,
+    )
+    third = score_story(
+        published_at=WHEN,
+        rungs_earned=3,
+        significance="changes_practice",
+        density_position=2,
+    )
+
+    assert second.density_factor == pytest.approx(
+        1 / (1 + SOURCE_DENSITY_STRENGTH)
+    )
+    assert first.effective_at > second.effective_at > third.effective_at
+    assert (first.effective_at - second.effective_at).total_seconds() == pytest.approx(
+        timedelta(hours=16.01).total_seconds(), abs=60
+    )
+    assert second.quality == first.quality
+    assert second.offset_hours == first.offset_hours
+    assert second.reasons == first.reasons
+
+
+def test_negative_density_position_cannot_promote_a_story() -> None:
+    assert score_story(
+        published_at=WHEN,
+        rungs_earned=3,
+        significance="changes_practice",
+        density_position=-5,
+    ).effective_at == WHEN
+
+
+@pytest.mark.parametrize(
+    ("valid", "eligible", "band"),
+    [(1, 1, 3), (2, 2, 3), (3, 3, 3), (2, 3, 2), (1, 2, 2), (1, 3, 1)],
+)
+def test_completion_is_relative_to_eligible_depths(
+    valid: int, eligible: int, band: int
+) -> None:
+    assert completion_rungs(valid_depths=valid, eligible_depths=eligible) == band

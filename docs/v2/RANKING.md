@@ -13,11 +13,9 @@ retrieval** captured), and corroboration (how many outlets picked it up). Three
 of the four describe our own machinery. None of them read the paper.
 
 Meanwhile the pipeline read every word: it extracted claims against evidence,
-ran a second judge over whether Explain states a mechanism, and wrote a
-Technical walkthrough whose citations were validated against recoverable figure
-labels. Ranking consults none of it. A story that earned all four rungs and one
-that managed two are indistinguishable to the feed unless their content types
-happen to differ.
+classified the available evidence and generated the depths that source could
+support. Ranking consults whether eligible generation completed, rather than
+rewarding a source merely for being long enough to support more layers.
 
 **And freshness cannot be stored.** At an 18-hour half-life a written score is
 wrong within hours, so scheduling `run_ranking` after generation shortens the
@@ -28,22 +26,11 @@ window in which the feed is wrong without closing it.
 Only signals the pipeline already produced and already validated. Each was
 checked against the 168 published stories before being kept.
 
-**Rungs earned — kept.** The one signal that discriminates.
-
-```
-1 depth:  20 stories (12%)
-2 depths: 96 stories (57%)
-3 depths: 52 stories (31%)
-
-explain    138 valid,  30 failed
-technical   62 valid,  10 failed
-```
-
-This is earned, not asserted. A story reaches three rungs only if its Explain
-survived a judge that had to quote the mechanism sentence verbatim, and its
-Technical cited figures that exist in the document. The thirty failures are
-recorded with their reasons — "judged a capability list rather than a
-mechanism" — which is a real editorial verdict about the source's substance.
+**Eligible-depth completion — kept.** A complete Idea-only news story and a
+complete three-layer paper both receive the top band. Lower bands mean a model
+call failed for a depth that the selected source was capable of supporting.
+This measures pipeline completeness without turning source complexity into a
+quality judgement.
 
 **Claim kinds — rejected.** 165 of 168 packets carry a `result` claim. At 98%
 prevalence it separates nothing. `limitation` (73%) and `uncertainty` (79%)
@@ -61,9 +48,9 @@ whether our fetcher succeeded.
 ## Quality
 
 ```
-Q = QUALITY_BY_RUNGS[rungs_earned] x QUALITY_BY_SIGNIFICANCE[verdict]
+Q = QUALITY_BY_RUNGS[completion_band] x QUALITY_BY_SIGNIFICANCE[verdict]
 
-rungs         3 -> 1.00   2 -> 0.70   1 -> 0.45
+completion    3 -> 1.00   2 -> 0.70   1 -> 0.45
 significance  changes_practice -> 1.00   incremental -> 0.55   unclear -> 0.35
 ```
 
@@ -71,10 +58,10 @@ Both are tables rather than formulas, because neither approximates an
 underlying continuous quantity and pretending otherwise would invite false
 precision.
 
-Significance is weighted harder than rungs deliberately: rungs measure how well
-we could explain a paper, significance measures whether it mattered, and the
-second is the editorial question this feed exists to answer. A one-rung paper
-that changes practice therefore outranks a three-rung paper that does not.
+Significance is weighted harder than completion deliberately: completion
+measures whether our pipeline finished its eligible work, while significance
+measures whether the result mattered, and the second is the editorial question
+this feed exists to answer.
 
 ## Provenance is not quality, and stops being folded in
 
@@ -140,6 +127,24 @@ eligibility and sets `draft`.
 for the one case that needs it: a change to the table or the half-life, which
 invalidates every key at once.
 
+## Composition is not quality
+
+The final shelf is not a single top-N query. The reader selects two independent
+lanes using the grounding item: journalism and news-like document types are
+accessible; primary research and other document types are technical. It keeps
+the stored `effective_at` order inside each lane, deals principal sources
+round-robin inside the selected batch, and interleaves two technical stories
+for every accessible one. A twenty-story page therefore normally contains
+fourteen technical and six accessible stories, with either lane allowed to
+fill spare positions if the other runs out.
+
+Both lanes carry independent keyset cursors. This is essential: advancing one
+global cursor past the fourteen selected technical rows would silently discard
+accessible rows that ranked between them. Composition belongs at read time
+because it describes the shelf, while `effective_at` describes the individual
+story; neither source repetition nor readable format is a defect in a story's
+quality score.
+
 ## Significance
 
 Three levels is coarse. The obvious remedy is to ask the model, and the obvious
@@ -175,34 +180,48 @@ for everything published so far.
 
 ## Variety
 
-The damper leaves the score. It multiplies by `0.45 ** repetition` counted
-**within a ranking pass**, so two stories of identical merit take different
-permanent scores depending on which batch ranked them. That is not a property
-of a story.
+Interleaving only rearranges the rows already inside one page. It cannot repair
+a page whose ranked candidate set contains nineteen arXiv ML stories and one
+other source, which is the measured shape of the 998-story corpus.
 
-Removing it leaves real clumping — the corpus has source-days of up to 10
-published stories. **Phase one removes it and does nothing else**, so the shape
-can be seen before it is designed against.
+The assembly adjustment is therefore **source/category/day density**. Within a
+cohort, stories take append-only positions in publication order and receive:
 
-**Phase two diversifies at assembly**: paginate by `effective_at` so each story
-falls on exactly one page, then interleave by source within the page. The page
-boundary stays keyset-stable while reading order spreads sources out.
+```
+D(position) = 1 / (1 + 0.1 * position)
+effective_at = published_at + h*ln(Q) + h*ln(D)
+```
 
-If that proves insufficient, the escalation is **source-day density** — shift
-`effective_at` back by `h · ln(1 / (1 + λ(n − 1)))` for `n` same-source stories
-published that day. It is a stable property of a story's context rather than of
-a batch, but the day's output is not known until the day closes, so it would
-need finalising once after the fact. That is why it is the fallback.
+Position zero — the source's first story in that reader category that day — is
+untouched. Position one moves back about 16 hours, position two about 31 hours,
+and the curve continues smoothly. There is no quota: freshness and quality can
+still overcome repetition. `D` stays outside `quality` because repetition is a
+property of assembly, not a judgement about the work.
+
+The category is part of the cohort because one source covering two genuinely
+different fields should not make either story redundant. A 2026-08 simulation
+compared whole-day, progressive-day, weekly and category-aware variants. The
+chosen append-stable rule changed the first page from 2 to 12 sources, reduced
+the largest source from 19/20 to 6/20, and represented all eight categories.
+Every selected story remained in the top quality and significance band; median
+age moved from 0.5 to 0.7 days.
+
+The position and its identity are stored in `ranking_reasons`. Regeneration in
+the same cohort reuses the position, concurrent publishers reserve positions
+under a cohort-scoped advisory lock, and a recompute preserves stored positions
+while appending anything new. Keyset pagination therefore remains stable.
 
 ## What changes
 
 1. **Migration**: add `quality_score DOUBLE PRECISION` and
    `effective_at TIMESTAMPTZ`; index `(effective_at DESC, id DESC)
    WHERE status = 'published'`. Retire `feed_score` after the reader moves.
-2. **`pipeline/ranking.py`**: `Q` from rungs earned; drop evidence, primary,
-   corroboration, text, and the variety damper.
-3. **`db/generation.py`**: write the key alongside `status = 'published'`.
-4. **`db/ranking.py`**: `run_ranking` becomes an explicit recompute.
+2. **`pipeline/scoring.py`**: `Q` from eligible-depth completion; drop evidence,
+   primary, corroboration and text; apply density outside `Q`.
+3. **`db/generation.py`**: reserve the append-only density position and write
+   the key alongside `status = 'published'`.
+4. **`db/ranking.py`**: preserve stored density positions during an explicit
+   recompute and append any unpositioned stories.
 5. **Reader**: order and paginate on `(effective_at, id)`; show provenance as a
    badge rather than as an input to the score.
 6. **Backfill**: one recompute over the 168 already published.

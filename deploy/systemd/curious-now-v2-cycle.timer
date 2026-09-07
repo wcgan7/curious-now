@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Curious Now v2 pipeline every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+RandomizedDelaySec=1m
+AccuracySec=1m
+Unit=curious-now-v2-cycle.service
+
+[Install]
+WantedBy=timers.target
+

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { spreadSources } from "@/lib/spread";
+import { mixFormats, spreadSources } from "@/lib/spread";
 import type { FeedStory } from "@/lib/types";
 
 function story(id: string, sourceName: string): FeedStory {
@@ -74,5 +74,38 @@ describe("spreadSources", () => {
 
   it("returns an empty page unchanged", () => {
     expect(spreadSources([])).toEqual([]);
+  });
+});
+
+describe("mixFormats", () => {
+  it("places one accessible story after every two technical stories", () => {
+    expect(
+      mixFormats(["t1", "t2", "t3", "t4"], ["n1", "n2"]),
+    ).toEqual(["t1", "t2", "n1", "t3", "t4", "n2"]);
+  });
+
+  it("preserves each lane's ranking", () => {
+    const mixed = mixFormats(["t1", "t2", "t3"], ["n1", "n2", "n3"]);
+
+    expect(mixed.filter((value) => value.startsWith("t"))).toEqual([
+      "t1",
+      "t2",
+      "t3",
+    ]);
+    expect(mixed.filter((value) => value.startsWith("n"))).toEqual([
+      "n1",
+      "n2",
+      "n3",
+    ]);
+  });
+
+  it("fills from the remaining lane when one is exhausted", () => {
+    expect(mixFormats(["t1"], ["n1", "n2", "n3"])).toEqual([
+      "t1",
+      "n1",
+      "n2",
+      "n3",
+    ]);
+    expect(mixFormats(["t1", "t2"], [])).toEqual(["t1", "t2"]);
   });
 });

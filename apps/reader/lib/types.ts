@@ -21,6 +21,17 @@ export type ContentType =
 export type ExplanationDepth = "glance" | "explain" | "technical";
 export type ReaderMode = "evidence_only" | "enriched";
 
+export interface ProseFragment {
+  text: string;
+  html: string;
+}
+
+export type ProseBlock =
+  | { kind: "paragraph"; value: ProseFragment }
+  | { kind: "heading"; level: 2 | 3; value: ProseFragment }
+  | { kind: "quote"; value: ProseFragment }
+  | { kind: "list"; ordered: boolean; items: ProseFragment[] };
+
 export type ContentTypeBasis =
   | "feed_default"
   | "feed_unmatched"
@@ -34,6 +45,9 @@ export interface SourceLink {
   sourceRole: SourceRole;
   storyRole: string;
   title: string;
+  // Server-rendered KaTeX with all surrounding prose escaped. Optional so a
+  // feed cached before title typesetting shipped still renders as plain text.
+  titleHtml?: string;
   url: string;
   contentType: ContentType;
   // Where contentType came from. 'feed_unmatched' means the feed carries
@@ -65,6 +79,7 @@ export interface SourceLink {
 export interface FeedStory {
   id: string;
   title: string;
+  titleHtml?: string;
   publishedAt: string;
   sources: SourceLink[];
 }
@@ -95,6 +110,7 @@ export interface Explanation {
   plainText: string | null;
   // The same prose with its mathematics typeset, rendered on the server.
   html: string | null;
+  blocks: ProseBlock[];
   content: Record<string, unknown>;
 }
 

@@ -79,14 +79,12 @@ def gate_story(items: tuple[ItemText, ...]) -> StoryGate:
         )
 
     item, assessment = max(
-        candidates, key=lambda entry: len(entry[1].supported_depths)
+        candidates,
+        # Depth is planned after evidence extraction now. At retrieval time,
+        # prefer primary material and then the richest usable body.
+        key=lambda entry: (entry[0].is_primary_material, entry[1].words),
     )
     depths = list(assessment.supported_depths)
-
-    # Technical inspects the work itself, so it needs primary material, not
-    # coverage of it — however well that coverage is written.
-    if ExplanationDepth.TECHNICAL in depths and not item.is_primary_material:
-        depths.remove(ExplanationDepth.TECHNICAL)
 
     reasons = [
         f"grounded in {item.source_name} ({assessment.words} words)",

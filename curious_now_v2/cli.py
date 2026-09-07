@@ -10,6 +10,7 @@ from curious_now_v2.core import blobs
 from curious_now_v2.core.source_registry import load_source_registry
 from curious_now_v2.db.generation import run_generation
 from curious_now_v2.db.hydration import run_hydration
+from curious_now_v2.db.images import run_image_backfill
 from curious_now_v2.db.ingestion import sync_source_registry
 from curious_now_v2.db.migrations import apply_migrations
 from curious_now_v2.db.publication import run_publication_gate
@@ -77,6 +78,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     retrieve.add_argument("--limit", type=int, default=50)
     retrieve.add_argument("--timeout-seconds", type=float, default=30)
+    retrieve.add_argument(
+        "--source",
+        help="resolve only pending items from this source",
+    )
     # The normal queue selects on `full_text IS NULL`, so a fix to an extractor
     # reaches only what arrives afterwards. These reopen what is already stored.
     retrieve.add_argument(
@@ -92,12 +97,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_database_url_argument(retrieve)
 
+    images = commands.add_parser(
+        "backfill-images",
+        help="recover publisher-declared images from stored retrieval bodies",
+    )
+    images.add_argument("--limit", type=int, default=1000)
+    images.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report recoverable images and hosts without updating items",
+    )
+    _add_database_url_argument(images)
+
     generate = commands.add_parser(
         "generate",
         help="extract evidence packets and write the layers they support",
     )
     generate.add_argument("--limit", type=int, default=10)
     generate.add_argument("--model", default=None)
+    generate.add_argument(
+        "--source",
+        help="generate only stories containing an item from this source",
+    )
     generate.add_argument(
         "--regenerate",
         action="store_true",
@@ -124,6 +145,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="evaluate only the least recently gated N stories",
+    )
+    gate.add_argument(
+        "--source",
+        help="evaluate only stories containing an item from this source",
+    )
+    gate.add_argument(
+        "--changed-only",
+        action="store_true",
+        help="evaluate only stories whose retrieved evidence changed since gating",
     )
     _add_database_url_argument(gate)
 
@@ -211,6 +241,8 @@ def main() -> None:
     if args.command == "retrieve":
         if args.limit < 1:
             raise SystemExit("--limit must be positive")
+        if args.source and (args.refetch_source or args.refetch_path):
+            raise SystemExit("--source cannot be combined with a refetch option")
         # The blob root is usually an external disk. Checked here so an
         # unmounted drive stops the run at the start, rather than being found
         # out after an hour of fetching whose bodies all went nowhere.
@@ -222,6 +254,7 @@ def main() -> None:
             _database_url(args.database_url),
             limit=args.limit,
             timeout_seconds=args.timeout_seconds,
+            source=args.source,
             refetch_source=args.refetch_source,
             refetch_path=args.refetch_path,
         )
@@ -242,14 +275,41 @@ def main() -> None:
             limit=args.limit,
             model=args.model,
             regenerate=args.regenerate,
+            source=args.source,
             workers=args.workers,
         )
         print(  # noqa: T201
             f"generated {result.generated}/{result.attempted} stories "
-            f"({result.declined_explain} declined Explain, "
+            f"({result.explain_ineligible} intentionally Idea-only, "
+            f"{result.explain_failed} failed Explain, "
             f"{result.withheld_kind} withheld as not a development); "
-            f"{result.invalid} failed validation, {result.failed} errored; "
+            f"{result.technical_failed} failed Technical, "
+            f"{result.failed} errored; "
             f"US${result.cost_usd:.2f}"
+        )
+        return
+
+    if args.command == "backfill-images":
+        if args.limit < 1:
+            raise SystemExit("--limit must be positive")
+        image_result = run_image_backfill(
+            _database_url(args.database_url),
+            limit=args.limit,
+            dry_run=args.dry_run,
+        )
+        hosts = ", ".join(
+            f"{host} {count}" for host, count in image_result.hosts
+        )
+        print(  # noqa: T201
+            f"image backfill scanned {image_result.scanned}: "
+            f"{image_result.candidates} recoverable, "
+            f"{image_result.updated} updated "
+            f"({image_result.figure_items} figures, "
+            f"{image_result.preview_items} previews); "
+            f"{image_result.no_image} absent, "
+            f"{image_result.missing_blobs} missing blobs, "
+            f"{image_result.failed} failed"
+            + (f"; hosts: {hosts}" if hosts else "")
         )
         return
 
@@ -259,6 +319,8 @@ def main() -> None:
         gate_result = run_publication_gate(
             _database_url(args.database_url),
             limit=args.limit,
+            source=args.source,
+            changed_only=args.changed_only,
         )
         depths = ", ".join(
             f"{name} {count}" for name, count in sorted(gate_result.by_depth.items())

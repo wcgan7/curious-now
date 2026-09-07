@@ -2,460 +2,158 @@
 
 ## Purpose
 
-This document defines how one evidence-backed story becomes four reader-facing
-layers:
+One retrieved science source may produce three independent reader-facing views:
 
 ```text
-Title -> Glance and/or Explain -> Technical
+Idea -> Explain -> Technical
 ```
 
-It is normative for generation, validation, storage, and reader behavior. `MUST`,
-`SHOULD`, and `MAY` describe requirements in decreasing order of strength.
+They are choices of reading depth, not a document assembled in stages. Each view
+MUST stand alone and MUST be generated directly from the retrieved source text.
 
-## Terminology
+## Source sufficiency
 
-### Source title
+Metadata and snippets are not articles. A story whose best available material is
+`metadata_only` or `snippet` MUST be skipped and MUST NOT enter generation.
 
-The title supplied by a paper, publisher, lab, institution, or news source.
+An abstract or accessible article can support Idea. Explain additionally needs a
+method or mechanism in the evidence, except that an open primary work is presumed
+to contain enough material for an intuitive summary. Technical requires open
+primary material: a paper, preprint, technical report, dataset, or equivalent
+primary documentation rather than secondary coverage.
 
-- It MUST be retained verbatim apart from safe text normalization.
-- It MUST remain attached to its source item.
-- It MUST remain visible in the source shelf.
-- It MUST never be overwritten by generated editorial text.
-
-### Working title
-
-An internal label used while clustering and operating on a story. It may initially
-be copied from a source title. It is not a guaranteed reader-facing artifact.
-
-### Display title
-
-The approachable title shown in the Curious Now feed and story header.
-
-- It MUST describe the development represented by the story.
-- A generated display title MUST reference one evidence-packet version.
-- It MUST be versioned rather than silently rewritten.
-- It MUST fall back safely when no generated title is valid.
-
-### Evidence packet
-
-The versioned set of supported claims, citations, limitations, uncertainty, and
-text-sufficiency information that constrains every generated presentation.
-
-### Conceptual spine
-
-The shared semantic plan from which all four layers are rendered. It contains:
-
-- the central supported claim;
-- what is genuinely new;
-- the simplest accurate intuition;
-- why it may matter;
-- the strongest supporting evidence;
-- the essential qualification or uncertainty;
-- prerequisite concepts;
-- the source roles relevant to interpreting the claim.
-
-Every factual element in the conceptual spine MUST resolve to one or more supported
-claims in the evidence packet.
-
-## Story kinds
-
-A story may cover a result, release, explainer, correction, or debate, drawn from
-any science source — not only research papers. The layer contracts below apply to
-every kind: their required-content lists name roles a presentation must fill, not
-a paper-shaped template.
-
-- For a result, the mechanism is what produces the finding, and the comparison
-  is the prior state of evidence or the relevant baseline.
-- For a release, they are how the new capability works and what was previously
-  available.
-- For an explainer — an account of established science, usually occasioned by
-  an event — the mechanism is the whole of the story, and the comparison is what
-  a reader would otherwise have assumed. Nothing is new, which does not make it
-  a lesser story: an explainer is mechanism throughout, and so is often the
-  clearest case the ladder has.
-- For a correction, they are why the original conclusion failed and what was
-  previously believed.
-- For a debate, they are what each position claims follows from the evidence,
-  and where the positions actually diverge.
-
-A required element that is genuinely inapplicable to a story kind MAY be omitted;
-it MUST NOT be satisfied with invented material. In particular an explainer has
-no novelty to state, and MUST NOT manufacture one.
-
-Two kinds are recognised in order to be excluded. An **announcement** reports
-that something happened — an event, a podcast, a grant, an appointment — and
-leaves nothing to explain, however scientific its subject. A **review** of a
-book, film, or exhibition carries no claims of its own, since the claims belong
-to the work under review. Neither is published, and the distinction turns on what
-the text does rather than on how scientific it sounds.
-
-## Reader progression
-
-The layers have different product roles.
-
-| Layer | Stage | Familiarity assumption | Expected use |
+| Best available source | Idea | Explain | Technical |
 | --- | --- | --- | --- |
-| Title | Discovery | None | Decide whether to open |
-| Glance | Orientation | New to the topic | Establish simple intuition |
-| Explain | Orientation | Knows the foundations | Understand the important details |
-| Technical | Investigation | Ready to inspect the work | Examine methods and evidence |
+| Metadata or snippet | No | No | No |
+| Simple news, release, or announcement | Yes | No | No |
+| Secondary source with a supported mechanism | Yes | Yes | No |
+| Primary abstract with a supported method | Yes | Yes | No |
+| Open primary work | Yes | Yes | Yes |
 
-Glance and Explain are alternative orientation paths. A reader MAY use either or
-both. Technical is a progressive deep dive after orientation, not the normal
-entry point from the feed.
+Technical eligibility MUST NOT depend on Explain being generated successfully.
+A failure at one depth MUST NOT invalidate a successful depth.
 
-Because they are alternatives, each MUST read on its own. Explain in particular
-MUST NOT open on a reference back to Glance — "the test hinges on", "the
-mechanism begins with", "the reported gap comes from" all assume a paragraph its
-reader may have skipped, and a reader who chose Explain often did. Naming its own
-subject is not the restatement the ladder prohibits: what Explain must not do is
-reuse Glance's sentences or stay at Glance's level.
+## Generation objectives
 
-## Title contract
+The objectives below are the complete editorial instructions for the prose. They
+are sent as plain-text requests, followed by the source title and retrieved source
+text.
 
-### Target
-
-- Approximately 6–14 words and normally no more than 100 characters.
-- One plain-language statement or noun phrase.
-- Specific enough to distinguish the development from adjacent stories.
-
-### Required behavior
-
-A display title MUST:
-
-- identify the actual result, release, explainer, correction, or debate;
-- preserve the qualification needed to avoid a materially false impression;
-- use attribution when the claim comes only from an interested party;
-- remain compatible with the confidence expressed by the evidence packet;
-- work alongside, rather than duplicate, source-type and review-status badges.
-
-### Prohibited behavior
-
-A display title MUST NOT:
-
-- use unsupported superlatives such as “first,” “best,” or “largest”;
-- use “breakthrough,” “revolutionary,” “game-changing,” or equivalent hype unless
-  the wording itself is the subject of the story;
-- turn correlation into causation;
-- imply peer review, replication, or independent confirmation that does not exist;
-- conceal that a result is limited to animals, simulations, a small sample, or
-  another essential scope condition;
-- use a question merely to manufacture curiosity;
-- inherit unexplained acronyms when a short ordinary-language alternative exists.
-
-### Attribution examples
+### Idea
 
 ```text
-Weak:     A new model solves long-context reasoning
-Better:   Anthropic reports better long-context reasoning in a new model
-
-Weak:     Coffee prevents heart disease
-Better:   A large observational study links coffee intake with lower heart risk
+Please summarise the intuition behind this in a short paragraph suitable for reader without related knowledge:
 ```
 
-### Fallback order
+Idea is the feed-level orientation for a newcomer. It uses the database depth
+value `glance` for compatibility.
 
-If no valid generated display title exists, the reader uses:
+### Explain
 
-1. the clearest eligible source title, with its source attribution;
-2. otherwise the story working title;
-3. otherwise the primary source title, with its source attribution.
+For a paper:
 
-A source title is eligible when it does not violate the prohibited-behavior rules
-above. A fallback that reaches step 3 MAY show a title that would fail the
-display-title contract, because a source’s own headline is an attributed fact
-rather than Curious Now editorial text; it MUST remain visibly attributed to its
-source. A fallback source title MUST NOT be edited into partial compliance — it
-is shown verbatim or not at all.
+```text
+Please summarise the intuition behind this paper:
+```
 
-A failed title generation MUST NOT block publication.
+`paper` is replaced by `article`, `report`, or `dataset` when appropriate.
 
-## Glance contract
+### Technical
 
-### Audience and duration
+For a paper:
 
-- Assumes no topic-specific familiarity.
-- Targets approximately 30–60 seconds of reading.
-- Corresponds internally to ELI5 without presenting that label to the reader.
+```text
+Please provide a technical but intuitive summary for this paper so a technical reader can get the key contribution essence without having to read the paper:
+```
 
-### Required content
+The document noun is replaced when appropriate. Technical is a substantial
+self-contained summary, not a schema-shaped reconstruction of the paper.
 
-Glance MUST provide:
+## Model invocation
 
-1. what happened;
-2. the simplest accurate mental model;
-3. why it might matter;
-4. the one qualification most likely to change the reader’s interpretation.
+Reader-facing writing uses `gpt-5.6-luna` at low reasoning effort. Each depth is
+an independent plain-text completion. Generation MUST NOT feed a writer:
 
-These are things the Glance must convey, not parts it is assembled from. In
-particular the qualification is written into the prose, placed where it changes
-how the sentence beside it is read — never appended as a labelled caveat, and
-never carried in a separate field. A caveat presented as a footer is read as
-boilerplate and skipped, which defeats the reason for requiring it; and a
-qualification stored beside the text rather than inside it can be dropped by any
-surface that renders only the prose.
+- an editorial brief;
+- a conceptual spine;
+- an earlier reading depth;
+- a semantic checklist;
+- another model's critique;
+- a requested word or sentence count beyond the natural wording of the prompt.
 
-It SHOULD use an analogy only when the analogy preserves the relevant mechanism.
+The title is a separate fourth completion for papers and technical reports. It
+uses the completed Idea rather than rereading the source, so title writing does
+not alter or intermediate the three reading depths.
 
-Every term a newcomer would not know MUST be explained where it first appears,
-or replaced with ordinary language. A Glance that reads as a compressed abstract
-has failed even when every statement in it is true: "a sum of five abelian line
-bundles on a Calabi–Yau threefold" tells its intended reader nothing.
+The evidence packet remains a control-plane record for provenance, classification,
+depth routing, and ranking. It MUST NOT become an intermediate representation from
+which the prose is assembled.
 
-Glance carries ONE idea. Not few — one: the single thing a reader should walk
-away knowing, with one way to picture it or one reason to believe it. Everything
-else the source establishes belongs to Explain.
+## Validation
 
-Method, sample sizes, percentages, date ranges, and any second finding are
-excluded from Glance however true they are, because a Glance that carries them
-has spent the reader's attention on detail before they hold the idea the detail
-is about. Compression is the failure mode here, not length — the fix for a dense
-Glance is fewer concepts, never more words, because the reading budget is fixed.
+Production validation is mechanical. A layer is valid when:
 
-### Exclusions
+- its model call completed;
+- its response is nonempty;
+- its text is safe to store.
 
-Glance SHOULD omit:
+The runtime MUST NOT reject prose for word count, sentence count, number of ideas,
+heading choice, sentence overlap, centrality, readability, or whether a second
+model agrees with it. There are no automatic semantic judges or rewrite passes.
 
-- exhaustive methodological detail;
-- long numerical result tables;
-- secondary caveats that do not alter the basic interpretation;
-- unexplained field jargon;
-- historical background not needed for the central intuition.
+Markdown headings MAY be parsed into display sections after generation. This is a
+presentation convenience, not a validity requirement. The unmodified stored prose
+remains the source of truth, and a response without headings remains valid.
 
-Simple language MUST NOT become stronger certainty.
+## Titles
 
-## Explain contract
+News, magazine, blog, and release headlines remain the reader title. Papers,
+reports, and datasets receive a display title from their successful Idea using:
 
-### Audience and duration
+```text
+Please rewrite this paper’s title as a short, intuitive and accurate title so a curious reader without related knowledge can immediately understand what it found, explained, or made possible, and return only the new title:
 
-- Assumes foundational familiarity with the field.
-- Corresponds internally to ELI20.
-- Runs to at most about 500 words, and stops when the mechanism is clear.
+Original title: {source_title}
 
-Length is a ceiling, never a target. Generation is asked for an explanation
-addressed to a particular reader, not for a word count, because a model given a
-range will fill it — and filling it is how a mechanism gets padded with
-restated context. An Explain that answers how it works in 300 words is better
-than one that reaches 500.
+Intuitive title: {idea}
+```
 
-This budget was 3–6 minutes when Explain carried six required elements. It
-carries one, so the budget came down with it.
+The original title always remains attached to its source item. If the title call
+fails, the existing source/working-title fallback applies; failure or absence of
+editorial title generation MUST NOT block a story.
 
-### Required content
+## Storage and provenance
 
-Explain answers one question: **how does it work?**
+Each attempted layer records:
 
-Each layer owes the reader a different question. Glance answers what happened
-and why it might matter. Explain answers how. Technical answers whether it holds
-up. A reader who already knows the field does not need the problem restated;
-what they lack is the mechanism of this particular development.
-
-Explain MUST:
-
-1. explain the mechanism at an intuitive but field-aware level — what the
-   approach actually does, and why that produces the claimed effect;
-2. carry the qualification that keeps the mechanism honest.
-
-Explain SHOULD, when the evidence supports it:
-
-- frame the problem or prior approach, only as far as the mechanism needs;
-- state what is genuinely new about it;
-- give the key evidence that the mechanism works;
-- compare with the relevant baseline or prior state of understanding.
-
-An unsupported SHOULD element is omitted. It is never filled with invented
-material or generic restatement.
-
-The qualification is required because a vivid mechanical account reads as
-truth: explaining precisely how something works, while saying nothing about
-what is uncertain, produces confidence that the evidence has not earned. Since
-Technical is often unavailable, Explain is frequently the deepest layer a reader
-sees.
-
-The qualification MAY be satisfied from source metadata rather than an extracted
-claim — preprint status, a single source, or interested-party-only reporting all
-qualify a mechanism — so it constrains what Explain says without gating whether
-Explain exists.
-
-It MAY use established field terminology without defining every basic term. It
-SHOULD explain new, ambiguous, or paper-specific terminology.
-
-### Relationship with Glance
-
-Explain MUST stand alone for a reader who skips Glance. When read after Glance, it
-SHOULD preserve the same conceptual spine and add resolution rather than reverse
-the framing or repeat the simple version verbatim.
-
-Explain is not an expanded abstract. It MUST reorganize the material around reader
-understanding.
-
-## Technical contract
-
-### Eligibility
-
-Technical is eligible only when:
-
-- the story contains suitable primary material — a paper, preprint, technical
-  report, dataset, or equivalent primary documentation, not only coverage of it;
-- accessible primary material is sufficient to inspect the method and evidence;
-- the evidence packet distinguishes reported results from interpretation;
-- the system can cite the relevant sections, figures, tables, or source items.
-
-A paper title and abstract alone are normally insufficient.
-
-### Audience and duration
-
-- Assumes the central intuition is already established.
-- Targets approximately 8–15 minutes of reading.
-- Remains navigable by a capable reader outside the paper’s narrow specialty.
-
-### Structure
-
-Technical MUST take the reader through a progression: orient them, say what was
-done, show what it rests on, give what was found, and be clear about what it
-does not settle. That order is the argument, and a walkthrough that reports
-results before saying what was done has summarised rather than inspected.
-
-The headings are the writer's to choose, and SHOULD be the ones the work itself
-calls for — a proof has a proof strategy, a cohort study has a cohort, a
-fabricated device has a fabrication process. This shape is a good default where
-nothing better suggests itself:
-
-1. **Orientation** — the central intuition in one compact paragraph;
-2. **Problem formulation** — what is being solved or tested;
-3. **Approach** — architecture, intervention, experimental design, or method;
-4. **Evidence** — datasets, controls, baselines, measurements, and evaluation;
-5. **Results** — quantitative findings with context;
-6. **Ablations or alternatives** — what supports the claimed mechanism;
-7. **Limitations** — scope, assumptions, missing comparisons, and uncertainty;
-8. **Relation to prior work** — only when supported by bibliographic evidence.
-
-**Prerequisites** — the concepts a reader needs in order to follow the
-walkthrough — are recorded alongside it rather than written as a section.
-
-A required heading list would be a paper-shaped template imposed on work that is
-not all paper-shaped, and enforcing one costs a walkthrough its whole layer over
-a label. What is checked instead is that a heading is a heading: present, short,
-and not repeated.
-
-Equations, algorithms, and detailed numbers SHOULD appear only when they improve
-understanding of the claim.
-
-### Progressive entry
-
-Technical MUST be reachable from a distinct “Go technical” action after Glance or
-Explain. It MUST also support a direct URL for sharing and returning readers.
-
-The interface MUST NOT require proof that a reader completed an orientation.
-
-## Sufficiency and abstention
-
-A layer is produced only when the evidence supports every element that layer
-requires. Generation MUST be able to decline a layer, and declining MUST be
-recorded with the element that was unsupported.
-
-Sufficiency is judged per required element, never as a single global
-"is this enough" question:
-
-- each required element resolves to one or more supported claims in the
-  evidence packet, or it is unsupported;
-- an unsupported required element makes that layer ineligible;
-- eligibility is decided from the recorded per-element result, not from the
-  generator's overall confidence.
-
-This ordering keeps each check where it is reliable:
-
-1. a deterministic text gate rejects material that cannot ground anything,
-   before any inference is spent;
-2. evidence-packet extraction records which elements the sources actually
-   support;
-3. depth planning derives eligible layers from those recorded elements;
-4. generation MAY still decline, and a declined layer is recorded rather than
-   produced.
-
-Distinguish two reasons an element may be absent. An element that is genuinely
-inapplicable to the story kind MAY be omitted, as described in Story kinds. An
-element that is applicable but unsupported by the available evidence MUST cause
-the layer to be declined. Neither may be satisfied with invented material,
-generic hedging, or restatement that presents thin evidence as thorough.
-
-Declining one layer MUST NOT withdraw a shallower layer. A story whose evidence
-supports Glance but not Explain publishes with Glance alone.
-
-Abstention counts and their reasons MUST be visible to the operator. A layer
-declined often for the same missing element indicates a retrieval gap rather
-than a generation failure.
-
-## Cross-layer invariants
-
-Across one evidence-packet version:
-
-- factual claims MUST NOT contradict one another;
-- certainty MUST NOT increase merely because the language becomes simpler;
-- key numbers MUST retain compatible units, populations, and comparison frames;
-- preprint and peer-review status MUST remain consistent;
-- interested-party claims MUST remain attributed;
-- a qualification whose omission would make Title or Glance materially misleading
-  MUST remain visible at that layer;
-- source and concept links MUST resolve to stable reader-visible records.
-
-Title and Glance MAY be produced in one inexpensive generation request, but they
-MUST be validated independently.
-
-## Versioning and staleness
-
-Each generated presentation records:
-
-- story ID;
-- evidence-packet ID and version;
-- conceptual-spine ID and version;
-- presentation layer;
+- story and evidence-packet IDs;
+- depth;
+- plain text and any mechanically derived display sections;
+- status and failure reason;
+- model provider and model name;
 - prompt version;
-- model provider and model;
-- generation status;
-- validation status;
-- creation time.
+- input and output token usage;
+- creation and validation time.
 
-New evidence creates a new conceptual spine and new presentation candidates. A
-spine MAY also be regenerated for an unchanged evidence packet, for example after
-a prompt improvement; the regenerated spine receives a new version. The reader
-continues showing the previous valid set until the replacement set is validated.
-A displayed set MUST come from one evidence-packet version and one
-conceptual-spine version; a partially generated new set MUST NOT create
-cross-version mixtures.
+All depths produced in one run reference the same evidence packet. The retained
+conceptual-spine row is a schema-compatible batch identifier only; it does not
+plan or constrain the direct prose.
 
-## Evidence-only behavior
+## Publication
 
-When generation is unavailable or evidence is insufficient:
+A successful Idea is sufficient to publish a new story; a deeper failure does
+not invalidate it. Regeneration is stricter: an incomplete new attempt remains
+recorded for diagnosis but does not replace the reader's existing current
+version. If Idea fails and no current version exists, the story remains
+unpublished even when a deeper call happened to complete.
 
-- the feed still shows a fallback title chosen by the title fallback order;
-- the story still exposes source titles, source roles, dates, and links;
-- the reader clearly states which explanations are not yet available;
-- Technical is omitted when ineligible;
-- no placeholder text is presented as a generated explanation.
+No placeholder explanation is shown for an ineligible or failed depth. The source
+link remains available for every published story.
 
-## Evaluation rubric
+## Evaluation
 
-Each candidate is scored on a small hand-reviewed set before broad generation.
-
-| Dimension | Title | Glance | Explain | Technical |
-| --- | --- | --- | --- | --- |
-| Supported by evidence | Required | Required | Required | Required |
-| Appropriate certainty | Required | Required | Required | Required |
-| Audience fit | General | Newcomer | Field-aware | Investigative |
-| Intuitive understanding | Useful | Central | Central | Preserved |
-| Key evidence | Implied safely | Brief | Explained | Examined |
-| Limitations | Essential only | Essential | Important | Thorough |
-| Source provenance | Story-level | Claim-level | Claim-level | Section-level |
-
-Automatic checks MAY reject length, missing citations, prohibited hype,
-cross-layer number mismatches, or invalid status labels. Human evaluation remains
-required to establish that the result is genuinely useful.
-
-## High-risk subjects
-
-Medical, health, safety, and other high-risk stories require stricter validation.
-Presentations MUST report evidence and uncertainty rather than provide personal
-advice. A simpler presentation MUST never remove a warning necessary to prevent a
-harmful interpretation.
+Subjective quality belongs in an offline prompt evaluation set, not the production
+request path. Prompt changes SHOULD be reviewed against a small cross-field corpus
+including primary research, medicine, physical science, climate science, and
+method-heavy machine learning. Production does not ask a model to grade every
+answer generated by another model.

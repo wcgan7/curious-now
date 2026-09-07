@@ -16,7 +16,13 @@ a story ranks as if published earlier by an amount its shortcomings cost it.
 That is the whole reason the score is readable: an operator asking why one story
 sits above another gets an answer in hours rather than in arbitrary points.
 
-**Ties are broken by rotating sources, not by row id.** Both terms above are
+**Source bursts are spread without becoming quality.** Stories are queued by
+source, reader category and publication day. The first pays nothing; later
+arrivals receive `h·ln(1 / (1 + 0.1·position))`. The queue is append-only, so a
+new story cannot move an old key. The factor changes assembly order but remains
+outside `quality` and the quality reasons.
+
+**Ties are broken by rotating sources, not by row id.** The terms above can be
 coarse -- see ROTATION_SECONDS -- so a great many stories share a key exactly.
 Left alone the order falls to the UUID, which put 110 stories from one
 publisher at the top of the feed in an order that meant nothing. A second per
@@ -46,12 +52,25 @@ from math import log
 # right trade for a feed that is calm rather than breaking.
 FRESHNESS_HALF_LIFE_HOURS = 168.0
 
-# How many rungs the story earned. Not asserted: three rungs means the Explain
-# survived a judge that had to quote its mechanism sentence, and the Technical
-# cited figures that exist in the document. Measured across 168 published
-# stories, this splits them 12% / 57% / 31%.
+# How completely generation covered the depths this particular source could
+# support.  Three means every eligible depth succeeded, whether that was only
+# Idea for a short news article or all three layers for an open paper.  A lower
+# band means an eligible generation failed; depth count itself is not quality.
 QUALITY_BY_RUNGS: dict[int, float] = {3: 1.0, 2: 0.70, 1: 0.45}
 RUNGS_FALLBACK = 0.45
+
+
+def completion_rungs(*, valid_depths: int, eligible_depths: int) -> int:
+    """Map eligible-depth completion to the existing three quality bands."""
+
+    if eligible_depths <= 0:
+        return 1
+    ratio = min(max(valid_depths, 0), eligible_depths) / eligible_depths
+    if ratio >= 1:
+        return 3
+    if ratio >= 0.5:
+        return 2
+    return 1
 
 # Whether the result would change what someone in the field does next. Weighted
 # harder than rungs on purpose: rungs measure how well we could explain a paper,
@@ -85,6 +104,13 @@ SIGNIFICANCE_FALLBACK = 0.35
 # not a margin.
 ROTATION_SECONDS = 1.0
 
+# Repeated stories from one source, in one reader category, on one publication
+# day receive a smooth assembly adjustment.  Position zero is the source's
+# first story in that category/day and pays nothing; position one is multiplied
+# by 1 / 1.1, position two by 1 / 1.2, and so on.  This is deliberately not a
+# quality term: it changes reading order, not our judgement of the work.
+SOURCE_DENSITY_STRENGTH = 0.1
+
 
 @dataclass(frozen=True)
 class ScoreComponent:
@@ -103,6 +129,8 @@ class ScoreComponent:
 class StoryScore:
     quality: float
     offset_hours: float
+    density_factor: float
+    density_offset_hours: float
     effective_at: datetime
     components: tuple[ScoreComponent, ...]
 
@@ -121,6 +149,7 @@ def score_story(
     rungs_earned: int,
     significance: str,
     queue_position: int = 0,
+    density_position: int = 0,
     half_life_hours: float = FRESHNESS_HALF_LIFE_HOURS,
 ) -> StoryScore:
     """The sort key for one story, and the reasons behind it.
@@ -133,6 +162,12 @@ def score_story(
     afterwards, because a later story takes a higher position and an earlier one
     is never revisited -- so the key stays written-once, which is the property
     the whole design rests on.
+
+    `density_position` is how many earlier stories share this source, reader
+    category and publication day.  It is also append-only, but unlike the
+    one-second tie break it is large enough to spread a source burst across the
+    feed.  It remains outside `quality` and `reasons`: repetition is a property
+    of feed assembly, not a shortcoming in the story.
     """
 
     rungs = QUALITY_BY_RUNGS.get(rungs_earned, RUNGS_FALLBACK)
@@ -144,6 +179,10 @@ def score_story(
     )
     quality_offset = sum(component.offset_hours for component in components)
 
+    repetitions = max(density_position, 0)
+    density_factor = 1.0 / (1.0 + SOURCE_DENSITY_STRENGTH * repetitions)
+    density_offset = half_life_hours * log(density_factor)
+
     # Kept out of `components`, and out of `quality`, on purpose. The reasons
     # exist so an operator can ask why one story sits above another and get an
     # answer in hours; a fraction of a second is not an answer, and listing it
@@ -153,6 +192,9 @@ def score_story(
     return StoryScore(
         quality=rungs * weight,
         offset_hours=quality_offset,
-        effective_at=published_at + timedelta(hours=quality_offset + rotation_hours),
+        density_factor=density_factor,
+        density_offset_hours=density_offset,
+        effective_at=published_at
+        + timedelta(hours=quality_offset + density_offset + rotation_hours),
         components=components,
     )

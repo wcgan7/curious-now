@@ -28,6 +28,23 @@ trust metadata               source shelf                  evidence + prerequisi
 
 ## Feed
 
+### Composition
+
+The unfiltered shelf keeps the technical material that distinguishes the
+product without asking it to carry every position. Each page is assembled from
+two independently ranked lanes: two technical stories, then one accessible
+news or explainer story. For a twenty-story page this is fourteen technical and
+six accessible stories. If either lane is exhausted, the other fills the
+remaining positions.
+
+Lane membership follows the story's grounding item, not its headline or the
+depths generation happened to complete. Journalism, news, press releases and
+blogs form the accessible lane; primary research and the remaining document
+types form the technical lane. Stored quality and freshness still determine
+the order *within* each lane. Principal sources are dealt round-robin inside
+the exact page batch so one bulk publisher cannot occupy every slot, and each
+lane advances its own keyset cursor so interleaving cannot skip stories.
+
 ### Desktop wireframe
 
 ```text
@@ -123,17 +140,19 @@ the feed optimizes for scanning, and a column of forty text cards is harder to
 scan than one where the eye has something to travel by. Uniformity is not calm;
 it is undifferentiated, and the reader pays for it in effort.
 
-A feed card MAY therefore show the image its source syndicated with the story —
-the `media:content`, `media:thumbnail`, or image `enclosure` a publisher puts in
-its own feed precisely so that a reader can display it.
+A feed card MAY therefore show the image its source declared for the story —
+either `media:content`, `media:thumbnail`, or an image `enclosure` in the feed,
+or the page's own `og:image`/social preview recovered while retrieving the text.
+Both are publisher-selected representations of the linked article.
 
-- The image MUST come from the feed. It MUST NOT be scraped from the page,
-  generated, or substituted from stock.
+- The image MUST be declared by the publisher. It MUST NOT be guessed from an
+  arbitrary inline image, generated, or substituted from stock.
 - It MUST NOT be the reason to open a story: the display title remains the
   card's subject, and the image is subordinate to it in size and in position.
-- A story with no syndicated image MUST render as a complete card, not as a card
-  with a hole in it. Around half the corpus has none — no preprint server or
-  journal syndicates one — so the absence is the common case, not the exception.
+- A story with no declared preview or usable source figure MUST render as a
+  complete card, not as a card with a hole in it. Primary feeds commonly omit
+  media and not every paper exposes a reusable figure, so absence remains a
+  normal case rather than an error state.
 - A broken or unreachable image MUST degrade to that same complete card.
 
 The whole semantic card acts as one story link. External source links begin on the
@@ -367,8 +386,8 @@ title-only feed cards that act as one story link, Glance as the opened default,
 a Glance/Explain orientation selector with familiarity labels, Technical as a
 progressive continuation with a shareable `?view=technical` route, and
 evidence-only stories without empty controls. The data layer separates source,
-working, and display titles and keeps showing the newest fully validated
-presentation set.
+working, and display titles and keeps showing the explicitly committed, fully
+validated presentation set.
 
 Remaining known deltas, pending later milestones:
 

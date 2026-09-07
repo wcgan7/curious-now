@@ -5,7 +5,12 @@ from uuid import uuid4
 import httpx
 
 from curious_now_v2.core.enums import ContentType, SourceRole
-from curious_now_v2.core.source_registry import FeedSpec, SourcePolicy, SourceSpec
+from curious_now_v2.core.source_registry import (
+    ContentTypeRule,
+    FeedSpec,
+    SourcePolicy,
+    SourceSpec,
+)
 from curious_now_v2.pipeline.feed_reader import (
     FeedReadStatus,
     fetch_feed,
@@ -171,6 +176,88 @@ def test_an_unconfigured_feed_excludes_nothing() -> None:
         default_content_type=ContentType.NEWS,
     )
     assert feed.excludes("https://example.test/sounds/play/anything") is None
+
+
+def test_a_feed_can_bound_a_large_publisher_ordered_archive() -> None:
+    entries = "".join(
+        f"""
+        <item>
+          <guid>article-{number}</guid>
+          <title>Article {number}</title>
+          <link>https://example.test/articles/{number}</link>
+        </item>
+        """
+        for number in range(1, 6)
+    )
+    rss = (
+        '<?xml version="1.0"?><rss version="2.0"><channel>'
+        f"{entries}</channel></rss>"
+    ).encode()
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=rss)
+
+    feed = FeedSpec(
+        url="https://example.test/archive.xml",
+        default_content_type=ContentType.NEWS,
+        max_entries=2,
+    )
+    source = SourceSpec(
+        name="Bounded archive",
+        role=SourceRole.JOURNALISM,
+        feeds=(feed,),
+        policy=SourcePolicy(counts_as_independent=True),
+    )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        batch = fetch_feed(
+            client=client, source_id=uuid4(), source=source, feed=feed
+        )
+
+    assert [candidate.title for candidate in batch.candidates] == [
+        "Article 1",
+        "Article 2",
+    ]
+    assert batch.skipped_entries == 3
+
+
+def test_feed_categories_are_available_to_content_type_rules() -> None:
+    rss = b"""\
+    <rss version="2.0"><channel><item>
+      <guid>research-1</guid>
+      <title>A bioengineered tissue result</title>
+      <link>https://example.test/articles/research-1</link>
+      <category>Original Research</category>
+    </item></channel></rss>
+    """
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=rss)
+
+    feed = FeedSpec(
+        url="https://example.test/mixed.xml",
+        default_content_type=ContentType.OTHER,
+        content_type_rules=(
+            ContentTypeRule(
+                pattern="Original Research",
+                content_type=ContentType.PEER_REVIEWED,
+            ),
+        ),
+    )
+    source = SourceSpec(
+        name="Mixed Journal",
+        role=SourceRole.PRIMARY_RESEARCH,
+        feeds=(feed,),
+        policy=SourcePolicy(counts_as_independent=False),
+    )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        batch = fetch_feed(
+            client=client, source_id=uuid4(), source=source, feed=feed
+        )
+
+    assert batch.candidates[0].content_type is ContentType.PEER_REVIEWED
+    assert batch.candidates[0].content_type_basis == "source_pattern"
 
 
 def test_the_accept_header_does_not_exclude_a_working_feed() -> None:

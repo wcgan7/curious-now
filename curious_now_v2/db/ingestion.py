@@ -108,17 +108,19 @@ def sync_source_registry(
                       default_content_type,
                       content_type_rules,
                       exclude_patterns,
+                      max_entries,
                       fetch_interval_minutes,
                       active,
                       next_fetch_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now())
                     ON CONFLICT (url) DO UPDATE SET
                       source_id = EXCLUDED.source_id,
                       feed_kind = EXCLUDED.feed_kind,
                       default_content_type = EXCLUDED.default_content_type,
                       content_type_rules = EXCLUDED.content_type_rules,
                       exclude_patterns = EXCLUDED.exclude_patterns,
+                      max_entries = EXCLUDED.max_entries,
                       fetch_interval_minutes = EXCLUDED.fetch_interval_minutes,
                       active = EXCLUDED.active,
                       updated_at = now();
@@ -131,6 +133,7 @@ def sync_source_registry(
                         Jsonb([rule.model_dump(mode="json")
                                for rule in feed.content_type_rules]),
                         Jsonb(list(feed.exclude_patterns)),
+                        feed.max_entries,
                         feed.fetch_interval_minutes,
                         source.active,
                     ),
@@ -159,6 +162,7 @@ def list_due_feeds(
               f.default_content_type,
               f.content_type_rules,
               f.exclude_patterns,
+              f.max_entries,
               f.fetch_interval_minutes,
               f.etag,
               f.last_modified,
@@ -188,14 +192,15 @@ def list_due_feeds(
                 ContentTypeRule.model_validate(rule) for rule in (row[5] or [])
             ),
             exclude_patterns=tuple(row[6] or ()),
-            fetch_interval_minutes=row[7],
+            max_entries=row[7],
+            fetch_interval_minutes=row[8],
         )
         source = SourceSpec(
-            name=row[10],
-            homepage_url=row[11],
-            role=row[12],
+            name=row[11],
+            homepage_url=row[12],
+            role=row[13],
             feeds=(feed,),
-            policy=SourcePolicy.model_validate(row[13]),
+            policy=SourcePolicy.model_validate(row[14]),
         )
         due.append(
             DueFeed(
@@ -203,8 +208,8 @@ def list_due_feeds(
                 source_id=row[1],
                 source=source,
                 feed=feed,
-                etag=row[8],
-                last_modified=row[9],
+                etag=row[9],
+                last_modified=row[10],
             )
         )
     return tuple(due)

@@ -6,12 +6,14 @@ from typing import Any
 from curious_now_v2.core.enums import ClaimKind
 from curious_now_v2.core.fields import (
     describe_for_prompt,
-    leaf as field_leaf,
     leaf_slugs,
+)
+from curious_now_v2.core.fields import (
+    leaf as field_leaf,
 )
 from curious_now_v2.generation.client import Completion, Generator, storable
 
-PROMPT_VERSION = "packet-v5"
+PROMPT_VERSION = "packet-v6"
 
 # Extraction, deliberately: asking which claims the source supports is a task a
 # model does well, where asking whether it feels able to explain something is
@@ -37,6 +39,7 @@ SCHEMA: dict[str, Any] = {
                 "explainer",
                 "correction",
                 "debate",
+                "mission_event",
                 "announcement",
                 "not_science",
             ],
@@ -113,6 +116,8 @@ about. Judge the item, not the publisher:
                    new finding
   correction       a retraction, correction, or revised conclusion
   debate           disagreement between positions over evidence
+  mission_event    a completed launch, landing, deployment, mission operation,
+                   hardware test, or failure with a concrete outcome
   announcement     an event, podcast, funding award, appointment, or programme —
                    something happening rather than something found or built
   not_science      marketing, opinion, review, or general news carrying no
@@ -125,6 +130,10 @@ newsworthy it is:
   thing does; if it is mainly promotion, it is an announcement.
 - A podcast series, a conference, or a grant is an announcement, however
   scientific the subject matter.
+- A space mission is a mission_event only when the text reports a completed
+  operation or observed outcome: a launch, landing, deployment, docking, test,
+  in-flight manoeuvre, or failure. A contract, future plan, schedule, crew
+  assignment, partnership, or intention to launch is an announcement.
 - A news article covering an ongoing event is an explainer if it explains the
   science behind the event, and an announcement if it only reports what
   happened. "Wildfires have spread across the region" is an announcement;
@@ -182,6 +191,7 @@ VALID_KINDS = frozenset(
         "explainer",
         "correction",
         "debate",
+        "mission_event",
         "announcement",
         "not_science",
     }
@@ -190,7 +200,14 @@ VALID_KINDS = frozenset(
 # and leaves nothing to explain; an explainer reports nothing new and is still
 # the clearest case the ladder has, since it is mechanism throughout.
 PUBLISHABLE_KINDS = frozenset(
-    {"research_result", "release", "explainer", "correction", "debate"}
+    {
+        "research_result",
+        "release",
+        "explainer",
+        "correction",
+        "debate",
+        "mission_event",
+    }
 )
 
 

@@ -228,6 +228,7 @@ def test_only_developments_are_worth_publishing() -> None:
     assert make_packet(story_kind="research_result").worth_publishing
     assert make_packet(story_kind="release").worth_publishing
     assert make_packet(story_kind="explainer").worth_publishing
+    assert make_packet(story_kind="mission_event").worth_publishing
     assert not make_packet(story_kind="announcement").worth_publishing
     assert not make_packet(story_kind="not_science").worth_publishing
 
@@ -308,6 +309,88 @@ def test_generation_runs_stories_concurrently_without_sharing_a_connection() -> 
         "each worker must open its own connection"
     )
     assert "workers" in inspect.signature(generation.run_generation).parameters
+
+
+def test_each_layer_keeps_the_provenance_of_its_own_model_call() -> None:
+    """Each direct layer records the call that wrote its own prose."""
+
+    from curious_now_v2.db.generation import _layers_to_store
+    from curious_now_v2.generation import direct
+    from curious_now_v2.generation.client import TextCompletion
+
+    generated = (
+        direct.DirectLayer(
+            depth=ExplanationDepth.GLANCE,
+            text="An idea.",
+            prompt_version=direct.IDEA_PROMPT_VERSION,
+            completion=TextCompletion(
+                "An idea.", usage=Usage(input_tokens=505, output_tokens=606)
+            ),
+        ),
+        direct.DirectLayer(
+            depth=ExplanationDepth.EXPLAIN,
+            text="An explanation.",
+            prompt_version=direct.EXPLAIN_PROMPT_VERSION,
+            completion=TextCompletion(
+                "An explanation.", usage=Usage(input_tokens=101, output_tokens=202)
+            ),
+        ),
+        direct.DirectLayer(
+            depth=ExplanationDepth.TECHNICAL,
+            text="A technical summary.",
+            prompt_version=direct.TECHNICAL_PROMPT_VERSION,
+            completion=TextCompletion(
+                "A technical summary.",
+                usage=Usage(input_tokens=303, output_tokens=404),
+            ),
+        ),
+    )
+
+    layers = {layer.depth: layer for layer in _layers_to_store(generated)}
+
+    assert layers[ExplanationDepth.GLANCE].prompt_version == direct.IDEA_PROMPT_VERSION
+    assert layers[ExplanationDepth.GLANCE].usage.input_tokens == 505
+    assert layers[ExplanationDepth.GLANCE].usage.output_tokens == 606
+    assert (
+        layers[ExplanationDepth.EXPLAIN].prompt_version
+        == direct.EXPLAIN_PROMPT_VERSION
+    )
+    assert (
+        layers[ExplanationDepth.TECHNICAL].prompt_version
+        == direct.TECHNICAL_PROMPT_VERSION
+    )
+    assert layers[ExplanationDepth.TECHNICAL].usage.input_tokens == 303
+    assert layers[ExplanationDepth.TECHNICAL].usage.output_tokens == 404
+
+
+def test_partial_regeneration_cannot_become_the_current_version() -> None:
+    from curious_now_v2.db.generation import (
+        _can_make_current,
+        _layers_to_store,
+        _replacement_complete,
+    )
+    from curious_now_v2.generation import direct
+    from curious_now_v2.generation.client import TextCompletion
+
+    idea = direct.DirectLayer(
+        depth=ExplanationDepth.GLANCE,
+        text="A complete idea.",
+        prompt_version=direct.IDEA_PROMPT_VERSION,
+        completion=TextCompletion("A complete idea."),
+    )
+    failed_explain = direct.DirectLayer(
+        depth=ExplanationDepth.EXPLAIN,
+        text="",
+        prompt_version=direct.EXPLAIN_PROMPT_VERSION,
+        completion=TextCompletion(None, error="timeout"),
+    )
+
+    idea_only = _layers_to_store((idea,))
+    partial = _layers_to_store((idea, failed_explain))
+    assert _replacement_complete(idea_only)
+    assert not _replacement_complete(partial)
+    assert _can_make_current(partial, has_current=False)
+    assert not _can_make_current(partial, has_current=True)
 
 
 def test_generated_text_cannot_carry_what_a_text_column_rejects() -> None:

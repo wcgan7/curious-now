@@ -80,6 +80,44 @@
       }
     },
     {
+      "name": "arXiv mathematics",
+      "homepage_url": "https://arxiv.org/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://rss.arxiv.org/rss/math",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "max_entries": 30,
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "A capped cross-section of the aggregate mathematics feed. The live feed carried 409 submissions when added, so only the newest 30 enter each cycle. arXiv's HTML/PDF resolver is already proven; this adds mathematical volume without pretending that topical arXiv feeds are independent outlets."
+      }
+    },
+    {
+      "name": "arXiv robotics",
+      "homepage_url": "https://arxiv.org/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://rss.arxiv.org/rss/cs.RO",
+          "kind": "rss",
+          "default_content_type": "preprint",
+          "max_entries": 30,
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Robotics preprints, capped at 30 of 59 live entries when added. Complements readable institutional and journal coverage with primary methods, but shares one publishing origin with every other arXiv feed in the coverage audit."
+      }
+    },
+    {
       "name": "eLife",
       "homepage_url": "https://elifesciences.org/",
       "role": "primary_research",
@@ -131,6 +169,303 @@
         "counts_as_independent": false,
         "allow_full_text_extraction": true,
         "notes": "CC BY, ~0.8 items a day, and the replacement for medRxiv as the medicine source that actually yields text. Research articles resolve via oa_pdf at 9245 words, score 0.96, 3/3 key roles, with the licence recorded; OpenAlex hands us the PDF so journals.plos.org is never fetched and the 30s crawl delay is never paid. Roughly a third of the feed is Perspectives and Essays which retrieve thin (~1200 words) but are legitimate explainer and correction shapes. Same caveat as PLOS Biology: no type marker in URL or DOI."
+      }
+    },
+    {
+      "name": "PLOS Digital Health",
+      "homepage_url": "https://journals.plos.org/digitalhealth/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://journals.plos.org/digitalhealth/feed/atom",
+          "kind": "atom",
+          "default_content_type": "peer_reviewed",
+          "max_entries": 30,
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Open-access research spanning physiological sensing, medical imaging, monitoring, diagnostics and health software. The rolling feed carries 30 current entries. Two of two representative papers resolved through the existing PLOS JATS route at 5,885 and 6,739 words with full structure. This fills the computational and instrumentation side of biomedical engineering, but is not treated as the whole field."
+      }
+    },
+    {
+      "name": "Frontiers in Bioengineering and Biotechnology",
+      "homepage_url": "https://www.frontiersin.org/journals/bioengineering-and-biotechnology",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/bioengineering-and-biotechnology/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            },
+            {
+              "pattern": "Brief Research Report",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Brief Research Report"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Broad biomedical engineering: biomaterials, biomechanics, tissue engineering, organs-on-chips, medical devices and bioprocessing. The current 20-entry feed contains 13 Original Research papers, one Brief Research Report, five Reviews and one Perspective. Publisher categories type the 14 research entries as peer reviewed; reviews and perspectives remain other rather than being passed off as primary results. Two of two tested entries resolved as full text at 13,940-15,772 words."
+      }
+    },
+    {
+      "name": "PLOS ONE",
+      "homepage_url": "https://journals.plos.org/plosone/",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://journals.plos.org/plosone/feed/atom",
+          "kind": "atom",
+          "default_content_type": "peer_reviewed",
+          "max_entries": 30,
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Broad open-access research across more than 200 subject areas, added as a measured cross-field source rather than a substitute for specialist coverage. The feed exposes 30 current entries and uses the already proven PLOS JATS resolver. Its field yield will be audited after generation; a capped broad feed is useful only where it actually narrows a gap."
+      }
+    },
+    {
+      "name": "Frontiers in Psychology",
+      "homepage_url": "https://www.frontiersin.org/journals/psychology",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/psychology/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Targets the psychology and mental-health volume gaps. The live feed contained 17 Original Research articles, two systematic reviews and one case report; only the 17 publisher-labelled research entries receive a peer-review type. Frontiers full-text retrieval was 20/20 in the biomedical pilot."
+      }
+    },
+    {
+      "name": "Frontiers in Psychiatry",
+      "homepage_url": "https://www.frontiersin.org/journals/psychiatry",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/psychiatry/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            },
+            {
+              "pattern": "Clinical Trial",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Clinical Trial"
+            },
+            {
+              "pattern": "Brief Research Report",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Brief Research Report"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "A targeted response to mental health stopping at eight stories despite broad psychology and digital-health passes. The live feed contained 13 Original Research articles, one Clinical Trial and one Brief Research Report; systematic reviews, case reports and commentary remain other. It shares the Frontiers origin and therefore adds depth, not artificial source diversity."
+      }
+    },
+    {
+      "name": "Frontiers in Education",
+      "homepage_url": "https://www.frontiersin.org/journals/education",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/education/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Targets the education gap with empirical work rather than campus news. Twelve of 20 live entries were Original Research when added; perspectives, reviews, theory and methods remain other and must justify themselves to the development classifier."
+      }
+    },
+    {
+      "name": "Frontiers in Robotics and AI",
+      "homepage_url": "https://www.frontiersin.org/journals/robotics-and-ai",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/robotics-and-ai/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            },
+            {
+              "pattern": "Data Report",
+              "content_type": "dataset",
+              "note": "publisher labels this entry Data Report"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Targets robotics with peer-reviewed methods alongside arXiv. Seventeen of 20 live entries were Original Research, with one Data Report typed separately; the review and editorial remain other. The field audit collapses this and all Frontiers journals to one publishing origin."
+      }
+    },
+    {
+      "name": "Frontiers in Sociology",
+      "homepage_url": "https://www.frontiersin.org/journals/sociology",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/sociology/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Targets the social-science volume gap. Thirteen of 20 live entries were Original Research when added; theory, editorials, reviews and perspectives remain other. Field labels after generation, not the journal name, decide whether it improves coverage."
+      }
+    },
+    {
+      "name": "Frontiers in Language Sciences",
+      "homepage_url": "https://www.frontiersin.org/journals/language-sciences",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/language-sciences/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            },
+            {
+              "pattern": "Brief Research Report",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Brief Research Report"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Targets a nearly empty linguistics field with primary empirical work. The live feed contained 11 Original Research and four Brief Research Reports among 20 entries; perspectives and the review remain other. It adds field volume, while the audit correctly treats it as the same publishing origin as other Frontiers journals."
+      }
+    },
+    {
+      "name": "Frontiers in Energy Research",
+      "homepage_url": "https://www.frontiersin.org/journals/energy-research",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/energy-research/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Targets the energy volume gap. Sixteen of 20 live entries were Original Research; three reviews and one correction remain other. Specialist research is balanced against the existing journalism and institutional sources rather than counted as another independent Frontiers outlet."
+      }
+    },
+    {
+      "name": "Frontiers in Materials",
+      "homepage_url": "https://www.frontiersin.org/journals/materials",
+      "role": "primary_research",
+      "feeds": [
+        {
+          "url": "https://www.frontiersin.org/journals/materials/rss",
+          "kind": "rss",
+          "default_content_type": "other",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "content_type_rules": [
+            {
+              "pattern": "Original Research",
+              "content_type": "peer_reviewed",
+              "note": "publisher labels this entry Original Research"
+            }
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Targets a narrow 16-of-26 arXiv concentration in materials science. Sixteen of 20 live entries were Original Research, covering concrete composites, nanoparticles, metastructures and corrosion; reviews, the perspective and editorial remain other. It is one Frontiers origin, added for specialist depth rather than nominal diversity."
       }
     },
     {
@@ -191,12 +526,19 @@
           "kind": "atom",
           "default_content_type": "news",
           "fetch_interval_minutes": 180
+        },
+        {
+          "url": "https://theconversation.com/us/education/articles.atom",
+          "kind": "atom",
+          "default_content_type": "news",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360
         }
       ],
       "policy": {
         "counts_as_independent": true,
         "allow_full_text_extraction": true,
-        "notes": "Narrowed to us/health. Its value is unusual \u2014 articles written by the researchers themselves, which is native explainer material rather than coverage of someone else's paper at one remove. But no section is clean: measured entry by entry, us/health is 48% scientific, us/technology 52% and overlapping our AI coverage, us/environment 36% and the worst for litigation and land-rights politics, us/business 4%. There is no us/science or global/science feed; both 404. us/environment was dropped on those numbers. The remaining non-science is withheld by the classifier at the cost of one packet call, which is worth paying for the half that lands \u2014 and is four times better than STAT, which was retired at 12%."
+        "notes": "Articles are written by researchers, which is native explainer material rather than coverage at one remove. No section is perfectly clean: measured entry by entry, us/health is 48% scientific, us/technology 52% and overlapping AI, us/environment 36%, and us/business 4%. Education was added specifically to counter a 12-of-17 Frontiers concentration; its current titles cover screen use, reading, anxiety, play and classroom heat alongside policy commentary. The development classifier must establish its actual yield, and non-science still stops after one packet call."
       }
     },
     {
@@ -215,6 +557,73 @@
         "counts_as_independent": true,
         "allow_full_text_extraction": true,
         "notes": "~9.6 items a day across genetics, palaeontology, marine biology, particle physics and astronomy \u2014 the widest subject spread of any journalism source tested. Four of four resolved as fulltext at 684-730 words, all clearing MIN_WORDS_EXPLAIN. Robots disallows only wp-admin and query strings and names no AI crawlers at all, which is rarer than it should be. Feed links carry utm_ parameters that robots disallows as query strings; strip them before fetching. No feed image."
+      }
+    },
+    {
+      "name": "NPR Science",
+      "homepage_url": "https://www.npr.org/sections/science/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://feeds.npr.org/1007/rss.xml",
+          "kind": "rss",
+          "default_content_type": "news",
+          "max_entries": 20,
+          "fetch_interval_minutes": 180,
+          "exclude_patterns": [
+            "short-wave-news-roundup"
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Broad, general-audience science and health reporting. Its official feed currently carries ten items; two representative articles resolved end to end at 428 and 1,489 words, both with declared images. The recurring multi-topic Short Wave roundup is excluded because one story cannot faithfully represent several unrelated developments; obituaries and policy-adjacent pieces still have to clear the development classifier."
+      }
+    },
+    {
+      "name": "The Guardian Science",
+      "homepage_url": "https://www.theguardian.com/science",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.theguardian.com/science/rss",
+          "kind": "rss",
+          "default_content_type": "news",
+          "max_entries": 30,
+          "fetch_interval_minutes": 180,
+          "exclude_patterns": [
+            "/audio/",
+            "/video/",
+            "/commentisfree/",
+            "obituary",
+            "solve-it"
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Fast, internationally oriented science news. Two representative reports resolved at 706 and 767 words with images. The live 27-item feed also contained nine audio/video entries, four opinion pieces, an obituary and four puzzle posts; those mechanically identifiable formats are excluded so the classifier sees the actual reporting rather than predictable noise."
+      }
+    },
+    {
+      "name": "Smithsonian Science & Nature",
+      "homepage_url": "https://www.smithsonianmag.com/science-nature/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.smithsonianmag.com/rss/science-nature/",
+          "kind": "rss",
+          "default_content_type": "news",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Accessible, image-rich features across space, ecology, evolution, archaeology and earth science. All three representative articles resolved as full text at 1,282-1,830 words and all three supplied a page image. The current twelve-item feed was uniformly substantive enough for Glance and usually Explain, without the product-review or multimedia noise seen in other broad candidates."
       }
     },
     {
@@ -247,18 +656,57 @@
           "url": "https://aasnova.org/feed/",
           "kind": "rss",
           "default_content_type": "news",
+          "max_entries": 40,
           "fetch_interval_minutes": 360,
           "exclude_patterns": [
-            "doi.org"
+            "doi.org",
+            "featured-image"
           ]
         }
       ],
       "policy": {
         "counts_as_independent": true,
         "allow_full_text_extraction": true,
-        "notes": "Deferred, not rejected. The feed returns 600 entries spanning 501 days in a single document, and FeedSpec has no entry cap or date cutoff, so a first fetch would ingest the lot. Enable once the config can bound it."
-      },
-      "active": false
+        "notes": "AAS journal highlights that strengthen sparse astronomy coverage. Its unusually large feed returns 600 entries spanning 501 days, so only the publisher-ordered newest 40 are considered; DOI-only entries point to papers rather than AAS Nova articles, while Featured Image posts yielded only 185-256 words, so both formats are excluded. The remaining 16 articles all retrieved as full text with a usable page image; median length is 638 words."
+      }
+    },
+    {
+      "name": "APS Physics",
+      "homepage_url": "https://physics.aps.org/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://feeds.aps.org/rss/recent/physics.xml",
+          "kind": "rss",
+          "default_content_type": "news",
+          "max_entries": 30,
+          "fetch_interval_minutes": 180
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "APS's editorial physics publication adds readable coverage beyond raw preprints. The official feed holds 100 entries over roughly three months, so only the newest 30 are considered. Three of three representative entries resolved through their DOI links to full APS Physics articles at 470-1,006 words, each with a declared page image."
+      }
+    },
+    {
+      "name": "CDC MMWR",
+      "homepage_url": "https://www.cdc.gov/mmwr/",
+      "role": "government",
+      "feeds": [
+        {
+          "url": "https://www.cdc.gov/mmwr/rss/rss.html",
+          "kind": "rss",
+          "default_content_type": "report",
+          "max_entries": 30,
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Authoritative public-health reports, added to reduce dependence on medicine preprints. The legacy-looking official URL redirects to an active feed with 2,308 entries going back to 2019, so only the newest 30 are considered. Three of three representative downloader links resolved to current CDC reports and extracted 2,204-2,399 words. Reports generally have no suitable preview image, and occasional QuickStats or errata are left for the science classifier to withhold."
+      }
     },
     {
       "name": "Max Planck Society",
@@ -276,6 +724,72 @@
         "counts_as_independent": false,
         "allow_full_text_extraction": true,
         "notes": "0.8 items a day spanning astrophysics, chemistry, brain, climate, ecology, evolution, quantum physics, medicine and human history \u2014 the broadest single institutional feed found. Every entry carries an image enclosure. Robots has no Disallow and no crawl-delay. Five of five retrieved as article_html at 682-901 words. Roughly 20% of entries are awards, grants and research-policy announcements; the URL slugs are numeric ids so exclude_patterns cannot filter them and the classifier has to withhold them."
+      }
+    },
+    {
+      "name": "MIT News Bioengineering",
+      "homepage_url": "https://news.mit.edu/topic/bio-bioeng-biotech",
+      "role": "institutional",
+      "feeds": [
+        {
+          "url": "https://news.mit.edu/topic/mitbio-bioeng-biotech-rss.xml",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "exclude_patterns": [
+            "mit-media"
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "Readable institutional coverage of tissue engineering, implants, bioprinting, biomaterials and biomanufacturing. The feed exposes 50 entries, so the newest 20 are considered; syndicated 'MIT in the media' links are excluded. Three representative research stories retrieved at 1,101-1,506 words and all three declared a usable page image. First-party for MIT research, so it never counts as independent confirmation."
+      }
+    },
+    {
+      "name": "MIT News Language and Linguistics",
+      "homepage_url": "https://news.mit.edu/topic/linguistics",
+      "role": "institutional",
+      "feeds": [
+        {
+          "url": "https://news.mit.edu/rss/topic/language-and-linguistics",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "exclude_patterns": [
+            "mit-media"
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "A non-Frontiers counterweight for linguistics, which reached volume almost entirely through one specialist publisher. The live 45-item feed begins with administrative noise but also carries substantive pieces such as 'Separating logic and language' and 'Language development in the brain'; only the newest 20 are considered and the development classifier must earn the source's yield. MIT remains one origin across all topical feeds."
+      }
+    },
+    {
+      "name": "MIT News Mathematics",
+      "homepage_url": "https://news.mit.edu/topic/mathematics",
+      "role": "institutional",
+      "feeds": [
+        {
+          "url": "https://news.mit.edu/rss/topic/mathematics",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "max_entries": 20,
+          "fetch_interval_minutes": 360,
+          "exclude_patterns": [
+            "mit-media"
+          ]
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "A measured attempt to dilute mathematics' arXiv concentration. The 50-item live feed mixes awards and funding with research; the newest 20 are admitted only to the classifier, not automatically published. This is one MIT origin, not a second independent source beside the language and bioengineering feeds."
       }
     },
     {
@@ -355,6 +869,63 @@
       }
     },
     {
+      "name": "Plus Magazine",
+      "homepage_url": "https://plus.maths.org/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://plus.maths.org/content/rss.xml",
+          "kind": "rss",
+          "default_content_type": "news",
+          "max_entries": 10,
+          "fetch_interval_minutes": 720
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Independent explanatory mathematics from the University of Cambridge's Millennium Mathematics Project. Added to reduce an 11-of-15 arXiv concentration, not merely increase volume. Four of four live samples resolved at 456-2,158 words with declared images; the feed mixes current research explanations with evergreen mathematical background and occasional event posts, which the classifier separates."
+      }
+    },
+    {
+      "name": "CNRS News Mathematics",
+      "homepage_url": "https://news.cnrs.fr/mathematics",
+      "role": "institutional",
+      "feeds": [
+        {
+          "url": "https://news.cnrs.fr/rss/3204",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "max_entries": 10,
+          "fetch_interval_minutes": 720
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "English-language mathematics coverage from France's national research agency, added after Plus and MIT still left arXiv at 65%. The live feed carries ten articles; three of three samples resolved at 1,240-1,496 words with declared images. It mixes research explanation, profiles and mathematical culture, so the classifier—not the topic page—decides what publishes."
+      }
+    },
+    {
+      "name": "CNRS News Linguistics",
+      "homepage_url": "https://news.cnrs.fr/linguistics",
+      "role": "institutional",
+      "feeds": [
+        {
+          "url": "https://news.cnrs.fr/rss/3057",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "max_entries": 10,
+          "fetch_interval_minutes": 720
+        }
+      ],
+      "policy": {
+        "counts_as_independent": false,
+        "allow_full_text_extraction": true,
+        "notes": "A small, authoritative linguistics archive from France's national research agency. The official topic page exposes six English-language articles on sign languages, rare-language archives, click languages and linguistic communication. It shares the CNRS publishing origin with the mathematics feed, but independently balances the linguistics field away from a single journal publisher."
+      }
+    },
+    {
       "name": "Science News",
       "homepage_url": "https://www.sciencenews.org/",
       "role": "journalism",
@@ -370,6 +941,63 @@
         "counts_as_independent": true,
         "allow_full_text_extraction": true,
         "notes": "KEPT ON PROBATION. Retrieval is intermittent: 12 of 20 attempted came back not_found with errors like 'too short (31 words)' on perfectly ordinary /article/ URLs, so the site is sometimes serving an interstitial. The 8 that succeed average ~650 words, barely at the gate, and none has section structure. Its real value is as corroboration for a Nature or arXiv paper, which requires clustering that does not exist yet. Re-audit once clustering lands; if it still shows 0 published, retire it."
+      }
+    },
+    {
+      "name": "Archaeology Magazine",
+      "homepage_url": "https://archaeology.org/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://archaeology.org/feed/",
+          "kind": "rss",
+          "default_content_type": "news",
+          "max_entries": 10,
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Specialist reporting from the Archaeological Institute of America. The feed carries ten current discoveries; three of three samples resolved at 219-358 words with declared images. This is deliberately Glance-oriented reporting, not a source for technical reconstructions that its short articles cannot support."
+      }
+    },
+    {
+      "name": "SpaceNews",
+      "homepage_url": "https://spacenews.com/",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://spacenews.com/feed/",
+          "kind": "rss",
+          "default_content_type": "news",
+          "max_entries": 24,
+          "fetch_interval_minutes": 180
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Independent trade reporting for the otherwise almost empty spaceflight field. The live feed carried 24 entries. Two of two samples resolved at 412 and 939 words with declared images; business-only items still have to clear the development classifier."
+      }
+    },
+    {
+      "name": "The Planetary Society",
+      "homepage_url": "https://www.planetary.org/articles",
+      "role": "journalism",
+      "feeds": [
+        {
+          "url": "https://www.planetary.org/rss/articles",
+          "kind": "rss",
+          "default_content_type": "news",
+          "max_entries": 15,
+          "fetch_interval_minutes": 360
+        }
+      ],
+      "policy": {
+        "counts_as_independent": true,
+        "allow_full_text_extraction": true,
+        "notes": "Specialist nonprofit reporting and explanation about Solar System science and exploration. The current articles page includes substantive asteroid, Mars, planetary-mission and impact-risk coverage alongside policy and member updates; a 15-item cap and the development classifier keep the latter from padding the feed."
       }
     },
     {
@@ -476,12 +1104,26 @@
           "kind": "rss",
           "default_content_type": "press_release",
           "fetch_interval_minutes": 180
+        },
+        {
+          "url": "https://www.nasa.gov/missions/artemis/feed/",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "max_entries": 10,
+          "fetch_interval_minutes": 180
+        },
+        {
+          "url": "https://www.nasa.gov/missions/station/feed/",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "max_entries": 10,
+          "fetch_interval_minutes": 180
         }
       ],
       "policy": {
         "counts_as_independent": false,
-        "allow_full_text_extraction": false,
-        "notes": "Authoritative for agency activity, but first-party for agency claims. 0 published from 20 items; left active because space coverage is otherwise thin, but it is the next audit candidate after Science News."
+        "allow_full_text_extraction": true,
+        "notes": "Authoritative but first-party. The general news-release feed had published nothing, so two official topical feeds now target Artemis and the space station. A live two-item Artemis test returned one readable 520-word profile and one 104-word image item; the latter is correctly rejected as too short. NASA remains one origin regardless of feed count."
       }
     },
     {
@@ -570,12 +1212,19 @@
           "kind": "rss",
           "default_content_type": "press_release",
           "fetch_interval_minutes": 60
+        },
+        {
+          "url": "https://www.esa.int/rssfeed/Enabling_Support/Space_Transportation",
+          "kind": "rss",
+          "default_content_type": "press_release",
+          "max_entries": 15,
+          "fetch_interval_minutes": 180
         }
       ],
       "policy": {
         "counts_as_independent": false,
-        "allow_full_text_extraction": false,
-        "notes": "Kept. A review recommended retiring this as image captions; direct measurement disagrees. 5 of 12 resolved items are full text up to 1154 words, and its picture pages carry real science \u2014 'Webb sniffs methane from interstellar Comet 3I/ATLAS' is a result in 405 words."
+        "allow_full_text_extraction": true,
+        "notes": "Kept after direct measurement contradicted an image-caption concern: science items reach 1154 words. The new Space Transportation feed targets mission and launcher developments; two of two samples resolved at 970 and 982 words with declared images. Both feeds remain the same first-party ESA origin."
       },
       "active": true
     }

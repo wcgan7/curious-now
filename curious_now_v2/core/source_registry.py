@@ -52,6 +52,11 @@ class FeedSpec(BaseModel):
     # never become items, so nothing downstream spends a request or a model
     # call discovering that there was never anything to read.
     exclude_patterns: tuple[str, ...] = ()
+    # Some publishers expose their complete archive as one feed. Only the
+    # publisher-ordered newest entries are useful to a recurring news ingest;
+    # bounding them also prevents a newly enabled source from importing years
+    # of backlog on its first fetch.
+    max_entries: int | None = Field(default=None, gt=0)
     fetch_interval_minutes: int = Field(default=60, gt=0)
 
     def excludes(self, url: str) -> str | None:

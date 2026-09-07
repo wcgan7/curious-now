@@ -1,4 +1,4 @@
-.PHONY: venv install dev-up dev-down migrate api test lint typecheck check sync-once sync-loop v2-sources v2-migrate v2-sync-sources v2-ingest v2-hydrate v2-retrieve v2-gate v2-generate v2-corpus-audit v2-fixtures v2-rank v2-test v2-lint v2-typecheck reader-install reader-dev reader-typecheck reader-build v2-check
+.PHONY: venv install dev-up dev-down migrate api test lint typecheck check sync-once sync-loop v2-sources v2-migrate v2-sync-sources v2-ingest v2-hydrate v2-retrieve v2-gate v2-generate v2-cycle v2-corpus-audit v2-fixtures v2-rank v2-test v2-lint v2-typecheck reader-install reader-dev reader-typecheck reader-build v2-check
 
 venv:
 	python -m venv .venv
@@ -64,6 +64,9 @@ v2-generate:
 
 v2-gate:
 	.venv/bin/python -m curious_now_v2.cli gate
+
+v2-cycle:
+	.venv/bin/python scripts/v2_run_cycle.py
 
 v2-rank:
 	.venv/bin/python -m curious_now_v2.cli rank

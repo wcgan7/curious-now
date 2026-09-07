@@ -41,7 +41,7 @@ function ago(iso: string | null): string {
  * properties, so the cards it puts first cannot differ in them — and a label
  * that reads the same on every row is texture, not information.
  */
-function StoryRow({ story }: { story: FeedStory }) {
+function StoryRow({ eager, story }: { eager: boolean; story: FeedStory }) {
   const source = vettingSource(story.sources);
   const hasPicture = Boolean(source?.imageUrl || source?.figureImage);
   const isFigure = Boolean(source && !source.imageUrl && source.figureImage);
@@ -51,7 +51,7 @@ function StoryRow({ story }: { story: FeedStory }) {
       <Link className="storyLink" href={`/story/${story.id}`}>
         {hasPicture ? (
           <span className={isFigure ? "storyPicture storyPicture--figure" : "storyPicture"}>
-            <CardImage source={source} />
+            <CardImage eager={eager} source={source} />
           </span>
         ) : null}
         <span className="storyBody">
@@ -61,7 +61,14 @@ function StoryRow({ story }: { story: FeedStory }) {
               {ago(story.publishedAt)}
             </time>
           </span>
-          <h2 className="storyTitle">{story.title}</h2>
+          {story.titleHtml ? (
+            <h2
+              className="storyTitle"
+              dangerouslySetInnerHTML={{ __html: story.titleHtml }}
+            />
+          ) : (
+            <h2 className="storyTitle">{story.title}</h2>
+          )}
         </span>
       </Link>
     </li>
@@ -228,8 +235,11 @@ export function FeedStream({
       {/* Capture, so the snapshot is written before the router begins the
           navigation and scrolls the feed to the top under us. */}
       <ul className="feed" onClickCapture={remember}>
-        {stories.map((story) => (
-          <StoryRow key={story.id} story={story} />
+        {stories.map((story, index) => (
+          // The first few rows make up the initial viewport. Their pictures
+          // are LCP candidates, so waiting for lazy-load discovery only makes
+          // the largest visible element arrive later.
+          <StoryRow eager={index < 4} key={story.id} story={story} />
         ))}
       </ul>
 

@@ -43,15 +43,11 @@ def test_a_story_whose_only_source_is_walled_is_withheld() -> None:
     assert any("paywall" in reason for reason in gate.reasons)
 
 
-def test_a_paper_supports_every_layer() -> None:
+def test_retrieval_gate_only_decides_that_a_paper_is_an_article() -> None:
     gate = gate_story((paper_item(),))
 
     assert gate.publishable is True
-    assert gate.supported_depths == (
-        ExplanationDepth.GLANCE,
-        ExplanationDepth.EXPLAIN,
-        ExplanationDepth.TECHNICAL,
-    )
+    assert gate.supported_depths == (ExplanationDepth.GLANCE,)
 
 
 def test_journalism_never_reaches_technical_however_well_written() -> None:
@@ -80,7 +76,7 @@ def test_the_richest_item_grounds_the_story() -> None:
     )
 
     assert gate.grounding_source == "microsoft_research_blog_html"
-    assert ExplanationDepth.EXPLAIN in gate.supported_depths
+    assert gate.supported_depths == (ExplanationDepth.GLANCE,)
 
 
 def test_thin_items_are_not_added_together() -> None:

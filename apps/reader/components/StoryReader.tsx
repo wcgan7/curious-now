@@ -1,10 +1,15 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { StoryImage } from "@/components/StoryImage";
 import { reviewBadge, sourceLinkLabel, vettingSource } from "@/lib/provenance";
-import type { Explanation, ExplanationDepth, StoryDetail } from "@/lib/types";
+import type {
+  Explanation,
+  ExplanationDepth,
+  ProseBlock,
+  StoryDetail,
+} from "@/lib/types";
 
 const RUNGS: { depth: ExplanationDepth; label: string }[] = [
   { depth: "glance", label: "The idea" },
@@ -58,25 +63,48 @@ export function StoryReader({
     const asked = rungs.find((rung) => rung.depth === initialView);
     return asked?.depth ?? rungs[0]?.depth ?? "glance";
   });
+  const rungAnchor = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
+  const resetAfterRender = useRef(false);
   const source = vettingSource(story.sources);
   const chosen = story.explanations.find((entry) => entry.depth === depth);
 
+  const returnToStart = useCallback(() => {
+    const anchor = rungAnchor.current;
+    if (!anchor) return;
+    const masthead = document.querySelector<HTMLElement>(".masthead");
+    // A sticky element's rectangle *and its offsetTop* follow it once stuck.
+    // This inert sibling never moves, so its document coordinate remains the
+    // beginning of the explanation at every scroll depth.
+    const documentTop = anchor.getBoundingClientRect().top + window.scrollY;
+    const top = Math.max(0, documentTop - (masthead?.offsetHeight ?? 0));
+    window.scrollTo({ behavior: "instant", top });
+  }, []);
+
   const choose = useCallback((next: ExplanationDepth) => {
+    if (next === depth) return;
+    // Move immediately, while the old, already-laid-out prose is still in the
+    // document. This gives the tap an instant visible response even when the
+    // incoming Technical view contains a large KaTeX tree.
+    returnToStart();
+    resetAfterRender.current = true;
     setDepth(next);
-    // The depths run 1,800px and 7,000px, so changing depth from halfway down
-    // would leave a reader past the end of a shorter text, staring at the
-    // source block. Every change starts the new text at its beginning —
-    // instantly, because the prose under the bar has already been replaced and
-    // animating 1,600px to reach it would be a long ride to nowhere.
-    bar.current?.scrollIntoView({ behavior: "instant", block: "start" });
     // In the URL so a depth can be linked to and survives a reload, and
     // replaceState so moving between depths does not fill the back button
     // with a trail a reader has to walk out of.
     const url = new URL(window.location.href);
     url.searchParams.set("view", next);
     window.history.replaceState(null, "", url);
-  }, []);
+  }, [depth, returnToStart]);
+
+  // Re-assert the same anchor before paint after React has exchanged bodies.
+  // This defeats browser scroll anchoring when the old and new depths have very
+  // different heights and guarantees that the first sentence remains visible.
+  useLayoutEffect(() => {
+    if (!resetAfterRender.current) return;
+    resetAfterRender.current = false;
+    returnToStart();
+  }, [depth, returnToStart]);
 
   return (
     <article className="article">
@@ -114,7 +142,14 @@ export function StoryReader({
             })}
           </time>
         </p>
-        <h1 className="articleTitle">{story.title}</h1>
+        {story.titleHtml ? (
+          <h1
+            className="articleTitle"
+            dangerouslySetInnerHTML={{ __html: story.titleHtml }}
+          />
+        ) : (
+          <h1 className="articleTitle">{story.title}</h1>
+        )}
       </header>
 
       {/* Pinned, and the same height at every depth so switching rungs does
@@ -123,6 +158,7 @@ export function StoryReader({
           nothing to the page but a thickening of a line that was there. Three
           bordered boxes with a black fill were tried and were 20px taller and
           the only filled object in a design that has no fills. */}
+      <div aria-hidden="true" className="articleRungAnchor" ref={rungAnchor} />
       <div className="articleRungs" ref={bar} role="tablist">
         {rungs.map((rung) => (
           <button
@@ -160,7 +196,14 @@ export function StoryReader({
                 decision the reader is about to make. */}
             {reviewBadge(entry) ? <span> · {reviewBadge(entry)}</span> : null}
           </p>
-          <p className="articleOriginalTitle">{entry.title}</p>
+          {entry.titleHtml ? (
+            <p
+              className="articleOriginalTitle"
+              dangerouslySetInnerHTML={{ __html: entry.titleHtml }}
+            />
+          ) : (
+            <p className="articleOriginalTitle">{entry.title}</p>
+          )}
           <a
             className="articleCta"
             href={entry.url}
@@ -176,7 +219,12 @@ export function StoryReader({
   );
 }
 
-type Section = { heading: string; text: string; html?: string };
+type Section = {
+  heading: string;
+  text: string;
+  html?: string;
+  blocks?: ProseBlock[];
+};
 
 function sectionsOf(content: Record<string, unknown> | undefined): Section[] {
   const raw = content?.sections;
@@ -208,10 +256,10 @@ function Body({ explanation }: { explanation?: Explanation }) {
   if (sections.length > 0) {
     return (
       <div className="articleProse">
-        {sections.map((section) => (
-          <section key={section.heading}>
+        {sections.map((section, index) => (
+          <section key={`${index}:${section.heading}`}>
             <h2 className="articleSectionHead">{section.heading}</h2>
-            <Paragraphs html={section.html} text={section.text} />
+            <Prose blocks={section.blocks} html={section.html} text={section.text} />
           </section>
         ))}
       </div>
@@ -219,9 +267,69 @@ function Body({ explanation }: { explanation?: Explanation }) {
   }
   return (
     <div className="articleProse">
-      <Paragraphs html={explanation.html} text={explanation.plainText} />
+      <Prose
+        blocks={explanation.blocks}
+        html={explanation.html}
+        lead
+        text={explanation.plainText}
+      />
     </div>
   );
+}
+
+function RichText({ html }: { html: string }) {
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+function Prose({
+  blocks,
+  html,
+  lead = false,
+  text,
+}: {
+  blocks?: ProseBlock[];
+  html?: string | null;
+  lead?: boolean;
+  text?: string | null;
+}) {
+  if (!blocks?.length) return <Paragraphs html={html} text={text} />;
+  return blocks.map((block, index) => {
+    if (block.kind === "heading") {
+      return block.level === 2 ? (
+        <h2 className="articleSectionHead" key={index}>
+          <RichText html={block.value.html} />
+        </h2>
+      ) : (
+        <h3 className="articleSubhead" key={index}>
+          <RichText html={block.value.html} />
+        </h3>
+      );
+    }
+    if (block.kind === "list") {
+      const List = block.ordered ? "ol" : "ul";
+      return (
+        <List className="articleList" key={index}>
+          {block.items.map((item, itemIndex) => (
+            <li key={itemIndex}>
+              <RichText html={item.html} />
+            </li>
+          ))}
+        </List>
+      );
+    }
+    if (block.kind === "quote") {
+      return (
+        <blockquote className="articleQuote" key={index}>
+          <RichText html={block.value.html} />
+        </blockquote>
+      );
+    }
+    return (
+      <p className={lead && index === 0 ? "articleLead" : undefined} key={index}>
+        <RichText html={block.value.html} />
+      </p>
+    );
+  });
 }
 
 function Paragraphs({ html, text }: { html?: string | null; text?: string | null }) {
@@ -237,9 +345,9 @@ function Paragraphs({ html, text }: { html?: string | null; text?: string | null
     <>
       {paragraphs.map((paragraph, index) =>
         rendered?.[index] ? (
-          <p dangerouslySetInnerHTML={{ __html: rendered[index] }} key={paragraph} />
+          <p dangerouslySetInnerHTML={{ __html: rendered[index] }} key={index} />
         ) : (
-          <p key={paragraph}>{paragraph}</p>
+          <p key={index}>{paragraph}</p>
         ),
       )}
     </>

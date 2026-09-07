@@ -120,7 +120,8 @@ def main() -> int:
                     retired += cursor.rowcount
 
             # A story whose only evidence has been retired has nothing behind
-            # it, so it leaves the feed rather than standing on a blocked item.
+            # it, so it leaves both the reader and the generation queue rather
+            # than standing on text retained by a blocked item.
             cursor.execute(
                 """
                 UPDATE stories SET
@@ -128,7 +129,7 @@ def main() -> int:
                   supported_depths = '{}',
                   publication_reasons = %s,
                   updated_at = now()
-                WHERE status = 'published'
+                WHERE status <> 'hidden'
                   AND NOT EXISTS (
                     SELECT 1 FROM story_items si
                     JOIN items i ON i.id = si.item_id

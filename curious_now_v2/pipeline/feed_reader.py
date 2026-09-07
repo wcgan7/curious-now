@@ -123,6 +123,22 @@ def _published_at(entry: Any) -> datetime | None:
     return None
 
 
+def _content_type_hints(entry: Any) -> tuple[str, ...]:
+    """Publisher-supplied categories that describe this individual entry."""
+
+    hints: list[str] = []
+    for tag in _entry_value(entry, "tags") or []:
+        if not isinstance(tag, dict):
+            continue
+        term = _plain_text(tag.get("term"))
+        if term and term not in hints:
+            hints.append(term)
+    category = _plain_text(_entry_value(entry, "category"))
+    if category and category not in hints:
+        hints.append(category)
+    return tuple(hints)
+
+
 def fetch_feed(
     *,
     client: httpx.Client,
@@ -172,6 +188,9 @@ def fetch_feed(
 
     candidates: list[IngestCandidate] = []
     skipped_entries = 0
+    if feed.max_entries is not None and len(entries) > feed.max_entries:
+        skipped_entries = len(entries) - feed.max_entries
+        entries = entries[: feed.max_entries]
     for entry in entries:
         title = _plain_text(_entry_value(entry, "title"))
         url = _entry_value(entry, "link")
@@ -205,6 +224,7 @@ def fetch_feed(
                 image_url=_syndicated_image(entry),
                 default_content_type=feed.default_content_type,
                 content_type_rules=feed.content_type_rules,
+                content_type_hints=_content_type_hints(entry),
             )
             candidates.append(normalize_entry(raw_entry))
         except ValueError:

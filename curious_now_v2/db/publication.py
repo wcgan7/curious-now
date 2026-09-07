@@ -37,6 +37,8 @@ def _load_story_items(
     connection: psycopg.Connection[Any],
     *,
     limit: int | None,
+    source: str | None,
+    changed_only: bool,
 ) -> dict[UUID, list[ItemText]]:
     """Every story's retrieved text, keyed by story."""
 
@@ -55,22 +57,83 @@ def _load_story_items(
         JOIN sources src ON src.id = i.source_id
         WHERE s.status <> 'hidden'
           AND s.withheld_kind IS NULL
+          AND src.active
+          AND i.full_text_status <> 'blocked'
     """
-    parameters: tuple[object, ...] = ()
-    if limit is not None:
+    parameters: list[object] = []
+    changed_outer = ""
+    changed_candidate = ""
+    if changed_only:
+        changed_outer = """
+          AND (
+            s.gated_at IS NULL
+            OR EXISTS (
+              SELECT 1
+              FROM story_items changed_si
+              JOIN items changed_i ON changed_i.id = changed_si.item_id
+              WHERE changed_si.story_id = s.id
+                AND changed_i.full_text_fetched_at IS NOT NULL
+                AND changed_i.full_text_fetched_at > s.gated_at
+            )
+          )
+        """
+        changed_candidate = """
+          AND (
+            stories.gated_at IS NULL
+            OR EXISTS (
+              SELECT 1
+              FROM story_items changed_si
+              JOIN items changed_i ON changed_i.id = changed_si.item_id
+              WHERE changed_si.story_id = stories.id
+                AND changed_i.full_text_fetched_at IS NOT NULL
+                AND changed_i.full_text_fetched_at > stories.gated_at
+            )
+          )
+        """
+    query += changed_outer
+    if source is not None:
         query += """
+          AND EXISTS (
+            SELECT 1
+            FROM story_items source_si
+            JOIN items source_i ON source_i.id = source_si.item_id
+            JOIN sources source_src ON source_src.id = source_i.source_id
+            WHERE source_si.story_id = s.id
+              AND source_src.name = %s
+          )
+        """
+        parameters.append(source)
+    if limit is not None:
+        candidate_source = ""
+        if source is not None:
+            candidate_source = "AND candidate_src.name = %s"
+        query += f"""
           AND s.id IN (
             SELECT id FROM stories
             WHERE status <> 'hidden' AND withheld_kind IS NULL
+              {changed_candidate}
+              AND EXISTS (
+                SELECT 1
+                FROM story_items candidate_si
+                JOIN items candidate_i ON candidate_i.id = candidate_si.item_id
+                JOIN sources candidate_src
+                  ON candidate_src.id = candidate_i.source_id
+                WHERE candidate_si.story_id = stories.id
+                  AND candidate_src.active
+                  AND candidate_i.full_text_status <> 'blocked'
+                  {candidate_source}
+              )
             ORDER BY gated_at NULLS FIRST, last_evidence_at DESC
             LIMIT %s
           )
         """
-        parameters = (limit,)
+        if source is not None:
+            parameters.append(source)
+        parameters.append(limit)
 
     grouped: dict[UUID, list[ItemText]] = {}
     with connection.cursor() as cursor:
-        cursor.execute(query, parameters)
+        cursor.execute(query, tuple(parameters))
         for (
             story_id,
             source_name,
@@ -140,6 +203,8 @@ def run_publication_gate(
     database_url: str,
     *,
     limit: int | None = None,
+    source: str | None = None,
+    changed_only: bool = False,
 ) -> GateRunResult:
     """Decide which stories have evidence worth opening.
 
@@ -166,7 +231,12 @@ def run_publication_gate(
                 raise RuntimeError("pipeline run insert returned no ID")
             run_id = cast(UUID, row[0])
 
-        stories = _load_story_items(connection, limit=limit)
+        stories = _load_story_items(
+            connection,
+            limit=limit,
+            source=source,
+            changed_only=changed_only,
+        )
         for story_id, items in stories.items():
             gate = gate_story(tuple(items))
             _store_gate(connection, story_id=story_id, gate=gate, now=now)

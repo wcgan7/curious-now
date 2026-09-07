@@ -49,6 +49,10 @@ class RawFeedEntry(BaseModel):
     image_url: str | None = None
     default_content_type: ContentType
     content_type_rules: tuple[ContentTypeRule, ...] = ()
+    # Publisher-supplied evidence about this individual entry, such as an RSS
+    # category of "Original Research" or "Review". Mixed journal feeds often
+    # put the only usable type signal here rather than in the URL.
+    content_type_hints: tuple[str, ...] = ()
 
 
 class IngestCandidate(BaseModel):
@@ -106,7 +110,12 @@ def classify_content_type(
     """
 
     for rule in entry.content_type_rules:
-        if rule.matches(canonical_url, entry.url, doi):
+        if rule.matches(
+            canonical_url,
+            entry.url,
+            doi,
+            *entry.content_type_hints,
+        ):
             return rule.content_type, "source_pattern", rule.note or (
                 f"matched {rule.pattern!r}"
             )

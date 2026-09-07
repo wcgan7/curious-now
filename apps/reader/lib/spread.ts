@@ -39,3 +39,40 @@ export function spreadSources(stories: FeedStory[]): FeedStory[] {
   return spread;
 }
 
+/** Interleave two independently ranked editorial lanes.
+ *
+ * Technical depth is the product's strength, so it leads and keeps two of
+ * every three positions. Accessible reporting gets the third. This is page
+ * assembly, not a quality score: neither lane's internal ranking is changed,
+ * and a readable article does not have to pretend it changes scientific
+ * practice in order to be seen.
+ */
+export function mixFormats<T>(
+  technical: readonly T[],
+  accessible: readonly T[],
+): T[] {
+  const mixed: T[] = [];
+  let technicalIndex = 0;
+  let accessibleIndex = 0;
+
+  while (
+    technicalIndex < technical.length ||
+    accessibleIndex < accessible.length
+  ) {
+    for (
+      let slot = 0;
+      slot < 2 && technicalIndex < technical.length;
+      slot += 1
+    ) {
+      mixed.push(technical[technicalIndex]);
+      technicalIndex += 1;
+    }
+    if (accessibleIndex < accessible.length) {
+      mixed.push(accessible[accessibleIndex]);
+      accessibleIndex += 1;
+    }
+    // Once either lane is empty, the loop naturally drains the other one.
+  }
+
+  return mixed;
+}

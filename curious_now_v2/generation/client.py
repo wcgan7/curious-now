@@ -21,6 +21,24 @@ CACHED_INPUT_DISCOUNT = 0.10
 DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_EFFORT = "high"
 
+# Reader-facing generation is text transformation, not an agent task.  Keep
+# every built-in capability that could inspect the host or delegate work out of
+# the model's tool surface. The event parser below remains fail-closed for any
+# new tool type a later CLI might add.
+DISABLED_GENERATION_FEATURES = (
+    "shell_tool",
+    "unified_exec",
+    "view_image",
+    "computer_use",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "image_generation",
+    "multi_agent",
+    "multi_agent_v2",
+    "workspace_dependencies",
+)
+
 
 # A model writing mathematics writes a great many backslashes, and sometimes
 # escapes one too many: the Technical walkthrough of a quantum optimisation
@@ -80,12 +98,26 @@ class Completion:
         return self.payload is not None
 
 
-class Generator(Protocol):
-    """Whatever produces structured output for a prompt.
+@dataclass(frozen=True)
+class TextCompletion:
+    """An unconstrained prose reply and the cost of producing it."""
 
-    Narrow on purpose: the pipeline needs a schema-constrained JSON reply and
-    the cost of getting it, nothing more. Swapping this for a direct API client
-    should not touch anything that calls it.
+    text: str | None
+    usage: Usage = field(default_factory=Usage)
+    seconds: float = 0.0
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.text is not None and bool(self.text.strip())
+
+
+class Generator(Protocol):
+    """Whatever produces structured control data and unconstrained prose.
+
+    Control-plane classifiers use schema-constrained JSON; reader-facing layers
+    use plain text. Both retain usage and error information so swapping this for
+    a direct API client does not touch their callers.
     """
 
     model: str
@@ -93,6 +125,8 @@ class Generator(Protocol):
     def complete(
         self, prompt: str, schema: dict[str, Any], *, timeout: float = 900
     ) -> Completion: ...
+
+    def complete_text(self, prompt: str, *, timeout: float = 900) -> TextCompletion: ...
 
 
 @dataclass
@@ -108,6 +142,77 @@ class CodexGenerator:
     model: str = DEFAULT_MODEL
     effort: str = DEFAULT_EFFORT
 
+    @staticmethod
+    def _events(stdout: str) -> tuple[Usage, tuple[str, ...]]:
+        """Read usage and record any agent tool activity.
+
+        Generation prompts contain third-party text.  A prose or extraction
+        call has no legitimate reason to inspect the machine, so any tool call
+        makes the result unusable even when the CLI eventually writes output.
+        """
+
+        usage = Usage()
+        tools: list[str] = []
+        for line in stdout.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(event, dict):
+                continue
+            if "usage" in event:
+                raw = event["usage"]
+                usage = Usage(
+                    input_tokens=int(raw.get("input_tokens", 0)),
+                    cached_input_tokens=int(raw.get("cached_input_tokens", 0)),
+                    output_tokens=int(raw.get("output_tokens", 0)),
+                )
+            item = event.get("item")
+            if not isinstance(item, dict):
+                continue
+            item_type = str(item.get("type", ""))
+            # Agent prose/reasoning is expected. Everything else is a tool or
+            # harness action and fails closed, including types introduced by a
+            # future CLI version that this code does not know by name.
+            if item_type and item_type not in {"agent_message", "reasoning"}:
+                tools.append(item_type)
+        return usage, tuple(dict.fromkeys(tools))
+
+    def _base_command(self, scratch: str) -> list[str]:
+        """A source-isolated CLI invocation.
+
+        Both shell implementations are disabled, the process runs from an
+        empty directory without user/project instructions, and the read-only
+        sandbox remains as defence in depth. Any other observed tool activity
+        is rejected rather than published.
+        """
+
+        command = [
+            "codex",
+            "exec",
+            "-m",
+            self.model,
+            "-c",
+            f'model_reasoning_effort="{self.effort}"',
+            "-c",
+            'web_search="disabled"',
+        ]
+        for feature in DISABLED_GENERATION_FEATURES:
+            command.extend(["--disable", feature])
+        command.extend(
+            [
+                "--sandbox",
+                "read-only",
+                "--ephemeral",
+                "--ignore-user-config",
+                "--ignore-rules",
+                "--skip-git-repo-check",
+                "-C",
+                scratch,
+            ]
+        )
+        return command
+
     def complete(
         self, prompt: str, schema: dict[str, Any], *, timeout: float = 900
     ) -> Completion:
@@ -119,12 +224,7 @@ class CodexGenerator:
             try:
                 completed = subprocess.run(
                     [
-                        "codex", "exec",
-                        "-m", self.model,
-                        "-c", f'model_reasoning_effort="{self.effort}"',
-                        "--sandbox", "read-only",
-                        "--ephemeral",
-                        "--skip-git-repo-check",
+                        *self._base_command(scratch),
                         "--output-schema", str(schema_path),
                         "-o", str(output_path),
                         "--json",
@@ -134,6 +234,7 @@ class CodexGenerator:
                     capture_output=True,
                     text=True,
                     timeout=timeout,
+                    cwd=scratch,
                 )
             except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
                 return Completion(
@@ -142,21 +243,26 @@ class CodexGenerator:
                     error=f"{type(exc).__name__}: {exc}",
                 )
 
-            usage = Usage()
-            for line in completed.stdout.splitlines():
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(event, dict) and "usage" in event:
-                    raw = event["usage"]
-                    usage = Usage(
-                        input_tokens=int(raw.get("input_tokens", 0)),
-                        cached_input_tokens=int(raw.get("cached_input_tokens", 0)),
-                        output_tokens=int(raw.get("output_tokens", 0)),
-                    )
+            usage, tools = self._events(completed.stdout)
 
             seconds = time.monotonic() - started
+            if completed.returncode != 0:
+                return Completion(
+                    None,
+                    usage=usage,
+                    seconds=seconds,
+                    error=(
+                        completed.stderr.strip()
+                        or f"codex exited with status {completed.returncode}"
+                    )[:400],
+                )
+            if tools:
+                return Completion(
+                    None,
+                    usage=usage,
+                    seconds=seconds,
+                    error=f"untrusted source triggered tool activity: {', '.join(tools)}",
+                )
             if not output_path.exists():
                 return Completion(
                     None,
@@ -172,3 +278,74 @@ class CodexGenerator:
                 return Completion(
                     None, usage=usage, seconds=seconds, error=f"unparseable: {exc}"
                 )
+
+    def complete_text(self, prompt: str, *, timeout: float = 900) -> TextCompletion:
+        """Run the prompt as prose, without turning the answer into a form.
+
+        Reader-facing generation is deliberately separate from `complete`.
+        The three depth prompts were evaluated as ordinary prose requests;
+        applying an output schema would change that objective back into field
+        filling, which is the behaviour the direct pipeline is removing.
+        """
+
+        started = time.monotonic()
+        with tempfile.TemporaryDirectory() as scratch:
+            output_path = Path(scratch) / "out.txt"
+            try:
+                completed = subprocess.run(
+                    [
+                        *self._base_command(scratch),
+                        "-o",
+                        str(output_path),
+                        "--json",
+                        "-",
+                    ],
+                    input=prompt,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    cwd=scratch,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+                return TextCompletion(
+                    None,
+                    seconds=time.monotonic() - started,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+
+            usage, tools = self._events(completed.stdout)
+
+            seconds = time.monotonic() - started
+            if completed.returncode != 0:
+                return TextCompletion(
+                    None,
+                    usage=usage,
+                    seconds=seconds,
+                    error=(
+                        completed.stderr.strip()
+                        or f"codex exited with status {completed.returncode}"
+                    )[:400],
+                )
+            if tools:
+                return TextCompletion(
+                    None,
+                    usage=usage,
+                    seconds=seconds,
+                    error=f"untrusted source triggered tool activity: {', '.join(tools)}",
+                )
+            if not output_path.exists():
+                return TextCompletion(
+                    None,
+                    usage=usage,
+                    seconds=seconds,
+                    error=(completed.stderr or "no output written")[:400],
+                )
+            text = output_path.read_text().strip()
+            if not text:
+                return TextCompletion(
+                    None,
+                    usage=usage,
+                    seconds=seconds,
+                    error="empty output",
+                )
+            return TextCompletion(text, usage=usage, seconds=seconds)

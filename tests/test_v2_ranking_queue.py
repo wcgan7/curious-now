@@ -9,23 +9,47 @@ never moves once assigned, is exactly the one worth protecting there.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from curious_now_v2.db.ranking import RankingInput, queue_positions
+from curious_now_v2.db.ranking import (
+    RankingInput,
+    density_identity,
+    density_positions,
+    queue_positions,
+)
 from curious_now_v2.pipeline.scoring import score_story
 
 # --- whose turn it is -------------------------------------------------------
 
 
-def _input(story_id: str, source: str, seen_days: int, published: datetime = None):
+def _input(
+    story_id: str,
+    source: str,
+    seen_days: int,
+    published: datetime = None,
+    *,
+    field: str | None = "ai",
+    stored_position: int | None = None,
+):
+    publication = published or datetime(2026, 7, 31, 4, 0, tzinfo=UTC)
+    identity = density_identity(
+        source_name=source,
+        field=field,
+        published_at=publication,
+    )
     return RankingInput(
         story_id=UUID(story_id),
-        published_at=published or datetime(2026, 7, 31, 4, 0, tzinfo=UTC),
+        published_at=publication,
         rungs=3,
+        eligible_depths=3,
         significance="changes_practice",
         source_name=source,
         first_seen=datetime(2026, 7, 31, 4, 0, tzinfo=UTC) + timedelta(days=seen_days),
+        field=field,
+        stored_density_key=identity.key if stored_position is not None else None,
+        stored_density_position=stored_position,
     )
 
 
@@ -119,3 +143,80 @@ def test_quality_still_decides_across_queues() -> None:
         significance="incremental",
     )
     assert best_but_hundredth.effective_at > worse_but_first.effective_at
+
+
+# --- source/category/day density -------------------------------------------
+
+
+def test_density_queue_runs_in_first_seen_order() -> None:
+    positions = density_positions(
+        [
+            _input(_id(2), "arXiv", seen_days=2),
+            _input(_id(1), "arXiv", seen_days=1),
+            _input(_id(3), "arXiv", seen_days=3),
+        ]
+    )
+
+    assert positions == {
+        UUID(_id(1)): 0,
+        UUID(_id(2)): 1,
+        UUID(_id(3)): 2,
+    }
+
+
+def test_density_resets_for_each_source_category_and_day() -> None:
+    next_day = datetime(2026, 8, 1, 4, 0, tzinfo=UTC)
+    entries = [
+        _input(_id(1), "arXiv", seen_days=1, field="ai"),
+        # A different leaf in the same reader category shares the queue.
+        _input(_id(2), "arXiv", seen_days=2, field="robotics"),
+        _input(_id(3), "arXiv", seen_days=3, field="clinical_medicine"),
+        _input(_id(4), "Nature", seen_days=4, field="ai"),
+        _input(_id(5), "arXiv", seen_days=5, published=next_day, field="ai"),
+    ]
+
+    positions = density_positions(entries)
+
+    assert positions[UUID(_id(1))] == 0
+    assert positions[UUID(_id(2))] == 1
+    assert positions[UUID(_id(3))] == 0
+    assert positions[UUID(_id(4))] == 0
+    assert positions[UUID(_id(5))] == 0
+
+
+def test_stored_density_positions_stay_fixed_and_new_stories_append() -> None:
+    existing = [
+        _input(_id(1), "eLife", seen_days=1, stored_position=0),
+        _input(_id(2), "eLife", seen_days=2, stored_position=1),
+    ]
+    before = density_positions(existing)
+    after = density_positions([*existing, _input(_id(3), "eLife", seen_days=3)])
+
+    assert after[UUID(_id(1))] == before[UUID(_id(1))] == 0
+    assert after[UUID(_id(2))] == before[UUID(_id(2))] == 1
+    assert after[UUID(_id(3))] == 2
+
+
+def test_partial_initial_backfill_reconstructs_the_same_positions() -> None:
+    entries = [
+        _input(_id(1), "eLife", seen_days=1),
+        _input(_id(2), "eLife", seen_days=2, stored_position=1),
+        _input(_id(3), "eLife", seen_days=3),
+    ]
+
+    assert density_positions(entries) == {
+        UUID(_id(1)): 0,
+        UUID(_id(2)): 1,
+        UUID(_id(3)): 2,
+    }
+
+
+def test_a_stored_position_from_an_old_category_is_not_reused() -> None:
+    moved = _input(_id(1), "eLife", seen_days=1, field="neuroscience")
+    moved = replace(
+        moved,
+        stored_density_key=("eLife", "life", "2026-07-31"),
+        stored_density_position=7,
+    )
+
+    assert density_positions([moved])[moved.story_id] == 0

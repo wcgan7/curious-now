@@ -6,13 +6,10 @@ from enum import StrEnum
 
 from curious_now_v2.core.enums import ExplanationDepth
 
-# Word budgets, derived from what the presentation contract asks each layer to
-# do. Glance is ~30-60 seconds; Explain is 3-6 minutes and must cover mechanism,
-# evidence, comparison, and limitations; Technical walks through the work.
-# Source text must comfortably exceed the output it grounds.
+# A coarse retrieval guard, not an editorial length target. Below this, fetched
+# pages were consistently metadata, teasers, or navigation rather than an
+# article a model could honestly summarise.
 MIN_WORDS_ANY = 150
-MIN_WORDS_EXPLAIN = 600
-MIN_WORDS_TECHNICAL = 2000
 
 # Publishers serve a teaser plus a subscription pitch under HTTP 200, and each
 # words it differently ("exclusive to STAT+ subscribers", "Access options" plus
@@ -118,7 +115,7 @@ def assess_text(text: str, *, has_structure: bool = False) -> TextAssessment:
         trailing = any(
             position > 0.5 for label, position in signals if label != "subscription price"
         )
-        if words < MIN_WORDS_EXPLAIN or (trailing and len(signals) >= 2):
+        if words < MIN_WORDS_ANY or (trailing and len(signals) >= 2):
             labels = [label for label, _ in signals]
             return TextAssessment(
                 verdict=TextVerdict.SOFT_PAYWALL,
@@ -140,24 +137,13 @@ def assess_text(text: str, *, has_structure: bool = False) -> TextAssessment:
             reasons=(f"{words} words is below the {MIN_WORDS_ANY}-word floor",),
         )
 
-    depths = [ExplanationDepth.GLANCE]
-    reasons = [f"{words} words of usable text"]
-    if words >= MIN_WORDS_EXPLAIN:
-        depths.append(ExplanationDepth.EXPLAIN)
-    else:
-        reasons.append(
-            f"below {MIN_WORDS_EXPLAIN} words; too thin for a field-aware Explain"
-        )
-
-    if words >= MIN_WORDS_TECHNICAL and has_structure and sections >= 3:
-        depths.append(ExplanationDepth.TECHNICAL)
-    elif words >= MIN_WORDS_TECHNICAL and not has_structure:
-        reasons.append("no section structure to cite for Technical")
-
     return TextAssessment(
         verdict=TextVerdict.USABLE,
         words=words,
         section_hits=sections,
-        supported_depths=tuple(depths),
-        reasons=tuple(reasons),
+        # Retrieval decides whether there is an article at all. Deeper rungs
+        # are planned later from source type, access class, and extracted
+        # evidence rather than guessed from word count or heading count.
+        supported_depths=(ExplanationDepth.GLANCE,),
+        reasons=(f"{words} words of usable text",),
     )

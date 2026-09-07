@@ -5,7 +5,6 @@ import trafilatura
 
 from curious_now_v2.core.enums import ExplanationDepth
 from curious_now_v2.retrieval.quality import (
-    MIN_WORDS_EXPLAIN,
     TextVerdict,
     assess_text,
 )
@@ -57,17 +56,16 @@ def test_short_usable_articles_support_only_glance() -> None:
     assessment = assess_text(extract("bbc_news_html"))
 
     assert assessment.supported_depths == (ExplanationDepth.GLANCE,)
-    assert any("too thin" in reason for reason in assessment.reasons)
 
 
-def test_long_articles_support_explain() -> None:
+def test_long_articles_do_not_guess_depth_from_length() -> None:
     assessment = assess_text(extract("microsoft_research_blog_html"))
 
-    assert assessment.words >= MIN_WORDS_EXPLAIN
-    assert ExplanationDepth.EXPLAIN in assessment.supported_depths
+    assert assessment.words > 600
+    assert assessment.supported_depths == (ExplanationDepth.GLANCE,)
 
 
-def test_technical_requires_structure_not_just_length() -> None:
+def test_structure_does_not_guess_technical_at_retrieval_time() -> None:
     body = " ".join(
         ["Introduction methods results discussion conclusion references"] * 400
     )
@@ -75,11 +73,8 @@ def test_technical_requires_structure_not_just_length() -> None:
     without_structure = assess_text(body, has_structure=False)
     with_structure = assess_text(body, has_structure=True)
 
-    assert ExplanationDepth.TECHNICAL not in without_structure.supported_depths
-    assert ExplanationDepth.TECHNICAL in with_structure.supported_depths
-    assert any(
-        "no section structure" in reason for reason in without_structure.reasons
-    )
+    assert without_structure.supported_depths == (ExplanationDepth.GLANCE,)
+    assert with_structure.supported_depths == (ExplanationDepth.GLANCE,)
 
 
 def test_an_article_discussing_subscriptions_is_not_a_paywall() -> None:
