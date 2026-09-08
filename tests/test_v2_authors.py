@@ -52,16 +52,31 @@ def test_arxiv_authors_key_on_the_bare_id_that_items_store() -> None:
     assert set(parse_arxiv_response(ARXIV_ENTRY)) == set(authors)
 
 
+SHORT_SUMMARY_ENTRY = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.00001v1</id>
+    <summary>Too short to generate from.</summary>
+    <author><name>Ji Lin</name></author>
+    <author><name>Li Fei-Fei</name></author>
+  </entry>
+</feed>
+"""
+
+
 def test_arxiv_authors_survive_an_abstract_the_hydrator_would_reject() -> None:
-    """The summary gate is about generation; a name is still a name."""
+    """The summary gate is about generation; a name is still a name.
 
-    payload = ARXIV_ENTRY.replace(
-        ARXIV_ENTRY[ARXIV_ENTRY.index("<summary>") : ARXIV_ENTRY.index("</summary>")],
-        "<summary>Abstract",
-    )
+    A summary under MIN_ABSTRACT_CHARS is refused as something to write from.
+    That is a judgement about prose, and it says nothing about whether the
+    entry named who wrote the paper — so the authors must still come back.
+    """
 
-    assert parse_arxiv_response(payload) == {}
-    assert len(parse_arxiv_authors(payload)["2312.07533"]) == 3
+    assert parse_arxiv_response(SHORT_SUMMARY_ENTRY) == {}
+
+    authors = parse_arxiv_authors(SHORT_SUMMARY_ENTRY)["2401.00001"]
+    assert [author.full_name for author in authors] == ["Ji Lin", "Li Fei-Fei"]
 
 
 def test_arxiv_authors_of_unparseable_markup_are_empty_not_an_error() -> None:

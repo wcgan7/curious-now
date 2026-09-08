@@ -55,6 +55,9 @@ from curious_now_v2.pipeline.hydrate import (
 # rather than a burst.
 CROSSREF_DELAY_SECONDS = 0.2
 
+# How many Crossref papers may be in flight before their attempt is recorded.
+MARK_EVERY = 50
+
 
 def select_papers(
     connection: psycopg.Connection[Any],
@@ -118,12 +121,18 @@ def mark_attempted(
         )
 
 
-def count(authors: tuple[Author, ...], tally: Counter[str]) -> None:
-    """Record what the providers actually carry, not what we hoped."""
+def count(authors: tuple[Author, ...], tally: Counter[str], source: str) -> None:
+    """Record what the providers actually carry, not what we hoped.
 
-    tally["authors"] += len(authors)
-    tally["with_orcid"] += sum(1 for a in authors if a.orcid)
-    tally["with_affiliation"] += sum(1 for a in authors if a.affiliation)
+    Counted per provider because the pooled figure is meaningless: arXiv never
+    returns an ORCID, so mixing its authors into the denominator reports a
+    number that falls as arXiv coverage rises. What decides whether following a
+    person needs OpenAlex is the share of *Crossref* authors carrying one.
+    """
+
+    tally[f"{source}.authors"] += len(authors)
+    tally[f"{source}.orcid"] += sum(1 for a in authors if a.orcid)
+    tally[f"{source}.affiliation"] += sum(1 for a in authors if a.affiliation)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -198,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
                 for arxiv_id in batch:
                     paper_id = by_arxiv[arxiv_id.casefold()]
                     authors = found.get(arxiv_id.casefold(), ())
-                    count(authors, tally)
+                    count(authors, tally, "arxiv_api")
                     tally["papers"] += 1
                     attempted.append(paper_id)
                     if authors and not args.dry_run:
@@ -208,6 +217,13 @@ def main(argv: list[str] | None = None) -> int:
                             authors=authors,
                             source="arxiv_api",
                         )
+                # Mark per batch rather than at the end. A Crossref run is one
+                # request per paper and takes long enough to be interrupted;
+                # marking only on completion would re-fetch everything it had
+                # already done, which is the case "resumable" is about.
+                if not args.dry_run:
+                    mark_attempted(connection, paper_ids=attempted, now=now)
+                    attempted.clear()
                 print(f"  arxiv {tally['papers']}/{len(arxiv)}")
 
             for position, (paper_id, doi) in enumerate(doi_only):
@@ -228,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
                     tally["failed"] += 1
                     print(f"  {doi}: {type(exc).__name__}: {exc}", file=sys.stderr)
                     continue
-                count(authors, tally)
+                count(authors, tally, "crossref_api")
                 tally["papers"] += 1
                 attempted.append(paper_id)
                 if authors and not args.dry_run:
@@ -238,26 +254,30 @@ def main(argv: list[str] | None = None) -> int:
                         authors=authors,
                         source="crossref_api",
                     )
+                if not args.dry_run and len(attempted) >= MARK_EVERY:
+                    mark_attempted(connection, paper_ids=attempted, now=now)
+                    attempted.clear()
                 if position and position % 100 == 0:
                     print(f"  crossref {position}/{len(doi_only)}")
 
         if not args.dry_run:
             mark_attempted(connection, paper_ids=attempted, now=now)
 
-    authors = tally["authors"]
+    total = tally["arxiv_api.authors"] + tally["crossref_api.authors"]
     print(
-        f"\n{'would store' if args.dry_run else 'stored'} {authors} authors "
+        f"\n{'would store' if args.dry_run else 'stored'} {total} authors "
         f"across {tally['papers']} papers; {tally['failed']} failed"
     )
-    if authors:
-        # The number that decides whether following a person needs OpenAlex.
+    for source in ("arxiv_api", "crossref_api"):
+        seen = tally[f"{source}.authors"]
+        if not seen:
+            continue
+        orcid = tally[f"{source}.orcid"]
+        affiliation = tally[f"{source}.affiliation"]
         print(
-            f"  ORCID on       {tally['with_orcid']:6d}  "
-            f"({tally['with_orcid'] / authors:.0%})"
-        )
-        print(
-            f"  affiliation on {tally['with_affiliation']:6d}  "
-            f"({tally['with_affiliation'] / authors:.0%})"
+            f"  {source:13s} {seen:6d} authors, "
+            f"ORCID on {orcid} ({orcid / seen:.0%}), "
+            f"affiliation on {affiliation} ({affiliation / seen:.0%})"
         )
     return 0
 
