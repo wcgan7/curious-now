@@ -114,6 +114,15 @@ access class to what was actually fetched. Many DOIs — news and editorial item
 in particular — publish no abstract at all; those are recorded as attempted and
 retried later rather than refetched on every run.
 
+The same responses carry the author list, which is stored verbatim per provider
+rather than reconciled into a canonical person. arXiv gives one display string,
+Crossref a given/family split and sometimes an ORCID; only the ORCID identifies
+rather than describes, so it is the only field a later join should trust. Author
+capture is deliberately not gated on the abstract — an entry whose summary is
+unusable still named who wrote it. Affiliation is read where present and is
+almost always absent, so where an author works remains a question for OpenAlex
+and not one this stage can answer.
+
 Open-access primary full text enables Technical. Abstracts can support Idea and,
 when they state a method, Explain. Metadata and snippets are skipped.
 

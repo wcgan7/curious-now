@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -14,9 +15,12 @@ from curious_now_v2.pipeline.hydrate import (
     ARXIV_API,
     ARXIV_BATCH_SIZE,
     CROSSREF_API,
+    Author,
     PaperHydration,
     arxiv_batches,
+    parse_arxiv_authors,
     parse_arxiv_response,
+    parse_crossref_authors,
     parse_crossref_work,
 )
 
@@ -37,6 +41,7 @@ class HydrationRunResult:
     papers_without_abstract: int
     papers_failed: int
     items_upgraded: int
+    authors_stored: int
 
 
 @dataclass(frozen=True)
@@ -159,10 +164,53 @@ def _store_hydration(
         return cursor.rowcount
 
 
+def store_authors(
+    connection: psycopg.Connection[Any],
+    *,
+    paper_id: UUID,
+    authors: Sequence[Author],
+    source: str,
+) -> int:
+    """Replace one paper's author list with what the provider just said.
+
+    Replace rather than merge: the provider's list is the whole truth about
+    author order, so a shorter corrected list must be able to remove rows a
+    longer wrong one left behind.
+    """
+
+    if not authors:
+        return 0
+    with connection.transaction(), connection.cursor() as cursor:
+        cursor.execute("DELETE FROM paper_authors WHERE paper_id = %s;", (paper_id,))
+        cursor.executemany(
+            """
+            INSERT INTO paper_authors (
+              paper_id, position, full_name, family, given, orcid,
+              affiliation, source
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+            """,
+            [
+                (
+                    paper_id,
+                    author.position,
+                    author.full_name,
+                    author.family,
+                    author.given,
+                    author.orcid,
+                    author.affiliation,
+                    source,
+                )
+                for author in authors
+            ],
+        )
+    return len(authors)
+
+
 def _fetch_arxiv(
     client: httpx.Client,
     arxiv_ids: tuple[str, ...],
-) -> dict[str, PaperHydration]:
+) -> tuple[dict[str, PaperHydration], dict[str, tuple[Author, ...]]]:
     response = client.get(
         ARXIV_API,
         params={
@@ -172,19 +220,25 @@ def _fetch_arxiv(
         headers={"User-Agent": USER_AGENT},
     )
     response.raise_for_status()
-    return parse_arxiv_response(response.content)
+    # One response, read twice. The authors are in the bytes the abstract was
+    # already paid for, so keeping them costs no request and no politeness.
+    return parse_arxiv_response(response.content), parse_arxiv_authors(response.content)
 
 
-def _fetch_crossref(client: httpx.Client, doi: str) -> PaperHydration | None:
+def _fetch_crossref(
+    client: httpx.Client,
+    doi: str,
+) -> tuple[PaperHydration | None, tuple[Author, ...]]:
     response = client.get(
         f"{CROSSREF_API}/{doi}",
         headers={"User-Agent": USER_AGENT},
         follow_redirects=True,
     )
     if response.status_code == httpx.codes.NOT_FOUND:
-        return None
+        return None, ()
     response.raise_for_status()
-    return parse_crossref_work(response.json())
+    payload = response.json()
+    return parse_crossref_work(payload), parse_crossref_authors(payload)
 
 
 def run_hydration(
@@ -205,6 +259,7 @@ def run_hydration(
     without_abstract = 0
     failed = 0
     upgraded = 0
+    authors_stored = 0
 
     with psycopg.connect(database_url, autocommit=True) as connection:
         with connection.transaction(), connection.cursor() as cursor:
@@ -238,7 +293,7 @@ def run_hydration(
                 if index and sleep:
                     time.sleep(ARXIV_DELAY_SECONDS)
                 try:
-                    found = _fetch_arxiv(client, batch)
+                    found, found_authors = _fetch_arxiv(client, batch)
                 except Exception as exc:
                     failed += len(batch)
                     errors.append(f"arxiv batch: {type(exc).__name__}: {exc}")
@@ -246,6 +301,14 @@ def run_hydration(
                 for arxiv_id in batch:
                     hydration = found.get(arxiv_id.casefold())
                     paper = by_arxiv[arxiv_id.casefold()]
+                    # Before the abstract gate: an entry with an unusable
+                    # summary still named its authors.
+                    authors_stored += store_authors(
+                        connection,
+                        paper_id=paper.paper_id,
+                        authors=found_authors.get(arxiv_id.casefold(), ()),
+                        source="arxiv_api",
+                    )
                     if hydration is None:
                         without_abstract += 1
                         no_abstract.append(paper.paper_id)
@@ -262,11 +325,17 @@ def run_hydration(
                 if paper.doi is None:
                     continue
                 try:
-                    hydration = _fetch_crossref(client, paper.doi)
+                    hydration, crossref_authors = _fetch_crossref(client, paper.doi)
                 except Exception as exc:
                     failed += 1
                     errors.append(f"{paper.doi}: {type(exc).__name__}: {exc}")
                     continue
+                authors_stored += store_authors(
+                    connection,
+                    paper_id=paper.paper_id,
+                    authors=crossref_authors,
+                    source="crossref_api",
+                )
                 if hydration is None:
                     # Many DOIs are news or editorial items that legitimately
                     # publish no abstract; that is not a fetch failure.
@@ -303,6 +372,7 @@ def run_hydration(
                             "papers_without_abstract": without_abstract,
                             "papers_failed": failed,
                             "items_upgraded": upgraded,
+                            "authors_stored": authors_stored,
                         }
                     ),
                     "\n".join(errors[:10]) or None,
@@ -316,4 +386,5 @@ def run_hydration(
         papers_without_abstract=without_abstract,
         papers_failed=failed,
         items_upgraded=upgraded,
+        authors_stored=authors_stored,
     )
