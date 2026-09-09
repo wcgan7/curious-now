@@ -119,9 +119,21 @@ rather than reconciled into a canonical person. arXiv gives one display string,
 Crossref a given/family split and sometimes an ORCID; only the ORCID identifies
 rather than describes, so it is the only field a later join should trust. Author
 capture is deliberately not gated on the abstract — an entry whose summary is
-unusable still named who wrote it. Affiliation is read where present and is
-almost always absent, so where an author works remains a question for OpenAlex
-and not one this stage can answer.
+unusable still named who wrote it.
+
+Measured over 44,099 authors: Crossref carries an ORCID for 20% of its authors
+and arXiv for none, which is why ORCID is the only field indexed for joining.
+
+Affiliation is read where present and is not trustworthy. It is present more
+often than expected — 7% of arXiv authors and 27% of Crossref ones — and most
+of that is unusable. arXiv returns `<arxiv:affiliation>Rai</arxiv:affiliation>`
+for all 382 authors of the GPT-4 technical report, and the other frequent
+values are name fragments of the same kind; Crossref's are often the journal's
+entire author-address footnote repeated verbatim for every author, or the
+string "additional authors not shown". The parser is faithful and the data is
+wrong, which is why the count alone would have misled us. Where an author works
+therefore remains a question for OpenAlex's `authorships`, and this stage
+records who, not where.
 
 Open-access primary full text enables Technical. Abstracts can support Idea and,
 when they state a method, Explain. Metadata and snippets are skipped.
